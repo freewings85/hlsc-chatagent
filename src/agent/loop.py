@@ -1,27 +1,23 @@
-"""Agent Loop：手动 iter/next 驱动的核心循环"""
+"""Agent Loop：手动 iter/next 驱动的核心循环，通过 EventEmitter 发出事件"""
 
-from dataclasses import dataclass
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic_ai import Agent
 from pydantic_ai.agent import ModelRequestNode, CallToolsNode
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, ModelRequest
 from pydantic_ai.models import Model
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
 from src.agent.deps import AgentDeps
+from src.agent.message.context_injector import inject_context
+from src.agent.prompt.prompt_builder import PromptBuilder
 from src.agent.toolset import get_tools
-
-
-@dataclass
-class AgentResult:
-    """Agent 运行结果"""
-
-    output: str
-    nodes: list[str]
-    tool_call_count: int
-    messages: list[ModelMessage]
+from src.common.session_request_task import SessionRequestTask
+from src.config.settings import get_backend
+from src.event.event_emitter import EventEmitter
 
 
 def create_agent(
@@ -40,49 +36,73 @@ def create_agent(
 
 
 async def run_agent_loop(
+    emitter: EventEmitter,
+    task: SessionRequestTask,
     agent: Agent[AgentDeps, str],
-    user_input: str,
     deps: AgentDeps,
     message_history: list[ModelMessage] | None = None,
     max_iterations: int = 25,
-) -> AgentResult:
-    """手动驱动 agent loop"""
-    nodes_log: list[str] = []
-    iteration: int = 0
+) -> None:
+    """手动驱动 agent loop，通过 emitter 发出事件。
 
-    async with agent.iter(
-        user_input,
-        deps=deps,
-        message_history=message_history,
-    ) as run:
-        node = run.next_node
+    Producer 职责：
+    - 驱动节点流转（ModelRequestNode → CallToolsNode → ...）
+    - 通过 emitter.emit() 发出事件，不关心谁在消费
+    - 子函数拿到 emitter 即可发事件，无需层层传递 generator
 
-        while not isinstance(node, End):
-            node_name: str = type(node).__name__
-            nodes_log.append(node_name)
+    消息操作方式：
+    - 通过 run._graph_run.state.message_history 直接操作内部消息列表
+    - compact / attachment / context 在 ModelRequestNode 前手动修改消息
+    - 该列表与 run.all_messages() 是同一引用
+    """
+    try:
+        iteration: int = 0
 
-            if isinstance(node, ModelRequestNode):
-                # 调 LLM 前：可在此修改 deps
-                pass
+        # 1. PromptBuilder — 加载系统提示词 + 上下文消息
+        prompt_builder: PromptBuilder = PromptBuilder(get_backend())
+        context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
+            user_id=task.user_id,
+        )
 
-            elif isinstance(node, CallToolsNode):
-                # LLM 返回后：可在此观察响应
-                pass
+        # TODO: 2. MessageLoader.load(task) — 加载历史消息（首次从 FileSystemBackend，后续从 SessionContext 缓存）
+        # TODO: 3. MemoryManager.load(task) — 加载 auto-memory（也产出 context_messages）
 
-            node = await run.next(node)
+        async with agent.iter(
+            task.message,
+            deps=deps,
+            message_history=message_history,
+        ) as run:
+            node = run.next_node
 
-            iteration += 1
-            if iteration >= max_iterations:
-                break
+            while not isinstance(node, End):
+                if task.cancelled:
+                    break
 
-        nodes_log.append("End")
+                if isinstance(node, ModelRequestNode):
+                    # 注入上下文（agent.md + memory.md），每轮 ModelRequestNode 前重新注入
+                    history: list[ModelMessage] = run._graph_run.state.message_history
+                    inject_context(history, context_messages)
 
-    output: str = run.result.output if run.result else ""
-    all_messages: list[ModelMessage] = run.all_messages()
+                    # TODO: 4. Compactor.check(run) — 三层递进压缩
+                    # TODO: 5. AttachmentCollector.refresh(run) — 动态注入（首次 vs tool 后重算）
+                    # TODO: 6. MemoryManager.maybe_extract(run) — 后台 session memory 提取
+                    # TODO: 7. 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
 
-    return AgentResult(
-        output=output,
-        nodes=nodes_log,
-        tool_call_count=deps.tool_call_count,
-        messages=all_messages,
-    )
+                elif isinstance(node, CallToolsNode):
+                    # TODO: 8. 工具执行 → emitter.emit(tool_result 事件)
+                    pass
+
+                node = await run.next(node)
+
+                iteration += 1
+                if iteration >= max_iterations:
+                    break
+
+        # TODO: 9. MessageLoader.append(run) — 追加到 messages.jsonl（append-only，过滤 is_meta）
+
+    except Exception:
+        # 发送错误事件通知客户端
+        # TODO: emitter.emit(EventModel(type=EventType.ERROR, ...))
+        raise
+    finally:
+        await emitter.close()

@@ -1,94 +1,161 @@
-"""存储后端协议（纯接口）— 参考 langchain deepagents BackendProtocol"""
+"""Protocol definition for pluggable memory backends.
 
-from __future__ import annotations
+Ported from deepagents.backends.protocol (langchain deepagents).
+"""
 
+import abc
+import asyncio
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Literal, NotRequired
+
+from typing_extensions import TypedDict
+
+FileOperationError = Literal[
+    "file_not_found",
+    "permission_denied",
+    "is_directory",
+    "invalid_path",
+]
 
 
 @dataclass
-class FileInfo:
-    """文件/目录信息。"""
+class FileDownloadResponse:
+    """Result of a single file download operation."""
 
     path: str
-    is_dir: bool = False
-    size: int = 0
-    modified_at: str = ""
+    content: bytes | None = None
+    error: FileOperationError | None = None
+
+
+@dataclass
+class FileUploadResponse:
+    """Result of a single file upload operation."""
+
+    path: str
+    error: FileOperationError | None = None
+
+
+class FileInfo(TypedDict):
+    """Structured file listing info."""
+
+    path: str
+    is_dir: NotRequired[bool]
+    size: NotRequired[int]
+    modified_at: NotRequired[str]
+
+
+class GrepMatch(TypedDict):
+    """Structured grep match entry."""
+
+    path: str
+    line: int
+    text: str
 
 
 @dataclass
 class WriteResult:
-    """写入结果。"""
+    """Result from backend write operations."""
 
-    path: str
-    success: bool
-    message: str = ""
+    error: str | None = None
+    path: str | None = None
+    files_update: dict[str, Any] | None = None
 
 
 @dataclass
 class EditResult:
-    """编辑结果。"""
+    """Result from backend edit operations."""
 
-    path: str
-    success: bool
-    message: str = ""
-
-
-@dataclass
-class GrepMatch:
-    """搜索匹配结果。"""
-
-    path: str
-    line_number: int
-    content: str
+    error: str | None = None
+    path: str | None = None
+    files_update: dict[str, Any] | None = None
+    occurrences: int | None = None
 
 
-class FileSystemBackend(Protocol):
-    """虚拟文件系统接口。
+class BackendProtocol(abc.ABC):
+    """Protocol for pluggable memory backends.
 
-    所有路径为绝对路径（如 /sessions/xxx/messages.json）。
-    错误返回可读字符串而非抛异常。
+    Ported from deepagents.backends.protocol.BackendProtocol.
+    Sync methods + async wrappers via asyncio.to_thread.
     """
 
-    async def read(self, path: str, offset: int = 0, limit: int = 2000) -> str:
-        """读取文件内容，支持分页（offset=行偏移，limit=行数）。"""
-        ...
+    def ls_info(self, path: str) -> list[FileInfo]:
+        raise NotImplementedError
 
-    async def write(self, path: str, content: str) -> WriteResult:
-        """写入文件（创建或覆盖）。"""
-        ...
+    async def als_info(self, path: str) -> list[FileInfo]:
+        return await asyncio.to_thread(self.ls_info, path)
 
-    async def edit(
-        self,
-        path: str,
-        old_string: str,
-        new_string: str,
-        replace_all: bool = False,
-    ) -> EditResult:
-        """编辑文件：替换 old_string 为 new_string。"""
-        ...
+    def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> str:
+        raise NotImplementedError
 
-    async def ls_info(self, path: str) -> list[FileInfo]:
-        """列出目录内容，返回文件/目录信息列表。"""
-        ...
+    async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> str:
+        return await asyncio.to_thread(self.read, file_path, offset, limit)
 
-    async def glob_info(self, pattern: str, path: str = "/") -> list[FileInfo]:
-        """按 glob 模式搜索文件。"""
-        ...
-
-    async def grep_raw(
+    def grep_raw(
         self,
         pattern: str,
         path: str | None = None,
         glob: str | None = None,
     ) -> list[GrepMatch] | str:
-        """按正则搜索文件内容。无效正则返回错误字符串。"""
-        ...
+        raise NotImplementedError
 
-    async def exists(self, path: str) -> bool:
-        """检查路径是否存在。"""
-        ...
+    async def agrep_raw(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+    ) -> list[GrepMatch] | str:
+        return await asyncio.to_thread(self.grep_raw, pattern, path, glob)
 
-    async def delete(self, path: str) -> bool:
-        """删除文件或目录。"""
-        ...
+    def glob_info(self, pattern: str, path: str = "/") -> list[FileInfo]:
+        raise NotImplementedError
+
+    async def aglob_info(self, pattern: str, path: str = "/") -> list[FileInfo]:
+        return await asyncio.to_thread(self.glob_info, pattern, path)
+
+    def write(self, file_path: str, content: str) -> WriteResult:
+        raise NotImplementedError
+
+    async def awrite(self, file_path: str, content: str) -> WriteResult:
+        return await asyncio.to_thread(self.write, file_path, content)
+
+    def edit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        raise NotImplementedError
+
+    async def aedit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        return await asyncio.to_thread(self.edit, file_path, old_string, new_string, replace_all)
+
+    def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        raise NotImplementedError
+
+    async def aupload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        return await asyncio.to_thread(self.upload_files, files)
+
+    def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
+        raise NotImplementedError
+
+    async def adownload_files(self, paths: list[str]) -> list[FileDownloadResponse]:
+        return await asyncio.to_thread(self.download_files, paths)
+
+    def exists(self, path: str) -> bool:
+        raise NotImplementedError
+
+    async def aexists(self, path: str) -> bool:
+        return await asyncio.to_thread(self.exists, path)
+
+    def delete(self, path: str) -> bool:
+        raise NotImplementedError
+
+    async def adelete(self, path: str) -> bool:
+        return await asyncio.to_thread(self.delete, path)

@@ -23,6 +23,9 @@ class SessionRequestTaskQueue:
         # ready 队列：有任务且当前没在执行的 session_id
         self._ready: asyncio.Queue[str] = asyncio.Queue()
 
+        # 已在 ready 队列中的 session 集合（防止重复放入）
+        self._ready_set: set[str] = set()
+
         # task_id → task 的索引，用于 cancel 查找
         self._task_index: dict[str, SessionRequestTask] = {}
 
@@ -33,7 +36,9 @@ class SessionRequestTaskQueue:
             return False
         self._session_queues[sid].append(task)
         self._task_index[task.task_id] = task
-        self._ready.put_nowait(sid)
+        if sid not in self._ready_set:
+            self._ready_set.add(sid)
+            self._ready.put_nowait(sid)
         return True
 
     async def enqueue(self, task: SessionRequestTask) -> bool:
@@ -44,8 +49,9 @@ class SessionRequestTaskQueue:
             return False
         self._session_queues[sid].append(task)
         self._task_index[task.task_id] = task
-        # 如果该 session 当前没在执行，放入 ready 队列
-        if sid not in self._executing:
+        # 如果该 session 当前没在执行且不在 ready 队列中，放入 ready 队列
+        if sid not in self._executing and sid not in self._ready_set:
+            self._ready_set.add(sid)
             await self._ready.put(sid)
         return True
 
@@ -63,14 +69,17 @@ class SessionRequestTaskQueue:
         task.cancelled = True
         return True
 
-    def release(self, session_id: str) -> None:
-        """执行完毕释放，通知队列中下一个任务。"""
+    def release(self, session_id: str, task_id: str | None = None) -> None:
+        """执行完毕释放，清理索引，通知队列中下一个任务。"""
         self._executing.discard(session_id)
-        # 清理 task_index
-        # （执行完的 task 已经从 deque 中 popleft 了，这里不需要额外清理）
+        # 清理已完成任务的索引
+        if task_id is not None:
+            self._task_index.pop(task_id, None)
         # 如果该 session 还有排队任务，重新放入 ready
         if self._session_queues[session_id]:
-            self._ready.put_nowait(session_id)
+            if session_id not in self._ready_set:
+                self._ready_set.add(session_id)
+                self._ready.put_nowait(session_id)
         else:
             # 清理空队列
             del self._session_queues[session_id]
@@ -79,11 +88,17 @@ class SessionRequestTaskQueue:
         """阻塞等待下一个可执行的任务。TaskWorker 调用。"""
         while True:
             sid: str = await self._ready.get()
+            self._ready_set.discard(sid)
             if not self._session_queues[sid]:
                 continue
             task: SessionRequestTask = self._session_queues[sid].popleft()
             if task.cancelled:
                 self._task_index.pop(task.task_id, None)
+                # 如果该 session 还有后续任务，重新放入 ready
+                if self._session_queues[sid]:
+                    if sid not in self._ready_set:
+                        self._ready_set.add(sid)
+                        await self._ready.put(sid)
                 continue
             self._executing.add(sid)
             return task

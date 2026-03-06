@@ -48,22 +48,49 @@ class TaskWorker:
             task: SessionRequestTask = await self._task_queue.get_ready_task()
             try:
                 await self._execute(task)
-            except Exception:
-                logger.exception(
-                    "Worker %d failed on task %s", worker_id, task.task_id
-                )
             finally:
-                self._task_queue.release(task.session_id)
+                self._task_queue.release(task.session_id, task.task_id)
 
     async def _execute(self, task: SessionRequestTask) -> None:
-        """执行一个任务：驱动 Agent Loop → Handler → Sinker。"""
+        """执行一个任务：驱动 Agent Loop → Handler → Sinker。
+
+        生产-消费并行模式：
+        - 生产者：run_agent_loop() 通过 emitter 往 queue 放事件
+        - 消费者：_consume_events() 从 queue 取事件交给 handler
+        - 两者通过 asyncio.gather() 并行运行
+        """
+        from src.event.event_emitter import EventEmitter
+        from src.event.event_model import EventModel
+
+        event_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+        emitter: EventEmitter = EventEmitter(event_queue)
         handler: EventHandler = EventHandler(task.sinker)
+
+        async def _consume_events() -> None:
+            """从 emitter 的 queue 取事件，派发到 handler。"""
+            while True:
+                event: EventModel | None = await event_queue.get()
+                if event is None:
+                    break
+                await handler.handle(event)
+
         try:
-            # TODO: 接入 Agent Loop，产出事件流
-            # async for event in run_agent_stream(agent, task, deps):
-            #     if task.cancelled:
-            #         break
-            #     await handler.handle(event)
+            # TODO: 构建 agent 和 deps
+            # agent = create_agent(model, system_prompt)
+            # deps = AgentDeps(...)
+            # await asyncio.gather(
+            #     run_agent_loop(emitter, task, agent, deps),
+            #     _consume_events(),
+            # )
             pass
+        except Exception:
+            logger.exception(
+                "Worker %d failed on task %s",
+                0,  # TODO: 传入 worker_id
+                task.task_id,
+            )
+            # TODO: 发送错误事件通知客户端
+            # error_event = EventModel(type=EventType.ERROR, ...)
+            # await handler.handle(error_event)
         finally:
             await handler.close()

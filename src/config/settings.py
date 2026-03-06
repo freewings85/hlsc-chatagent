@@ -1,10 +1,15 @@
 """配置管理：从环境变量加载所有配置"""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    from src.common.filesystem_backend import BackendProtocol
 
 load_dotenv()
 
@@ -32,7 +37,11 @@ class LLMConfig:
 class StorageConfig:
     """持久化存储配置"""
 
-    sessions_dir: str = field(default_factory=lambda: os.getenv("SESSIONS_DIR", "data/sessions"))
+    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "data"))
+
+    @property
+    def sessions_dir(self) -> str:
+        return os.path.join(self.data_dir, "sessions")
 
 
 @dataclass
@@ -47,6 +56,7 @@ class ServerConfig:
 _llm_config: Optional[LLMConfig] = None
 _storage_config: Optional[StorageConfig] = None
 _server_config: Optional[ServerConfig] = None
+_backend: Optional["BackendProtocol"] = None
 
 
 def get_llm_config() -> LLMConfig:
@@ -71,3 +81,14 @@ def get_server_config() -> ServerConfig:
     if _server_config is None:
         _server_config = ServerConfig()
     return _server_config
+
+
+def get_backend() -> "BackendProtocol":
+    """获取文件系统后端（全局单例）"""
+    global _backend
+    if _backend is None:
+        from src.storage.local_backend import FilesystemBackend
+
+        config = get_storage_config()
+        _backend = FilesystemBackend(root_dir=config.data_dir, virtual_mode=True)
+    return _backend
