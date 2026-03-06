@@ -185,3 +185,87 @@ class TestAgentLoop:
         for event in events:
             assert event.conversation_id == "sid-123"
             assert event.request_id == task.request_id
+
+
+class TestAgentLoopEdgeCases:
+    """US-001: agent loop 异常恢复与边界条件"""
+
+    @pytest.mark.asyncio
+    async def test_empty_text_response_emitter_closes(self, make_task, make_emitter) -> None:
+        """LLM 返回空文本时 pydantic-ai 抛异常，emitter 仍然关闭"""
+        from pydantic_ai.messages import ModelResponse, TextPart
+
+        def empty_response(messages, info):
+            return ModelResponse(parts=[TextPart(content="")])
+
+        async def empty_stream(messages, info):
+            yield ""  # 空字符串，pydantic-ai 会拒绝并抛 UnexpectedModelBehavior
+
+        model = FunctionModel(empty_response, stream_function=empty_stream)
+        agent = create_agent(model=model)
+        deps = AgentDeps()
+        task, _ = make_task("你好")
+        event_queue, emitter = make_emitter()
+
+        from pydantic_ai.exceptions import UnexpectedModelBehavior
+        with pytest.raises(UnexpectedModelBehavior):
+            await run_agent_loop(emitter, task, agent, deps, message_history=[])
+
+        # emitter 应在 finally 中关闭
+        sentinel = await event_queue.get()
+        assert sentinel is None
+
+    @pytest.mark.asyncio
+    async def test_tool_exception_emitter_still_closes(self, make_task, make_emitter) -> None:
+        """工具执行抛异常时 emitter 仍能正常关闭"""
+        from pydantic_ai.messages import ModelResponse, ToolCallPart
+
+        def tool_call_response(messages, info):
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="bad_tool", args={"x": 1},
+            )])
+
+        async def tool_call_stream(messages, info):
+            yield {0: DeltaToolCall(name="bad_tool", json_args='{"x": 1}')}
+
+        from pydantic_ai.models.function import DeltaToolCall
+
+        async def bad_tool_fn(ctx, x: int) -> str:
+            raise ValueError("tool exploded")
+
+        model = FunctionModel(tool_call_response, stream_function=tool_call_stream)
+        agent = create_agent(model=model)
+        deps = AgentDeps(
+            available_tools=["bad_tool"],
+            tool_map={"bad_tool": bad_tool_fn},
+        )
+        task, _ = make_task("test")
+        event_queue, emitter = make_emitter()
+
+        # 工具异常被 pydantic-ai 内部捕获，不会向上抛出
+        # 但 emitter 最终应关闭
+        await run_agent_loop(emitter, task, agent, deps, message_history=[], max_iterations=2)
+
+        # emitter 应该已关闭（sentinel 在 queue 中）
+        events = await _collect_events(event_queue)
+        end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
+        assert len(end_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_max_iterations_zero_immediate_end(self, make_task, make_emitter) -> None:
+        """max_iterations=0 时立即结束，发送 CHAT_REQUEST_END"""
+        model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
+        agent = create_agent(model=model)
+        deps = AgentDeps()
+        task, _ = make_task("你好")
+        event_queue, emitter = make_emitter()
+
+        await run_agent_loop(emitter, task, agent, deps, message_history=[], max_iterations=0)
+
+        events = await _collect_events(event_queue)
+        # 不应有 TEXT 事件
+        text_events = [e for e in events if e.type == EventType.TEXT]
+        assert len(text_events) == 0
+        # 应有 CHAT_REQUEST_END
+        end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
+        assert len(end_events) == 1
