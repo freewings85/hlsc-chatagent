@@ -13,6 +13,7 @@ from pydantic_graph import End
 
 from src.agent.deps import AgentDeps
 from src.agent.message.context_injector import inject_context
+from src.agent.message.history_message_loader import HistoryMessageLoader
 from src.agent.prompt.prompt_builder import PromptBuilder
 from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
@@ -59,12 +60,17 @@ async def run_agent_loop(
         iteration: int = 0
 
         # 1. PromptBuilder — 加载系统提示词 + 上下文消息
-        prompt_builder: PromptBuilder = PromptBuilder(get_backend())
+        backend = get_backend()
+        prompt_builder: PromptBuilder = PromptBuilder(backend)
         context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
             user_id=task.user_id,
         )
 
-        # TODO: 2. MessageLoader.load(task) — 加载历史消息（首次从 FileSystemBackend，后续从 SessionContext 缓存）
+        # 2. HistoryMessageLoader — 加载历史消息（优先内存缓存，fallback 文件）
+        history_loader: HistoryMessageLoader = HistoryMessageLoader(backend)
+        if message_history is None:
+            message_history = await history_loader.load(task.user_id, task.session_id)
+
         # TODO: 3. MemoryManager.load(task) — 加载 auto-memory（也产出 context_messages）
 
         async with agent.iter(
@@ -98,7 +104,14 @@ async def run_agent_loop(
                 if iteration >= max_iterations:
                     break
 
-        # TODO: 9. MessageLoader.append(run) — 追加到 messages.jsonl（append-only，过滤 is_meta）
+        # 9. 追加新消息到 messages.jsonl（append-only，过滤 is_meta）
+        if run.result is not None:
+            new_messages: list[ModelMessage] = run.result.all_messages()
+            # all_messages() 包含历史 + 本轮新增，取本轮新增部分
+            history_len: int = len(message_history) if message_history else 0
+            await history_loader.append(
+                task.user_id, task.session_id, new_messages[history_len:],
+            )
 
     except Exception:
         # 发送错误事件通知客户端
