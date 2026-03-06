@@ -3,7 +3,7 @@
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from src.agent.message.history_message_loader import HistoryMessageLoader
+from src.agent.message.history_message_loader import HistoryMessageLoader, _deserialize_messages
 from src.storage.local_backend import FilesystemBackend
 
 
@@ -184,3 +184,19 @@ class TestTranscript:
         raw = responses[0].content.decode("utf-8").strip()
         lines = [l for l in raw.splitlines() if l.strip()]
         assert len(lines) == 2
+
+
+class TestDeserializeMessages:
+
+    def test_skips_empty_lines(self) -> None:
+        """JSONL 中的空行被跳过"""
+        from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
+
+        msg = ModelRequest(parts=[UserPromptPart(content="hello")])
+        # 序列化一条消息（去掉外层 []）
+        json_bytes = ModelMessagesTypeAdapter.dump_json([msg]).decode()
+        json_line = json_bytes[1:-1].strip()
+        # 加入空行
+        raw = f"{json_line}\n\n{json_line}\n"
+        result = _deserialize_messages(raw)
+        assert len(result) == 2

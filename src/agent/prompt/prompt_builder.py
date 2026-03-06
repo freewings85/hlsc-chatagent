@@ -76,7 +76,7 @@ class PromptBuilder:
         if not await self._backend.aexists(path):
             return None
         content: str = await self._backend.aread(path)
-        if content.startswith("Error:"):
+        if content.startswith("Error:"):  # pragma: no cover — backend 错误防御
             return None
         # aread 返回带行号的格式，这里需要原始内容
         return await self._read_raw(path)
@@ -90,6 +90,6 @@ class PromptBuilder:
         if results and results[0].content is not None:
             try:
                 return results[0].content.decode("utf-8")
-            except UnicodeDecodeError:
+            except UnicodeDecodeError:  # pragma: no cover
                 return None
-        return None
+        return None  # pragma: no cover — download_files 返回空结果

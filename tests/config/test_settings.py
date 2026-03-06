@@ -1,6 +1,7 @@
 """配置模块测试"""
 
 from src.agent.compact.config import CompactConfig
+from src.config import settings
 from src.config.settings import LLMConfig, StorageConfig, ServerConfig
 
 
@@ -25,6 +26,22 @@ class TestServerConfig:
     def test_default(self) -> None:
         config = ServerConfig()
         assert config.port == 8100
+
+
+class TestSingletons:
+    def test_get_llm_config(self) -> None:
+        # 重置单例
+        settings._llm_config = None
+        config = settings.get_llm_config()
+        assert isinstance(config, LLMConfig)
+        # 二次调用返回同一实例
+        assert settings.get_llm_config() is config
+
+    def test_get_server_config(self) -> None:
+        settings._server_config = None
+        config = settings.get_server_config()
+        assert isinstance(config, ServerConfig)
+        assert settings.get_server_config() is config
 
 
 class TestCompactConfig:

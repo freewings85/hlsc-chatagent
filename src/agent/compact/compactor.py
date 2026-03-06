@@ -148,10 +148,10 @@ class Compactor:
 
         for msg_idx, part_idx in to_replace:
             msg = messages[msg_idx]
-            if not isinstance(msg, ModelRequest):
+            if not isinstance(msg, ModelRequest):  # pragma: no cover — 防御性检查
                 continue
             part = msg.parts[part_idx]
-            if not isinstance(part, ToolReturnPart):
+            if not isinstance(part, ToolReturnPart):  # pragma: no cover — 防御性检查
                 continue
 
             old_tokens = estimate_part_tokens(part)

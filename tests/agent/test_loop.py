@@ -119,6 +119,58 @@ class TestAgentLoop:
         assert not event_queue.empty()
 
     @pytest.mark.asyncio
+    async def test_max_iterations_limit(self, make_task, make_emitter) -> None:
+        """max_iterations 限制循环次数"""
+        model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
+        agent = create_agent(model=model)
+        deps = AgentDeps()
+        task, _ = make_task("你好")
+        event_queue, emitter = make_emitter()
+
+        # max_iterations=1 会在第一个迭代后退出
+        await run_agent_loop(emitter, task, agent, deps, message_history=[], max_iterations=1)
+
+        events = await _collect_events(event_queue)
+        end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
+        assert len(end_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_exception_still_closes_emitter(self, make_task, make_emitter) -> None:
+        """异常时 emitter 仍然关闭"""
+        # 用一个会抛异常的 stream function
+        async def bad_stream(messages, info):
+            raise RuntimeError("test error")
+            yield "never"  # type: ignore[misc]  # noqa: E501
+
+        model = FunctionModel(stream_function=bad_stream)
+        agent = create_agent(model=model)
+        deps = AgentDeps()
+        task, _ = make_task("你好")
+        event_queue, emitter = make_emitter()
+
+        with pytest.raises(RuntimeError, match="test error"):
+            await run_agent_loop(emitter, task, agent, deps, message_history=[])
+
+        # emitter 应该在 finally 中关闭
+        sentinel = await event_queue.get()
+        assert sentinel is None
+
+    @pytest.mark.asyncio
+    async def test_load_history_from_backend(self, make_task, make_emitter) -> None:
+        """message_history=None 时从后端加载"""
+        model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
+        agent = create_agent(model=model)
+        deps = AgentDeps()
+        task, _ = make_task("你好")
+        event_queue, emitter = make_emitter()
+
+        # 不传 message_history，让 loop 从后端加载（空的）
+        await run_agent_loop(emitter, task, agent, deps, message_history=None)
+
+        events = await _collect_events(event_queue)
+        assert any(e.type == EventType.TEXT for e in events)
+
+    @pytest.mark.asyncio
     async def test_events_have_correct_ids(self, make_task, make_emitter) -> None:
         """事件携带正确的 session_id 和 request_id"""
         model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)

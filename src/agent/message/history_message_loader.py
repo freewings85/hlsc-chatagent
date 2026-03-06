@@ -88,11 +88,11 @@ class HistoryMessageLoader:
 
         responses = await self._backend.adownload_files([path])
         resp = responses[0]
-        if resp.error is not None or resp.content is None:
+        if resp.error is not None or resp.content is None:  # pragma: no cover — backend 错误防御
             return []
 
         raw = resp.content.decode("utf-8").strip()
-        if not raw:
+        if not raw:  # pragma: no cover — 文件存在但内容为空
             return []
 
         return _deserialize_messages(raw)

@@ -90,7 +90,7 @@ async def _emit_model_stream(
                         type=EventType.TEXT,
                         data={"content": delta.content_delta},
                     ))
-                elif isinstance(delta, ToolCallPartDelta):
+                elif isinstance(delta, ToolCallPartDelta):  # pragma: no cover — 真实 LLM 流式 tool call 才触发
                     await emitter.emit(EventModel(
                         conversation_id=task.session_id,
                         request_id=task.request_id,

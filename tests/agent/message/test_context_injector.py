@@ -21,6 +21,11 @@ class TestMergeContextMessages:
     def test_empty(self) -> None:
         assert merge_context_messages([]) is None
 
+    def test_messages_without_user_parts(self) -> None:
+        """有消息但没有 UserPromptPart，返回 None"""
+        msg = ModelRequest(parts=[])  # 空 parts
+        assert merge_context_messages([msg]) is None
+
     def test_single(self) -> None:
         msg = ModelRequest(
             parts=[UserPromptPart(content="agent.md content")],
