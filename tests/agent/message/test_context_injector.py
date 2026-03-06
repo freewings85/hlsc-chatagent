@@ -117,3 +117,51 @@ class TestInjectContext:
         ]
         inject_context(messages, [])
         assert len(messages) == 1
+
+
+class TestInjectContextEdgeCases:
+    """US-006: ContextInjector 边界条件"""
+
+    def test_inject_into_response_only_messages(self) -> None:
+        """inject_context 对只包含 ModelResponse 的消息列表正确处理"""
+        messages = [
+            ModelResponse(parts=[TextPart(content="回答1")]),
+            ModelResponse(parts=[TextPart(content="回答2")]),
+        ]
+        context = [
+            ModelRequest(
+                parts=[UserPromptPart(content="ctx")],
+                metadata={"is_meta": True, "source": "agent_md"},
+            ),
+        ]
+        inject_context(messages, context)
+        # 应该在 [0] 位置注入上下文
+        assert len(messages) == 3
+        assert messages[0].metadata["source"] == "merged_context"
+        assert messages[1].parts[0].content == "回答1"
+
+    def test_multiple_inject_no_accumulation(self) -> None:
+        """多次 inject_context 不会累积重复的 merged_context 消息"""
+        messages = [
+            ModelRequest(parts=[UserPromptPart(content="问题")]),
+        ]
+        context = [
+            ModelRequest(
+                parts=[UserPromptPart(content="ctx")],
+                metadata={"is_meta": True, "source": "agent_md"},
+            ),
+        ]
+
+        # 注入 5 次
+        for _ in range(5):
+            inject_context(messages, context)
+
+        # 应该只有 1 个 merged_context + 1 个用户消息 = 2
+        assert len(messages) == 2
+        merged_count = sum(
+            1 for m in messages
+            if isinstance(m, ModelRequest)
+            and isinstance(m.metadata, dict)
+            and m.metadata.get("source") == "merged_context"
+        )
+        assert merged_count == 1

@@ -74,3 +74,30 @@ class TestPromptBuilder:
         sources = [m.metadata["source"] for m in messages]
         assert "agent_md" in sources
         assert "memory" in sources
+
+
+class TestPromptBuilderEdgeCases:
+    """US-006: PromptBuilder 边界条件"""
+
+    @pytest.mark.asyncio
+    async def test_agent_md_not_exists_returns_empty(self, tmp_path) -> None:
+        """agent.md 不存在时返回空上下文"""
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        builder = PromptBuilder(backend)
+
+        messages = await builder.build_context_messages(user_id="nonexistent")
+        assert messages == []
+
+    @pytest.mark.asyncio
+    async def test_agent_md_empty_content_returns_empty(self, tmp_path) -> None:
+        """agent.md 为空内容时返回空上下文"""
+        user_dir = tmp_path / "u1"
+        user_dir.mkdir()
+        (user_dir / "agent.md").write_text("", encoding="utf-8")
+
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        builder = PromptBuilder(backend)
+
+        messages = await builder.build_context_messages(user_id="u1")
+        # 空文件不应产生上下文消息
+        assert messages == []
