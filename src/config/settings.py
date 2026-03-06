@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from dotenv import load_dotenv
 
 if TYPE_CHECKING:
+    from src.agent.compact.config import CompactConfig
     from src.common.filesystem_backend import BackendProtocol
 
 load_dotenv()
@@ -56,6 +57,7 @@ class ServerConfig:
 _llm_config: Optional[LLMConfig] = None
 _storage_config: Optional[StorageConfig] = None
 _server_config: Optional[ServerConfig] = None
+_compact_config: Optional["CompactConfig"] = None
 _backend: Optional["BackendProtocol"] = None
 
 
@@ -81,6 +83,16 @@ def get_server_config() -> ServerConfig:
     if _server_config is None:
         _server_config = ServerConfig()
     return _server_config
+
+
+def get_compact_config() -> "CompactConfig":
+    """获取压缩配置"""
+    global _compact_config
+    if _compact_config is None:
+        from src.agent.compact.config import CompactConfig
+
+        _compact_config = CompactConfig()
+    return _compact_config
 
 
 def get_backend() -> "BackendProtocol":

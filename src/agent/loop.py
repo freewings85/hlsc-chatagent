@@ -11,13 +11,14 @@ from pydantic_ai.models import Model
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
+from src.agent.compact.compactor import Compactor
 from src.agent.deps import AgentDeps
 from src.agent.message.context_injector import inject_context
 from src.agent.message.history_message_loader import HistoryMessageLoader
 from src.agent.prompt.prompt_builder import PromptBuilder
 from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
-from src.config.settings import get_backend
+from src.config.settings import get_backend, get_compact_config
 from src.event.event_emitter import EventEmitter
 
 
@@ -66,12 +67,18 @@ async def run_agent_loop(
             user_id=task.user_id,
         )
 
-        # 2. HistoryMessageLoader — 加载历史消息（优先内存缓存，fallback 文件）
+        # 2. HistoryMessageLoader — 加载历史消息
         history_loader: HistoryMessageLoader = HistoryMessageLoader(backend)
         if message_history is None:
             message_history = await history_loader.load(task.user_id, task.session_id)
 
-        # TODO: 3. MemoryManager.load(task) — 加载 auto-memory（也产出 context_messages）
+        # 3. Compactor — 两层递进压缩
+        compactor: Compactor = Compactor(
+            config=get_compact_config(),
+            history_loader=history_loader,
+            user_id=task.user_id,
+            session_id=task.session_id,
+        )
 
         async with agent.iter(
             task.message,
@@ -89,9 +96,10 @@ async def run_agent_loop(
                     history: list[ModelMessage] = run._graph_run.state.message_history
                     inject_context(history, context_messages)
 
-                    # TODO: 4. Compactor.check(run) — 三层递进压缩
+                    # 4. Compactor — 两层递进压缩（microcompact + full compact）
+                    await compactor.check(history)
+
                     # TODO: 5. AttachmentCollector.refresh(run) — 动态注入（首次 vs tool 后重算）
-                    # TODO: 6. MemoryManager.maybe_extract(run) — 后台 session memory 提取
                     # TODO: 7. 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
 
                 elif isinstance(node, CallToolsNode):

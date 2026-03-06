@@ -1,5 +1,6 @@
 """配置模块测试"""
 
+from src.agent.compact.config import CompactConfig
 from src.config.settings import LLMConfig, StorageConfig, ServerConfig
 
 
@@ -24,3 +25,21 @@ class TestServerConfig:
     def test_default(self) -> None:
         config = ServerConfig()
         assert config.port == 8100
+
+
+class TestCompactConfig:
+    def test_default(self) -> None:
+        config = CompactConfig()
+        assert config.context_window == 200_000
+        assert config.output_reserve == 20_000
+        assert config.keep_recent_tool_results == 3
+        assert config.min_savings_threshold == 20_000
+        assert config.auto_compact_buffer == 13_000
+        assert config.auto_compact_enabled is True
+        assert config.microcompact_enabled is True
+
+    def test_derived_properties(self) -> None:
+        config = CompactConfig()
+        assert config.effective_window == 180_000
+        assert config.microcompact_threshold == 160_000
+        assert config.full_compact_threshold == 167_000
