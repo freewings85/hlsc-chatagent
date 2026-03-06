@@ -97,9 +97,11 @@ async def run_agent_loop(
                     inject_context(history, context_messages)
 
                     # 4. Compactor — 两层递进压缩（microcompact + full compact）
-                    await compactor.check(history)
+                    compact_result: CompactResult = await compactor.check(history)
 
-                    # TODO: 5. AttachmentCollector.refresh(run) — 动态注入（首次 vs tool 后重算）
+                    # TODO: 5. AttachmentCollector.inject(history, compact_result)
+                    #   — compact 后恢复上下文（最近文件、任务状态等）
+                    #   — 每轮动态 attachment（changed_files、diagnostics 等）
                     # TODO: 7. 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
 
                 elif isinstance(node, CallToolsNode):

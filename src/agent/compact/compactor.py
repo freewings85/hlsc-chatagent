@@ -5,19 +5,19 @@ Layer 2 — Full Compact：调 LLM 生成摘要，替换全部消息。
 
 在每次 ModelRequestNode 前调用 check()，按需执行压缩。
 压缩直接修改 message_history（工作副本），不影响 transcript。
+check() 返回 CompactResult，包含压缩结果和需要恢复的附件。
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
-    ModelResponse,
     ToolReturnPart,
-    UserPromptPart,
 )
 
 from src.agent.compact.config import CompactConfig
@@ -33,6 +33,24 @@ logger = logging.getLogger(__name__)
 
 # 工具结果被替换后的占位符
 _PLACEHOLDER = "[工具结果已压缩，如需查看请重新调用工具]"
+
+
+@dataclass
+class CompactResult:
+    """压缩结果。
+
+    compacted: 是否执行了压缩
+    layer: 执行的压缩层级
+    tokens_saved: 估算节省的 token 数
+    pre_tokens: 压缩前总 token 数
+    attachments: full compact 后需要恢复的上下文消息（microcompact 为空）
+    """
+
+    compacted: bool = False
+    layer: str = "none"  # "none" / "microcompact" / "full"
+    tokens_saved: int = 0
+    pre_tokens: int = 0
+    attachments: list[ModelRequest] = field(default_factory=list)
 
 
 class Compactor:
@@ -53,13 +71,14 @@ class Compactor:
         self._user_id = user_id
         self._session_id = session_id
 
-    async def check(self, messages: list[ModelMessage]) -> bool:
-        """检查并执行压缩。返回是否执行了压缩。
+    async def check(self, messages: list[ModelMessage]) -> CompactResult:
+        """检查并执行压缩。
 
         直接修改 messages 列表（in-place）。
+        返回 CompactResult 描述压缩结果和需要恢复的附件。
         """
         if not self._config.auto_compact_enabled:
-            return False
+            return CompactResult()
 
         total_tokens = estimate_messages_tokens(messages)
 
@@ -71,25 +90,31 @@ class Compactor:
                     "Microcompact: 节省约 %d tokens (总计 %d → %d)",
                     savings, total_tokens, total_tokens - savings,
                 )
-                total_tokens -= savings
 
                 # 持久化压缩后的工作副本
                 if self._history_loader:
                     await self._history_loader.save(
                         self._user_id, self._session_id, messages,
                     )
-                return True
+
+                return CompactResult(
+                    compacted=True,
+                    layer="microcompact",
+                    tokens_saved=savings,
+                    pre_tokens=total_tokens,
+                )
 
         # Layer 2: Full Compact
         if total_tokens >= self._config.full_compact_threshold:
             # TODO: 调用 LLM 生成摘要，替换消息
-            # 需要：model 引用、摘要 prompt、附件恢复
+            # 实现后返回 CompactResult(layer="full", attachments=[...])
+            # attachments 包含需要恢复的上下文：最近读过的文件、任务状态等
             logger.info(
                 "Full compact 需要触发 (tokens=%d, threshold=%d)，但尚未实现",
                 total_tokens, self._config.full_compact_threshold,
             )
 
-        return False
+        return CompactResult(pre_tokens=total_tokens)
 
     def _microcompact(self, messages: list[ModelMessage]) -> int:
         """Layer 1: 替换旧 tool result 为占位符。
@@ -98,7 +123,7 @@ class Compactor:
         直接修改 messages 列表中的消息（in-place）。
         返回估算节省的 token 数。
         """
-        # 1. 倒序收集所有 tool return 的位置
+        # 1. 收集所有 tool return 的位置
         tool_return_positions: list[tuple[int, int]] = []  # (msg_idx, part_idx)
         for msg_idx, msg in enumerate(messages):
             if not isinstance(msg, ModelRequest):

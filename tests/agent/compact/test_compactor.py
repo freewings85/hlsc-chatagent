@@ -11,7 +11,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from src.agent.compact.compactor import Compactor, _PLACEHOLDER
+from src.agent.compact.compactor import CompactResult, Compactor, _PLACEHOLDER
 from src.agent.compact.config import CompactConfig
 from src.agent.compact.token_counter import estimate_messages_tokens
 from src.agent.message.history_message_loader import HistoryMessageLoader
@@ -62,7 +62,7 @@ class TestMicrocompact:
             ModelResponse(parts=[TextPart(content="hi")]),
         ]
         result = await compactor.check(messages)
-        assert result is False
+        assert result.compacted is False
 
     @pytest.mark.asyncio
     async def test_microcompact_replaces_old_tool_results(self) -> None:
@@ -85,7 +85,9 @@ class TestMicrocompact:
         total_before = estimate_messages_tokens(messages)
         result = await compactor.check(messages)
 
-        assert result is True
+        assert result.compacted is True
+        assert result.layer == "microcompact"
+        assert result.tokens_saved > 0
         total_after = estimate_messages_tokens(messages)
         assert total_after < total_before
 
@@ -146,7 +148,7 @@ class TestMicrocompact:
         )
 
         result = await compactor.check(messages)
-        assert result is False
+        assert result.compacted is False
 
         # 所有 tool return 保持原样
         tool_returns = [
@@ -187,7 +189,9 @@ class TestCompactWithPersistence:
         )
 
         result = await compactor.check(messages)
-        assert result is True
+        assert result.compacted is True
+        assert result.layer == "microcompact"
+        assert result.attachments == []
 
         # 重新从文件加载，验证压缩后的内容被持久化了
         loaded = await loader.load("u1", "s1")
