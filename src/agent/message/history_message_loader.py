@@ -73,7 +73,7 @@ def _deserialize_messages(raw: str) -> list[ModelMessage]:
             messages.extend(parsed)
         except Exception:
             import logging
-            logging.getLogger(__name__).warning("跳过损坏的 JSONL 行: %s", line[:100])
+            logging.getLogger(__name__).warning("跳过损坏的 JSONL 行（行长度 %d）", len(line))
     return messages
 
 
@@ -116,6 +116,9 @@ class HistoryMessageLoader:
         """整体覆写 messages.jsonl（compact 后调用）。
 
         过滤 is_meta 消息。写入失败时抛出异常，不静默丢数据。
+
+        注意：当前 BackendProtocol.write() 不支持原子覆写（先删后写），
+        写入失败时旧数据可能已被删除。生产环境需要后端支持 overwrite/rename。
         """
         persist = [m for m in messages if not _is_meta(m)]
         content = _serialize_messages(persist)
