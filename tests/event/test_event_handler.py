@@ -54,6 +54,74 @@ class TestSseSinker:
         assert await queue.get() is None
 
 
+class TestEventEmitterEdgeCases:
+    """US-004: EventEmitter close 后 emit 不抛异常"""
+
+    @pytest.mark.asyncio
+    async def test_emit_after_close_silent(self) -> None:
+        """close() 后再 emit() 静默丢弃，不抛异常"""
+        from src.event.event_emitter import EventEmitter
+        queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+        emitter = EventEmitter(queue)
+
+        await emitter.close()
+        # close 后 emit 不应抛异常
+        event = EventModel(
+            conversation_id="c1", request_id="r1",
+            type=EventType.TEXT, data={"content": "after close"},
+        )
+        await emitter.emit(event)  # 应该静默丢弃
+
+        # queue 中只有 sentinel
+        item = await queue.get()
+        assert item is None
+        assert queue.empty()
+
+    @pytest.mark.asyncio
+    async def test_double_close_safe(self) -> None:
+        """多次 close() 只放一个 sentinel"""
+        from src.event.event_emitter import EventEmitter
+        queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+        emitter = EventEmitter(queue)
+
+        await emitter.close()
+        await emitter.close()
+
+        assert await queue.get() is None
+        assert queue.empty()
+
+
+class TestEventHandlerMultipleSinkers:
+    """US-004: sinker 异常不影响其他 sinker"""
+
+    @pytest.mark.asyncio
+    async def test_bad_sinker_does_not_block_others(self) -> None:
+        """一个 sinker 抛异常不影响其他 sinker"""
+
+        class BadSinker:
+            async def send(self, event: EventModel) -> None:
+                raise RuntimeError("sinker exploded")
+            async def close(self) -> None:
+                raise RuntimeError("close exploded")
+
+        good_sinker = MockSinker()
+        bad_sinker = BadSinker()
+
+        handler = EventHandler(sinkers=[bad_sinker, good_sinker])
+        event = EventModel(
+            conversation_id="c1", request_id="r1",
+            type=EventType.TEXT, data={"content": "hi"},
+        )
+
+        # 不应抛异常
+        await handler.handle(event)
+        assert len(good_sinker.events) == 1
+
+        # close 也不应抛异常
+        await handler.close()
+        assert good_sinker.closed is True
+
+
 class TestEventModel:
 
     def test_to_dict(self) -> None:
@@ -77,3 +145,20 @@ class TestEventModel:
         json_str = event.to_json()
         assert '"conversation_id": "c1"' in json_str
         assert '"type": "text"' in json_str
+
+    def test_all_event_types_serializable(self) -> None:
+        """所有 EventType 都能正确序列化 to_dict() 和 to_json()"""
+        import json
+        for event_type in EventType:
+            event = EventModel(
+                conversation_id="c1", request_id="r1",
+                type=event_type, data={"key": "value"},
+                timestamp=1000,
+            )
+            d = event.to_dict()
+            assert d["type"] == event_type.value
+            assert isinstance(d["data"], dict)
+
+            json_str = event.to_json()
+            parsed = json.loads(json_str)
+            assert parsed["type"] == event_type.value
