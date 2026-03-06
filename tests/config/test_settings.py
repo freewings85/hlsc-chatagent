@@ -44,6 +44,40 @@ class TestSingletons:
         assert settings.get_server_config() is config
 
 
+class TestSingletonsEdgeCases:
+    """US-007: 配置系统单例安全"""
+
+    def test_get_llm_config_returns_same_instance(self) -> None:
+        """get_llm_config() 多次调用返回同一实例"""
+        settings._llm_config = None
+        c1 = settings.get_llm_config()
+        c2 = settings.get_llm_config()
+        c3 = settings.get_llm_config()
+        assert c1 is c2
+        assert c2 is c3
+
+    def test_get_compact_config_singleton(self) -> None:
+        """get_compact_config() 多次调用返回同一实例"""
+        settings._compact_config = None
+        c1 = settings.get_compact_config()
+        c2 = settings.get_compact_config()
+        assert c1 is c2
+
+    def test_get_storage_config_singleton(self) -> None:
+        """get_storage_config() 多次调用返回同一实例"""
+        settings._storage_config = None
+        c1 = settings.get_storage_config()
+        c2 = settings.get_storage_config()
+        assert c1 is c2
+
+    def test_get_backend_singleton(self) -> None:
+        """get_backend() 多次调用返回同一实例"""
+        settings._backend = None
+        b1 = settings.get_backend()
+        b2 = settings.get_backend()
+        assert b1 is b2
+
+
 class TestCompactConfig:
     def test_default(self) -> None:
         config = CompactConfig()
