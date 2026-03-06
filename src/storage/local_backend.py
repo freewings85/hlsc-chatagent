@@ -438,9 +438,12 @@ class FilesystemBackend(BackendProtocol):
             return False
 
     def delete(self, path: str) -> bool:
-        """Delete a file or directory."""
+        """Delete a file or directory. Refuses to delete root directory."""
         try:
             resolved = self._resolve_path(path)
+            # 防止删除根目录
+            if resolved == self.cwd or resolved == self.cwd.resolve():
+                return False
             if resolved.is_file():
                 resolved.unlink()
                 return True

@@ -68,3 +68,17 @@ class TestFilesystemBackend:
         await backend.awrite("/async.txt", "async content")
         content = await backend.aread("/async.txt")
         assert "async content" in content
+
+    def test_delete_root_refused(self, tmp_path) -> None:
+        """delete('/') 不能删除根目录"""
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        # 先写入一个文件确认数据存在
+        backend.write("/test.txt", "data")
+        assert backend.exists("/test.txt")
+
+        # 尝试删除根目录应该返回 False
+        result = backend.delete("/")
+        assert result is False
+
+        # 数据应该仍然存在
+        assert backend.exists("/test.txt")
