@@ -159,6 +159,123 @@ class TestMicrocompact:
             assert tr.content == small_result
 
 
+class TestCompactorBoundaryConditions:
+    """US-002: Compactor 边界条件加固"""
+
+    def _make_compactor(self, **kwargs) -> Compactor:
+        config = CompactConfig(**kwargs)
+        return Compactor(config=config)
+
+    @pytest.mark.asyncio
+    async def test_empty_messages_returns_not_compacted(self) -> None:
+        """空消息列表传给 check() 返回 CompactResult(compacted=False)"""
+        compactor = self._make_compactor()
+        result = await compactor.check([])
+        assert result.compacted is False
+        assert result.layer == "none"
+        assert result.pre_tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_single_message_below_threshold(self) -> None:
+        """单条消息不触发压缩"""
+        compactor = self._make_compactor()
+        messages: list[ModelMessage] = [
+            ModelRequest(parts=[UserPromptPart(content="hello")]),
+        ]
+        result = await compactor.check(messages)
+        assert result.compacted is False
+
+    @pytest.mark.asyncio
+    async def test_all_placeholder_no_recompact(self) -> None:
+        """所有 tool_return 已经是 placeholder 时不再重复压缩"""
+        messages: list[ModelMessage] = []
+        # 创建多个已压缩的 tool return（内容就是 placeholder）
+        for i in range(5):
+            messages.extend([
+                ModelResponse(parts=[ToolCallPart(
+                    tool_name=f"tool_{i}", args={"q": "x"},
+                    tool_call_id=f"call_{i}",
+                )]),
+                ModelRequest(parts=[ToolReturnPart(
+                    tool_name=f"tool_{i}",
+                    content=_PLACEHOLDER,
+                    tool_call_id=f"call_{i}",
+                )]),
+            ])
+
+        # 设置阈值使得会触发 microcompact 检查
+        compactor = self._make_compactor(
+            context_window=1_000,
+            output_reserve=100,
+            min_savings_threshold=1,
+            keep_recent_tool_results=2,
+        )
+        result = await compactor.check(messages)
+        # placeholder 替换后节省为 0（placeholder → placeholder），不应压缩
+        assert result.compacted is False
+
+    @pytest.mark.asyncio
+    async def test_token_at_exact_threshold(self) -> None:
+        """token 估算恰好等于 threshold 时触发压缩"""
+        # effective_window = 1000 - 0 = 1000
+        # microcompact_threshold = 1000 - 10 = 990
+        # 创建消息使 token 恰好 = 990 → >= threshold → 触发
+        # 每字符 = 0.25 token, 所以 3960 字符 = 990 tokens
+        big_result = "x" * 3940  # ≈985 tokens
+        messages: list[ModelMessage] = [
+            ModelResponse(parts=[ToolCallPart(
+                tool_name="t1", args={"q": "x"}, tool_call_id="c1",
+            )]),
+            ModelRequest(parts=[ToolReturnPart(
+                tool_name="t1", content=big_result, tool_call_id="c1",
+            )]),
+            ModelResponse(parts=[ToolCallPart(
+                tool_name="t2", args={"q": "x"}, tool_call_id="c2",
+            )]),
+            ModelRequest(parts=[ToolReturnPart(
+                tool_name="t2", content="small", tool_call_id="c2",
+            )]),
+        ]
+        total = estimate_messages_tokens(messages)
+        # microcompact_threshold = context_window - output_reserve - min_savings_threshold
+        # Set so threshold == total → triggers (>= check)
+        compactor = self._make_compactor(
+            context_window=total + 1,
+            output_reserve=0,
+            min_savings_threshold=1,
+            keep_recent_tool_results=1,
+        )
+        result = await compactor.check(messages)
+        assert result.compacted is True
+        assert result.layer == "microcompact"
+
+    @pytest.mark.asyncio
+    async def test_microcompact_disabled_skips_layer1(self) -> None:
+        """microcompact_enabled=False 时跳过 microcompact 层"""
+        big_result = "x" * 100_000
+        messages: list[ModelMessage] = []
+        for i in range(3):
+            messages.extend(_make_tool_exchange(f"tool_{i}", big_result))
+
+        compactor = self._make_compactor(
+            context_window=80_000,
+            output_reserve=1_000,
+            min_savings_threshold=100,
+            keep_recent_tool_results=1,
+            microcompact_enabled=False,
+        )
+        result = await compactor.check(messages)
+        # microcompact 被跳过，不执行压缩（full compact 尚未实现）
+        assert result.compacted is False
+        # 所有 tool return 保持原样
+        tool_returns = [
+            p for m in messages if isinstance(m, ModelRequest)
+            for p in m.parts if isinstance(p, ToolReturnPart)
+        ]
+        for tr in tool_returns:
+            assert tr.content == big_result
+
+
 class TestCompactWithPersistence:
 
     @pytest.mark.asyncio
