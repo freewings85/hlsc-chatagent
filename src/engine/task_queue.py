@@ -102,3 +102,25 @@ class SessionRequestTaskQueue:
                 continue
             self._executing.add(sid)
             return task
+
+    def try_get_ready_task(self) -> SessionRequestTask | None:
+        """非阻塞获取下一个可执行的任务。队列为空时返回 None。"""
+        while not self._ready.empty():
+            try:
+                sid = self._ready.get_nowait()
+            except asyncio.QueueEmpty:
+                return None
+            self._ready_set.discard(sid)
+            if not self._session_queues[sid]:
+                continue
+            task = self._session_queues[sid].popleft()
+            if task.cancelled:
+                self._task_index.pop(task.task_id, None)
+                if self._session_queues[sid]:
+                    if sid not in self._ready_set:
+                        self._ready_set.add(sid)
+                        self._ready.put_nowait(sid)
+                continue
+            self._executing.add(sid)
+            return task
+        return None

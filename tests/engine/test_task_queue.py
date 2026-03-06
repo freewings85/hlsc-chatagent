@@ -179,3 +179,78 @@ class TestGetReadyTask:
         t1.cancelled = True
         result = await q.get_ready_task()
         assert result is t2
+
+
+class TestTaskQueueEdgeCases:
+    """US-005: TaskQueue 并发控制与取消机制"""
+
+    def test_concurrent_try_enqueue_mutual_exclusion(self) -> None:
+        """同一 session 并发 try_enqueue 时只有一个成功"""
+        q = SessionRequestTaskQueue()
+        t1 = _make_task(task_id="t1")
+        t2 = _make_task(task_id="t2")
+
+        r1 = q.try_enqueue(t1)
+        r2 = q.try_enqueue(t2)
+
+        assert r1 is True
+        assert r2 is False
+
+    @pytest.mark.asyncio
+    async def test_concurrent_async_enqueue_mutual_exclusion(self) -> None:
+        """同一 session async enqueue，max=1 时只有一个成功"""
+        q = SessionRequestTaskQueue(max_queue_per_session=1)
+        t1 = _make_task(task_id="t1")
+        t2 = _make_task(task_id="t2")
+
+        r1 = await q.enqueue(t1)
+        r2 = await q.enqueue(t2)
+
+        assert r1 is True
+        assert r2 is False
+
+    def test_cancel_waiting_task_sets_cancelled(self) -> None:
+        """cancel 正在等待的任务能正确设置 cancelled 标记"""
+        q = SessionRequestTaskQueue(max_queue_per_session=3)
+        t1 = _make_task(task_id="t1")
+        q.try_enqueue(t1)
+
+        assert t1.cancelled is False
+        result = q.cancel("t1")
+        assert result is True
+        assert t1.cancelled is True
+
+    def test_release_then_reenqueue(self) -> None:
+        """release 后同一 session 可以再次 enqueue"""
+        q = SessionRequestTaskQueue()
+        t1 = _make_task(task_id="t1")
+        q.try_enqueue(t1)
+
+        # 模拟取出执行
+        q._session_queues["s1"].popleft()
+        q._executing.add("s1")
+
+        # release
+        q.release("s1", "t1")
+        assert "s1" not in q._executing
+
+        # 可以再次 enqueue
+        t2 = _make_task(task_id="t2")
+        result = q.try_enqueue(t2)
+        assert result is True
+
+    def test_try_get_ready_task_empty_returns_none(self) -> None:
+        """try_get_ready_task 在队列为空时返回 None"""
+        q = SessionRequestTaskQueue()
+        result = q.try_get_ready_task()
+        assert result is None
+
+    def test_try_get_ready_task_returns_task(self) -> None:
+        """try_get_ready_task 有任务时返回任务"""
+        q = SessionRequestTaskQueue()
+        t1 = _make_task(task_id="t1")
+        q.try_enqueue(t1)
+
+        result = q.try_get_ready_task()
+        assert result is t1
+        assert "s1" in q._executing
