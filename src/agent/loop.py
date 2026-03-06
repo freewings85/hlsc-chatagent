@@ -6,12 +6,23 @@ from typing import Any
 
 from pydantic_ai import Agent
 from pydantic_ai.agent import ModelRequestNode, CallToolsNode
-from pydantic_ai.messages import ModelMessage, ModelRequest
+from pydantic_ai.messages import (
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    ModelMessage,
+    ModelRequest,
+    PartDeltaEvent,
+    PartStartEvent,
+    TextPart,
+    TextPartDelta,
+    ToolCallPart,
+    ToolCallPartDelta,
+)
 from pydantic_ai.models import Model
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
-from src.agent.compact.compactor import Compactor
+from src.agent.compact.compactor import CompactResult, Compactor
 from src.agent.deps import AgentDeps
 from src.agent.message.context_injector import inject_context
 from src.agent.message.history_message_loader import HistoryMessageLoader
@@ -20,6 +31,8 @@ from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
 from src.config.settings import get_backend, get_compact_config
 from src.event.event_emitter import EventEmitter
+from src.event.event_model import EventModel
+from src.event.event_type import EventType
 
 
 def create_agent(
@@ -35,6 +48,91 @@ def create_agent(
         toolsets=[DynamicToolset(get_tools, per_run_step=True)],
         history_processors=history_processors or [],
     )
+
+
+async def _emit_model_stream(
+    node: ModelRequestNode[AgentDeps, str],
+    ctx: Any,
+    emitter: EventEmitter,
+    task: SessionRequestTask,
+) -> None:
+    """流式消费 ModelRequestNode，逐 token 发出 TEXT / TOOL_CALL 事件。
+
+    stream 结束后 node._result 已设置，后续 run.next(node) 不会重复调 LLM。
+    """
+    async with node.stream(ctx) as agent_stream:
+        async for event in agent_stream:
+            if isinstance(event, PartStartEvent):
+                part = event.part
+                if isinstance(part, TextPart) and part.content:
+                    await emitter.emit(EventModel(
+                        conversation_id=task.session_id,
+                        request_id=task.request_id,
+                        type=EventType.TEXT,
+                        data={"content": part.content},
+                    ))
+                elif isinstance(part, ToolCallPart):
+                    await emitter.emit(EventModel(
+                        conversation_id=task.session_id,
+                        request_id=task.request_id,
+                        type=EventType.TOOL_CALL_START,
+                        data={
+                            "tool_name": part.tool_name,
+                            "tool_call_id": part.tool_call_id or "",
+                        },
+                    ))
+            elif isinstance(event, PartDeltaEvent):
+                delta = event.delta
+                if isinstance(delta, TextPartDelta):
+                    await emitter.emit(EventModel(
+                        conversation_id=task.session_id,
+                        request_id=task.request_id,
+                        type=EventType.TEXT,
+                        data={"content": delta.content_delta},
+                    ))
+                elif isinstance(delta, ToolCallPartDelta):
+                    await emitter.emit(EventModel(
+                        conversation_id=task.session_id,
+                        request_id=task.request_id,
+                        type=EventType.TOOL_CALL_ARGS,
+                        data={"args_chunk": delta.args_delta},
+                    ))
+
+
+async def _emit_tool_events(
+    node: CallToolsNode[AgentDeps, str],
+    ctx: Any,
+    emitter: EventEmitter,
+    task: SessionRequestTask,
+) -> None:
+    """流式消费 CallToolsNode，发出 TOOL_CALL_START / TOOL_RESULT 事件。
+
+    stream 结束后 node._next_node 已设置，后续 run.next(node) 不会重复执行工具。
+    """
+    async with node.stream(ctx) as event_stream:
+        async for event in event_stream:
+            if isinstance(event, FunctionToolCallEvent):
+                await emitter.emit(EventModel(
+                    conversation_id=task.session_id,
+                    request_id=task.request_id,
+                    type=EventType.TOOL_CALL_START,
+                    data={
+                        "tool_name": event.part.tool_name,
+                        "tool_call_id": event.part.tool_call_id or "",
+                    },
+                ))
+            elif isinstance(event, FunctionToolResultEvent):
+                content = event.result.content if hasattr(event.result, "content") else str(event.result)
+                await emitter.emit(EventModel(
+                    conversation_id=task.session_id,
+                    request_id=task.request_id,
+                    type=EventType.TOOL_RESULT,
+                    data={
+                        "tool_name": event.result.tool_name,
+                        "tool_call_id": getattr(event.result, "tool_call_id", ""),
+                        "result": content,
+                    },
+                ))
 
 
 async def run_agent_loop(
@@ -56,6 +154,11 @@ async def run_agent_loop(
     - 通过 run._graph_run.state.message_history 直接操作内部消息列表
     - compact / attachment / context 在 ModelRequestNode 前手动修改消息
     - 该列表与 run.all_messages() 是同一引用
+
+    流式事件：
+    - ModelRequestNode: 通过 node.stream(ctx) 逐 token 发出 TEXT / TOOL_CALL 事件
+    - CallToolsNode: 通过 node.stream(ctx) 发出 TOOL_RESULT 事件
+    - stream 完成后 run.next(node) 不会重复执行（内部检查 _result/_next_node）
     """
     try:
         iteration: int = 0
@@ -102,17 +205,27 @@ async def run_agent_loop(
                     # TODO: 5. AttachmentCollector.inject(history, compact_result)
                     #   — compact 后恢复上下文（最近文件、任务状态等）
                     #   — 每轮动态 attachment（changed_files、diagnostics 等）
-                    # TODO: 7. 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
+
+                    # 7. 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
+                    await _emit_model_stream(node, run.ctx, emitter, task)
 
                 elif isinstance(node, CallToolsNode):
-                    # TODO: 8. 工具执行 → emitter.emit(tool_result 事件)
-                    pass
+                    # 8. 工具执行 → emitter.emit(tool_result 事件)
+                    await _emit_tool_events(node, run.ctx, emitter, task)
 
                 node = await run.next(node)
 
                 iteration += 1
                 if iteration >= max_iterations:
                     break
+
+        # 发送结束事件
+        await emitter.emit(EventModel(
+            conversation_id=task.session_id,
+            request_id=task.request_id,
+            type=EventType.CHAT_REQUEST_END,
+            data={},
+        ))
 
         # 9. 追加新消息到 messages.jsonl（append-only，过滤 is_meta）
         if run.result is not None:

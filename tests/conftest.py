@@ -1,11 +1,12 @@
 """共享 fixtures 和 mock 工具"""
 
 import asyncio
+from collections.abc import AsyncIterator
 
 import pytest
 from pydantic_ai import RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from src.agent.deps import AgentDeps
 from src.common.session_request_task import SessionRequestTask
@@ -13,7 +14,7 @@ from src.event.event_emitter import EventEmitter
 from src.event.event_model import EventModel
 
 
-# ---- Mock Models ----
+# ---- Mock Models (non-streaming) ----
 
 def mock_simple_text(messages: list[ModelMessage], info: object) -> ModelResponse:
     """直接返回文本"""
@@ -27,6 +28,27 @@ def mock_weather_then_answer(messages: list[ModelMessage], info: object) -> Mode
             if hasattr(part, "part_kind") and part.part_kind == "tool-return":
                 return ModelResponse(parts=[TextPart(content=f"天气结果：{part.content}")])
     return ModelResponse(parts=[ToolCallPart(tool_name="get_weather", args={"city": "上海"})])
+
+
+# ---- Mock Stream Functions ----
+
+async def mock_stream_text(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
+    """逐 token 流式返回文本"""
+    for chunk in ["你好", "，", "我是", "助手"]:
+        yield chunk
+
+
+async def mock_stream_weather_then_answer(
+    messages: list[ModelMessage], info: AgentInfo,
+) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    """流式版本：第1次返回 tool call delta，第2次返回文本"""
+    for msg in messages:
+        for part in msg.parts:
+            if hasattr(part, "part_kind") and part.part_kind == "tool-return":
+                for chunk in ["天气", "结果：", part.content]:
+                    yield chunk
+                return
+    yield {0: DeltaToolCall(name="get_weather", json_args='{"city": "上海"}')}
 
 
 # ---- Mock Tools ----
