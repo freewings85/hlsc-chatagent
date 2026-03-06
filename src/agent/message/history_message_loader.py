@@ -115,16 +115,20 @@ class HistoryMessageLoader:
     ) -> None:
         """整体覆写 messages.jsonl（compact 后调用）。
 
-        过滤 is_meta 消息。
+        过滤 is_meta 消息。写入失败时抛出异常，不静默丢数据。
         """
         persist = [m for m in messages if not _is_meta(m)]
         content = _serialize_messages(persist)
 
         path = _messages_path(user_id, session_id)
         if await self._backend.aexists(path):
-            await self._backend.adelete(path)
+            deleted = await self._backend.adelete(path)
+            if not deleted:
+                raise OSError(f"无法删除旧文件: {path}")
         if content:
-            await self._backend.awrite(path, content)
+            result = await self._backend.awrite(path, content)
+            if result.error is not None:
+                raise OSError(f"写入失败: {path}: {result.error}")
 
     async def append(
         self,
@@ -153,7 +157,10 @@ class HistoryMessageLoader:
                 if await self._backend.aexists(path):
                     responses = await self._backend.adownload_files([path])
                     resp = responses[0]
-                    if resp.error is None and resp.content is not None:
-                        existing = resp.content.decode("utf-8")
+                    if resp.error is not None or resp.content is None:
+                        raise OSError(f"读取失败，中止追加以防数据丢失: {path}")
+                    existing = resp.content.decode("utf-8")
                     await self._backend.adelete(path)
-                await self._backend.awrite(path, existing + append_content)
+                result = await self._backend.awrite(path, existing + append_content)
+                if result.error is not None:
+                    raise OSError(f"写入失败: {path}: {result.error}")

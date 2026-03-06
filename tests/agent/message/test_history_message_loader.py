@@ -268,6 +268,57 @@ class TestHistoryLoaderRobustness:
             assert orig.parts[0].content == load.parts[0].content
 
 
+class TestHistoryLoaderBackendFailure:
+    """Codex Issue #2/#3: 后端失败时不静默丢数据"""
+
+    @pytest.mark.asyncio
+    async def test_append_read_failure_raises(self, tmp_path) -> None:
+        """后端读取失败时 append 应抛异常，不删除旧文件"""
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        loader = HistoryMessageLoader(backend)
+
+        # 先写入一条消息
+        msg = ModelRequest(parts=[UserPromptPart(content="original")])
+        await loader.append("u1", "s1", [msg])
+
+        # Mock adownload_files 返回错误
+        original_download = backend.adownload_files
+
+        async def failing_download(paths: list[str]) -> list:
+            from src.common.filesystem_backend import FileDownloadResponse
+            return [FileDownloadResponse(path=paths[0], content=None, error="read error")]
+
+        backend.adownload_files = failing_download  # type: ignore[assignment]
+
+        new_msg = ModelRequest(parts=[UserPromptPart(content="new")])
+        with pytest.raises(OSError, match="读取失败"):
+            await loader.append("u1", "s1", [new_msg])
+
+        # 恢复原始方法，验证旧数据完整
+        backend.adownload_files = original_download  # type: ignore[assignment]
+        messages = await loader.load("u1", "s1")
+        assert len(messages) == 1
+        assert messages[0].parts[0].content == "original"
+
+    @pytest.mark.asyncio
+    async def test_save_write_failure_raises(self, tmp_path) -> None:
+        """后端写入失败时 save 应抛异常"""
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        loader = HistoryMessageLoader(backend)
+
+        original_write = backend.awrite
+
+        async def failing_write(path: str, content: str) -> object:
+            from src.common.filesystem_backend import WriteResult
+            return WriteResult(path=path, error="disk full")
+
+        backend.awrite = failing_write  # type: ignore[assignment]
+
+        msg = ModelRequest(parts=[UserPromptPart(content="test")])
+        with pytest.raises(OSError, match="写入失败"):
+            await loader.save("u1", "s1", [msg])
+
+
 class TestDeserializeMessages:
 
     def test_skips_empty_lines(self) -> None:
