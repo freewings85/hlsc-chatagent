@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from pydantic_ai.messages import (
@@ -57,14 +59,21 @@ def _serialize_messages(messages: list[ModelMessage]) -> str:
 
 
 def _deserialize_messages(raw: str) -> list[ModelMessage]:
-    """从 JSONL 字符串解析消息列表。"""
+    """从 JSONL 字符串解析消息列表。
+
+    损坏的行（非法 JSON）会被跳过并记录日志，不会导致整个文件失败。
+    """
     messages: list[ModelMessage] = []
     for line in raw.splitlines():
         line = line.strip()
         if not line:
             continue
-        parsed = ModelMessagesTypeAdapter.validate_json(f"[{line}]")
-        messages.extend(parsed)
+        try:
+            parsed = ModelMessagesTypeAdapter.validate_json(f"[{line}]")
+            messages.extend(parsed)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("跳过损坏的 JSONL 行: %s", line[:100])
     return messages
 
 
@@ -79,6 +88,7 @@ class HistoryMessageLoader:
 
     def __init__(self, backend: BackendProtocol) -> None:
         self._backend = backend
+        self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     async def load(self, user_id: str, session_id: str) -> list[ModelMessage]:
         """从 messages.jsonl 加载历史消息。"""
@@ -92,7 +102,7 @@ class HistoryMessageLoader:
             return []
 
         raw = resp.content.decode("utf-8").strip()
-        if not raw:  # pragma: no cover — 文件存在但内容为空
+        if not raw:
             return []
 
         return _deserialize_messages(raw)
@@ -134,14 +144,16 @@ class HistoryMessageLoader:
 
         append_content = _serialize_messages(persist)
 
-        # 两个文件都追加
-        for path_fn in (_messages_path, _transcript_path):
-            path = path_fn(user_id, session_id)
-            existing = ""
-            if await self._backend.aexists(path):
-                responses = await self._backend.adownload_files([path])
-                resp = responses[0]
-                if resp.error is None and resp.content is not None:
-                    existing = resp.content.decode("utf-8")
-                await self._backend.adelete(path)
-            await self._backend.awrite(path, existing + append_content)
+        lock_key = f"{user_id}:{session_id}"
+        async with self._locks[lock_key]:
+            # 两个文件都追加
+            for path_fn in (_messages_path, _transcript_path):
+                path = path_fn(user_id, session_id)
+                existing = ""
+                if await self._backend.aexists(path):
+                    responses = await self._backend.adownload_files([path])
+                    resp = responses[0]
+                    if resp.error is None and resp.content is not None:
+                        existing = resp.content.decode("utf-8")
+                    await self._backend.adelete(path)
+                await self._backend.awrite(path, existing + append_content)

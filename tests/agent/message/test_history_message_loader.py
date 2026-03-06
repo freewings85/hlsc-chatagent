@@ -186,6 +186,88 @@ class TestTranscript:
         assert len(lines) == 2
 
 
+class TestHistoryLoaderRobustness:
+    """US-003: HistoryMessageLoader 并发安全与序列化鲁棒性"""
+
+    def _make_loader(self, tmp_path) -> HistoryMessageLoader:
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        return HistoryMessageLoader(backend)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_append_no_message_loss(self, tmp_path) -> None:
+        """并发 append 同一 session 不丢消息"""
+        import asyncio
+        loader = self._make_loader(tmp_path)
+
+        async def append_msg(idx: int) -> None:
+            msg = ModelRequest(parts=[UserPromptPart(content=f"msg-{idx}")])
+            await loader.append("u1", "s1", [msg])
+
+        # 并发 append 10 条
+        await asyncio.gather(*[append_msg(i) for i in range(10)])
+
+        messages = await loader.load("u1", "s1")
+        assert len(messages) == 10
+        contents = {m.parts[0].content for m in messages}
+        for i in range(10):
+            assert f"msg-{i}" in contents
+
+    @pytest.mark.asyncio
+    async def test_corrupted_jsonl_line_skipped(self, tmp_path) -> None:
+        """JSONL 中有损坏行（非法 JSON）时跳过该行而不是整个文件失败"""
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        loader = HistoryMessageLoader(backend)
+
+        # 先写入一条正常消息
+        msg = ModelRequest(parts=[UserPromptPart(content="valid")])
+        await loader.append("u1", "s1", [msg])
+
+        # 手动在文件中插入损坏行
+        path = "/u1/sessions/s1/messages.jsonl"
+        responses = await backend.adownload_files([path])
+        original = responses[0].content.decode("utf-8")
+        corrupted = original.rstrip() + "\n{invalid json here}\n"
+        await backend.adelete(path)
+        await backend.awrite(path, corrupted)
+
+        # load 应该跳过损坏行，返回有效消息
+        messages = await loader.load("u1", "s1")
+        assert len(messages) == 1
+        assert messages[0].parts[0].content == "valid"
+
+    @pytest.mark.asyncio
+    async def test_empty_file_returns_empty_list(self, tmp_path) -> None:
+        """空文件（0 字节）load 返回空列表"""
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        loader = HistoryMessageLoader(backend)
+
+        # 写入空文件
+        path = "/u1/sessions/s1/messages.jsonl"
+        await backend.awrite(path, "")
+
+        messages = await loader.load("u1", "s1")
+        assert messages == []
+
+    @pytest.mark.asyncio
+    async def test_serialization_roundtrip(self, tmp_path) -> None:
+        """save 后再 load 的消息与原始消息完全一致（序列化往返测试）"""
+        loader = self._make_loader(tmp_path)
+
+        original = [
+            ModelRequest(parts=[UserPromptPart(content="用户问题")]),
+            ModelResponse(parts=[TextPart(content="助手回答")]),
+            ModelRequest(parts=[UserPromptPart(content="第二轮")]),
+            ModelResponse(parts=[TextPart(content="第二轮回答")]),
+        ]
+
+        await loader.save("u1", "s1", original)
+        loaded = await loader.load("u1", "s1")
+
+        assert len(loaded) == len(original)
+        for orig, load in zip(original, loaded):
+            assert orig.parts[0].content == load.parts[0].content
+
+
 class TestDeserializeMessages:
 
     def test_skips_empty_lines(self) -> None:
