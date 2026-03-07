@@ -64,5 +64,8 @@ class CompactConfig:
 
     @property
     def full_compact_threshold(self) -> int:
-        """Full compact 触发阈值"""
-        return self.effective_window - self.auto_compact_buffer
+        """Full compact 触发阈值（始终 > microcompact_threshold，防止 auto_compact_buffer 过大导致负值）"""
+        threshold = self.effective_window - self.auto_compact_buffer
+        # 确保 full compact 阈值 > microcompact 阈值：若 auto_compact_buffer 过大导致负值，
+        # 则 full compact 在 microcompact 刚刚触发后才可能触发
+        return max(threshold, self.microcompact_threshold + 1)

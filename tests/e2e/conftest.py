@@ -35,6 +35,16 @@ def base_url() -> str:  # type: ignore[return]
         **os.environ,
         "SERVER_PORT": str(PLAYWRIGHT_PORT),
         "DATA_DIR": str(TEST_DATA_DIR),
+        # E2E 使用 20k compact 阈值（接近真实使用场景）
+        # effective_window = 20000 - 2000 = 18000
+        # microcompact_threshold = 18000 - 2000 = 16000 tokens
+        # full_compact_threshold = max(18000-1300, 16001) = 16700 tokens
+        # 4 轮读取 16k-char 文件（~4000 tokens/轮）→ 总计 ~18000 tokens → 触发 microcompact
+        "COMPACT_CONTEXT_WINDOW": "20000",
+        "COMPACT_OUTPUT_RESERVE": "2000",
+        "COMPACT_MIN_SAVINGS_THRESHOLD": "2000",
+        "COMPACT_AUTO_BUFFER": "1300",
+        "COMPACT_KEEP_RECENT_TOOL_RESULTS": "1",
     }
 
     proc = subprocess.Popen(
