@@ -70,6 +70,20 @@ def base_url() -> str:  # type: ignore[return]
         proc.kill()
 
 
+@pytest.fixture(autouse=True)
+def clean_test_data_dir() -> None:
+    """每个测试函数开始前清空 TEST_DATA_DIR 内容（保留目录本身），避免测试间数据污染。"""
+    import shutil
+    if TEST_DATA_DIR.exists():
+        for child in TEST_DATA_DIR.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+    else:
+        TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
 @pytest.fixture()
 def chat_page(page: Page, base_url: str) -> Page:
     """打开聊天测试页面，返回 Page 对象。"""

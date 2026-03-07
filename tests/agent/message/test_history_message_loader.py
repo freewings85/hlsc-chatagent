@@ -333,3 +333,59 @@ class TestDeserializeMessages:
         raw = f"{json_line}\n\n{json_line}\n"
         result = _deserialize_messages(raw)
         assert len(result) == 2
+
+
+class TestSaveEdgeCases:
+    """US-004: save() 中 adelete 返回 False 时抛出 OSError（第 130 行）"""
+
+    @pytest.mark.asyncio
+    async def test_save_delete_failure_raises(self, tmp_path) -> None:
+        """save 时 adelete 返回 False → 抛出 OSError（覆盖 history_message_loader.py 130 行）"""
+        from src.storage.local_backend import FilesystemBackend
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        loader = HistoryMessageLoader(backend)
+
+        # 先写入一条消息（让文件存在，save 才会执行 adelete）
+        msg = ModelRequest(parts=[UserPromptPart(content="original")])
+        await loader.append("u1", "s1", [msg])
+
+        # Mock adelete 返回 False
+        original_delete = backend.adelete
+
+        async def failing_delete(path: str) -> bool:
+            return False
+
+        backend.adelete = failing_delete  # type: ignore[assignment]
+
+        new_msg = ModelRequest(parts=[UserPromptPart(content="new")])
+        with pytest.raises(OSError, match="无法删除旧文件"):
+            await loader.save("u1", "s1", [new_msg])
+
+        # 恢复并验证旧数据仍存在
+        backend.adelete = original_delete  # type: ignore[assignment]
+        messages = await loader.load("u1", "s1")
+        assert len(messages) == 1
+        assert messages[0].parts[0].content == "original"
+
+
+class TestAppendEdgeCases:
+    """US-004: append() 中 awrite 失败时抛出 OSError（第 169 行）"""
+
+    @pytest.mark.asyncio
+    async def test_append_write_failure_raises(self, tmp_path) -> None:
+        """append 时 awrite 失败 → 抛出 OSError（覆盖 history_message_loader.py 169 行）"""
+        from src.storage.local_backend import FilesystemBackend
+        from src.common.filesystem_backend import WriteResult
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        loader = HistoryMessageLoader(backend)
+
+        original_write = backend.awrite
+
+        async def failing_write(path: str, content: str) -> WriteResult:
+            return WriteResult(path=path, error="disk full")
+
+        backend.awrite = failing_write  # type: ignore[assignment]
+
+        msg = ModelRequest(parts=[UserPromptPart(content="test")])
+        with pytest.raises(OSError, match="写入失败"):
+            await loader.append("u1", "s1", [msg])

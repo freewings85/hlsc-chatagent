@@ -16,7 +16,69 @@ import pytest
 from src.agent.deps import AgentDeps
 from src.agent.file_state import FileStateTracker
 from src.agent.tools.fs import edit, glob, grep, read, write
+from src.agent.tools import create_default_tool_map
+from src.common.filesystem_backend import EditResult, WriteResult
 from src.storage.local_backend import FilesystemBackend
+
+
+# ---------------------------------------------------------------------------
+# 无 _resolve_path 的 mock backend（触发 AttributeError fallback）
+# ---------------------------------------------------------------------------
+
+class _NoResolveMockBackend:
+    """不含 _resolve_path 方法的 mock backend，用于触发 fs.py fallback 路径。"""
+
+    def __init__(
+        self,
+        read_content: str = "  1\ttest\n",
+        edit_occurrences: int = 1,
+        write_error: str | None = None,
+        grep_result: list | str = "Error: grep failed",
+    ) -> None:
+        self._read_content: str = read_content
+        self._edit_result: EditResult = EditResult(error=None, occurrences=edit_occurrences)
+        self._write_result: WriteResult = WriteResult(error=write_error)
+        self._grep_result: list | str = grep_result
+
+    async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> str:
+        return self._read_content
+
+    async def aedit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        return self._edit_result
+
+    async def awrite(self, file_path: str, content: str) -> WriteResult:
+        return self._write_result
+
+    async def agrep_raw(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+    ) -> list | str:
+        return self._grep_result
+
+    # 故意不定义 _resolve_path → 访问时抛出 AttributeError
+
+
+def _make_ctx_no_resolve(
+    read_content: str = "  1\ttest\n",
+    grep_result: list | str = "Error: grep failed",
+) -> Any:
+    """创建使用无 _resolve_path backend 的 mock RunContext。"""
+    backend: Any = _NoResolveMockBackend(
+        read_content=read_content,
+        grep_result=grep_result,
+    )
+    deps: AgentDeps = AgentDeps(backend=backend, file_state_tracker=FileStateTracker())
+    ctx: Any = MagicMock()
+    ctx.deps = deps
+    return ctx
 
 
 def make_ctx(tmp_path: Path) -> Any:
@@ -265,3 +327,126 @@ class TestFileStateTrackerIntegration:
 
         tracker.clear()
         assert len(tracker) == 0
+
+
+class TestFsToolsFallbackPaths:
+    """US-001: backend 无 _resolve_path 时触发 AttributeError fallback 路径（fs.py 56-60, 101-108, 140-144, 193）"""
+
+    @pytest.mark.asyncio
+    async def test_read_fallback_file_exists(self, tmp_path: Path) -> None:
+        """read: _resolve_path AttributeError → fallback Path().stat() 成功（覆盖 56-59 行）"""
+        f: Path = tmp_path / "test.py"
+        f.write_text("test content\n")
+
+        ctx: Any = _make_ctx_no_resolve()
+        result: str = await read(ctx, str(f))
+
+        assert result == "  1\ttest\n"
+        assert len(ctx.deps.file_state_tracker) == 1
+
+    @pytest.mark.asyncio
+    async def test_read_fallback_file_not_exists(self, tmp_path: Path) -> None:
+        """read: _resolve_path AttributeError → fallback Path().stat() OSError → mtime=0.0（覆盖 56-60 行）"""
+        nonexistent: Path = tmp_path / "ghost.py"
+
+        ctx: Any = _make_ctx_no_resolve()
+        result: str = await read(ctx, str(nonexistent))
+
+        assert result == "  1\ttest\n"
+        assert len(ctx.deps.file_state_tracker) == 1
+
+    @pytest.mark.asyncio
+    async def test_edit_fallback_file_exists(self, tmp_path: Path) -> None:
+        """edit: _resolve_path AttributeError → fallback Path().read_text() 成功（覆盖 101-105 行）"""
+        f: Path = tmp_path / "code.py"
+        f.write_text("x = 42\n")
+
+        ctx: Any = _make_ctx_no_resolve()
+        result: str = await edit(ctx, str(f), "x = 1", "x = 42")
+
+        assert "已替换" in result
+        assert len(ctx.deps.file_state_tracker) == 1
+
+    @pytest.mark.asyncio
+    async def test_edit_fallback_file_not_exists(self, tmp_path: Path) -> None:
+        """edit: _resolve_path AttributeError + Path().read_text() OSError → new_content=new_string（覆盖 101-108 行）"""
+        nonexistent: Path = tmp_path / "ghost.py"
+
+        ctx: Any = _make_ctx_no_resolve()
+        result: str = await edit(ctx, str(nonexistent), "old", "new")
+
+        assert "已替换" in result
+        assert len(ctx.deps.file_state_tracker) == 1
+
+    @pytest.mark.asyncio
+    async def test_write_fallback_file_exists(self, tmp_path: Path) -> None:
+        """write: _resolve_path AttributeError → fallback Path().stat() 成功（覆盖 140-142 行）"""
+        f: Path = tmp_path / "out.py"
+        f.write_text("content\n")
+
+        ctx: Any = _make_ctx_no_resolve()
+        result: str = await write(ctx, str(f), "content\n")
+
+        assert "已写入" in result
+        assert len(ctx.deps.file_state_tracker) == 1
+
+    @pytest.mark.asyncio
+    async def test_write_fallback_file_not_exists(self, tmp_path: Path) -> None:
+        """write: _resolve_path AttributeError + Path().stat() OSError → mtime=0.0（覆盖 140-144 行）"""
+        nonexistent: Path = tmp_path / "ghost.py"
+
+        ctx: Any = _make_ctx_no_resolve()
+        result: str = await write(ctx, str(nonexistent), "content\n")
+
+        assert "已写入" in result
+        assert len(ctx.deps.file_state_tracker) == 1
+
+    @pytest.mark.asyncio
+    async def test_grep_returns_str_error_message(self, tmp_path: Path) -> None:
+        """grep: agrep_raw 返回 str（错误消息）时直接返回（覆盖 fs.py 193 行）"""
+        ctx: Any = _make_ctx_no_resolve(grep_result="Error: grep failed")
+        result: str = await grep(ctx, "pattern")
+
+        assert result == "Error: grep failed"
+
+
+class TestFileStateTrackerOSErrorPath:
+    """US-003: file_state.py get_changed_files() 中文件被删除时的 OSError 路径（91-92 行）"""
+
+    def test_get_changed_files_file_not_on_disk(self) -> None:
+        """on_read 后文件从磁盘删除，get_changed_files() 跳过该文件（OSError → continue）"""
+        tracker: FileStateTracker = FileStateTracker()
+        # 记录一个不存在的路径
+        tracker.on_read("/nonexistent/path/file.py", "content", 0.0, None, None)
+
+        changed: list = tracker.get_changed_files()
+        # 文件不存在 → OSError → continue → 不返回
+        assert len(changed) == 0
+
+    def test_get_changed_files_file_not_modified(self, tmp_path: Path) -> None:
+        """on_read 后文件未被修改，get_changed_files() 返回空列表"""
+        f: Path = tmp_path / "stable.py"
+        f.write_text("x = 1\n")
+        mtime: float = f.stat().st_mtime
+
+        tracker: FileStateTracker = FileStateTracker()
+        tracker.on_read(str(f), "x = 1\n", mtime, None, None)
+
+        changed: list = tracker.get_changed_files()
+        assert len(changed) == 0
+
+
+class TestCreateDefaultToolMap:
+    """agent/tools/__init__.py create_default_tool_map 覆盖（第 38 行）"""
+
+    def test_create_default_tool_map_returns_all_tools(self) -> None:
+        """create_default_tool_map() 返回包含所有工具的 dict"""
+        tool_map: dict = create_default_tool_map()
+
+        assert "read" in tool_map
+        assert "edit" in tool_map
+        assert "write" in tool_map
+        assert "glob" in tool_map
+        assert "grep" in tool_map
+        assert "bash" in tool_map
+        assert len(tool_map) == 6

@@ -254,3 +254,54 @@ class TestTaskQueueEdgeCases:
         result = q.try_get_ready_task()
         assert result is t1
         assert "s1" in q._executing
+
+
+class TestTryGetReadyTaskEdgeCases:
+    """US-004: try_get_ready_task 边界路径（task_queue.py 111-112, 115, 118-123）"""
+
+    def test_skip_empty_session_in_ready(self) -> None:
+        """ready 队列中有 session_id 但 session_queues 为空时跳过并返回 None（覆盖 114-115 行）"""
+        q = SessionRequestTaskQueue()
+        # 手动放 sid 到 ready 但不放任务
+        q._ready.put_nowait("empty_session")
+        q._ready_set.add("empty_session")
+
+        result = q.try_get_ready_task()
+        assert result is None
+
+    def test_skip_cancelled_task_in_try_get(self) -> None:
+        """try_get_ready_task 跳过已取消的任务（覆盖 117-119 行）"""
+        q = SessionRequestTaskQueue()
+        t1 = _make_task(task_id="t1")
+        q.try_enqueue(t1)
+        t1.cancelled = True
+
+        result = q.try_get_ready_task()
+        assert result is None
+
+    def test_cancelled_with_next_in_try_get(self) -> None:
+        """try_get_ready_task 跳过取消任务后还有后续任务时重新放入 ready（覆盖 118-123 行）"""
+        q = SessionRequestTaskQueue(max_queue_per_session=3)
+        t1 = _make_task(task_id="t1")
+        t2 = _make_task(task_id="t2")
+        q.try_enqueue(t1)
+        # 手动加入 t2（try_enqueue 会拒绝，因为 t1 已在队列）
+        q._session_queues["s1"].append(t2)
+        q._task_index["t2"] = t2
+
+        t1.cancelled = True
+
+        result = q.try_get_ready_task()
+        assert result is t2
+        assert "s1" in q._executing
+
+    def test_try_get_ready_task_queue_empty_race(self) -> None:
+        """ready.empty() 返回 False 但 get_nowait() 抛出 QueueEmpty 时返回 None（覆盖 111-112 行）"""
+        q = SessionRequestTaskQueue()
+
+        # 模拟竞态：empty() 说不为空，但实际 get_nowait() 抛出 QueueEmpty
+        q._ready.empty = lambda: False  # type: ignore[method-assign]
+        q._ready.get_nowait = lambda: (_ for _ in ()).throw(asyncio.QueueEmpty())  # type: ignore[method-assign]
+
+        result = q.try_get_ready_task()
+        assert result is None

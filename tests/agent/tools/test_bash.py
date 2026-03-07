@@ -1,6 +1,7 @@
 """Bash 工具测试。"""
 
-from unittest.mock import MagicMock
+import asyncio
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -60,3 +61,36 @@ class TestBashTool:
         result = await bash(ctx, "printf 'line1\\nline2\\nline3\\n'")
         assert "line1" in result
         assert "line3" in result
+
+    @pytest.mark.asyncio
+    async def test_os_error_on_subprocess_creation(self) -> None:
+        """asyncio.create_subprocess_shell 抛出 OSError 时返回启动失败信息（覆盖 bash.py 42-43 行）"""
+        ctx: MagicMock = make_ctx()
+        with patch(
+            "asyncio.create_subprocess_shell",
+            side_effect=OSError("permission denied"),
+        ):
+            result: str = await bash(ctx, "some_command")
+        assert "命令启动失败" in result
+        assert "permission denied" in result
+
+    @pytest.mark.asyncio
+    async def test_process_lookup_error_on_kill(self) -> None:
+        """超时后 proc.kill() 抛出 ProcessLookupError 时正常返回超时信息（覆盖 bash.py 52 行）"""
+        ctx: MagicMock = make_ctx()
+
+        mock_proc: MagicMock = MagicMock()
+        mock_proc.kill.side_effect = ProcessLookupError()
+
+        async def _fake_create(*args: object, **kwargs: object) -> MagicMock:
+            return mock_proc
+
+        async def _fake_wait_for(coro: object, *, timeout: float) -> None:
+            raise asyncio.TimeoutError()
+
+        with patch("asyncio.create_subprocess_shell", new=_fake_create):
+            with patch("asyncio.wait_for", new=_fake_wait_for):
+                result: str = await bash(ctx, "sleep 100", timeout=1)
+
+        assert "超时" in result
+        mock_proc.kill.assert_called_once()
