@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +14,13 @@ from src.agent.compact.config import CompactConfig
 from src.agent.file_state import FileStateTracker
 from src.agent.message.attachment_collector import AttachmentCollector, _ATTACHMENT_SOURCE
 from src.agent.message.context_injector import _MERGED_META_SOURCE
-from src.agent.message.pre_model_call_service import PreModelCallMessageService
+from src.agent.message.pre_model_call_service import (
+    PreModelCallMessageService,
+    _INVOKED_SKILLS_SOURCE,
+    _SKILL_LISTING_SOURCE,
+)
+from src.agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
+from src.agent.skills.registry import SkillEntry, SkillRegistry
 
 
 def make_user_msg(content: str, source: str | None = None) -> ModelRequest:
@@ -280,3 +287,284 @@ class TestHandlePostCompactAttachments:
             if isinstance(m, ModelRequest)
         ]
         assert any("restored file content" in c for c in restore_contents)
+
+
+# --------------------------------------------------------------------------- #
+# Skill 注入测试                                                               #
+# --------------------------------------------------------------------------- #
+
+def make_skill_registry(*names: str) -> SkillRegistry:
+    registry = SkillRegistry()
+    for name in names:
+        registry._entries[name] = SkillEntry(
+            name=name,
+            description=f"{name} description",
+            content=f"# {name} skill content",
+            when_to_use=f"Use when doing {name}.",
+        )
+    return registry
+
+
+def make_invoked_store_with(skills: dict[str, str]) -> InvokedSkillStore:
+    """创建已有记录的 InvokedSkillStore mock。"""
+    store = MagicMock(spec=InvokedSkillStore)
+    store.get_all.return_value = {
+        name: InvokedSkill(
+            name=name,
+            content=content,
+            invoked_at=datetime(2026, 3, 7, tzinfo=timezone.utc),
+        )
+        for name, content in skills.items()
+    }
+    return store
+
+
+class TestSkillListingInjection:
+    async def test_skill_listing_injected_when_registry_provided(self) -> None:
+        """提供 skill_registry 时注入 skill_listing attachment"""
+        registry = make_skill_registry("commit")
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            skill_registry=registry,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        sources = [
+            m.metadata.get("source")
+            for m in result.model_messages
+            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
+        ]
+        assert _SKILL_LISTING_SOURCE in sources
+
+    async def test_skill_listing_not_injected_when_no_registry(self) -> None:
+        """无 skill_registry 时不注入 skill_listing"""
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        sources = [
+            m.metadata.get("source")
+            for m in result.model_messages
+            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
+        ]
+        assert _SKILL_LISTING_SOURCE not in sources
+
+    async def test_skill_listing_content_contains_skill_names(self) -> None:
+        """skill_listing attachment 内容包含 skill 名称"""
+        registry = make_skill_registry("commit", "review")
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            skill_registry=registry,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        listing_msgs = [
+            m for m in result.model_messages
+            if isinstance(m, ModelRequest)
+            and isinstance(m.metadata, dict)
+            and m.metadata.get("source") == _SKILL_LISTING_SOURCE
+        ]
+        assert len(listing_msgs) == 1
+        content = str(listing_msgs[0].parts[0].content)  # type: ignore[union-attr]
+        assert "commit" in content
+        assert "review" in content
+
+    async def test_skill_listing_wrapped_in_system_reminder(self) -> None:
+        """skill_listing 包裹在 <system-reminder> 标签中"""
+        registry = make_skill_registry("commit")
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            skill_registry=registry,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        listing_msgs = [
+            m for m in result.model_messages
+            if isinstance(m, ModelRequest)
+            and isinstance(m.metadata, dict)
+            and m.metadata.get("source") == _SKILL_LISTING_SOURCE
+        ]
+        content = str(listing_msgs[0].parts[0].content)  # type: ignore[union-attr]
+        assert "<system-reminder>" in content
+        assert "</system-reminder>" in content
+
+    async def test_old_skill_listing_replaced_each_call(self) -> None:
+        """每次 handle 都替换旧的 skill_listing（不重复累积）"""
+        registry = make_skill_registry("commit")
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            skill_registry=registry,
+        )
+
+        messages = [make_user_msg("hello")]
+        result1 = await service.handle(messages)
+        result2 = await service.handle(result1.model_messages)
+
+        listing_count = sum(
+            1 for m in result2.model_messages
+            if isinstance(m, ModelRequest)
+            and isinstance(m.metadata, dict)
+            and m.metadata.get("source") == _SKILL_LISTING_SOURCE
+        )
+        assert listing_count == 1
+
+
+class TestInvokedSkillsInjection:
+    async def test_invoked_skills_injected_when_store_has_records(self) -> None:
+        """store 有记录时注入 invoked_skills attachment"""
+        store = make_invoked_store_with({"commit": "# Commit\nStep 1."})
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            invoked_skill_store=store,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        sources = [
+            m.metadata.get("source")
+            for m in result.model_messages
+            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
+        ]
+        assert _INVOKED_SKILLS_SOURCE in sources
+
+    async def test_invoked_skills_not_injected_when_store_empty(self) -> None:
+        """store 为空时不注入 invoked_skills attachment"""
+        store = make_invoked_store_with({})
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            invoked_skill_store=store,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        sources = [
+            m.metadata.get("source")
+            for m in result.model_messages
+            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
+        ]
+        assert _INVOKED_SKILLS_SOURCE not in sources
+
+    async def test_invoked_skills_not_injected_when_store_none(self) -> None:
+        """store 为 None 时不注入"""
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        sources = [
+            m.metadata.get("source")
+            for m in result.model_messages
+            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
+        ]
+        assert _INVOKED_SKILLS_SOURCE not in sources
+
+    async def test_invoked_skills_content_contains_skill_content(self) -> None:
+        """invoked_skills attachment 内容包含 SKILL.md 正文"""
+        store = make_invoked_store_with({"commit": "# Commit\nDo the commit."})
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            invoked_skill_store=store,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        invoked_msgs = [
+            m for m in result.model_messages
+            if isinstance(m, ModelRequest)
+            and isinstance(m.metadata, dict)
+            and m.metadata.get("source") == _INVOKED_SKILLS_SOURCE
+        ]
+        assert len(invoked_msgs) == 1
+        content = str(invoked_msgs[0].parts[0].content)  # type: ignore[union-attr]
+        assert "# Commit" in content
+        assert "Do the commit." in content
+
+
+class TestSkillInjectionOrder:
+    async def test_invoked_skills_before_skill_listing(self) -> None:
+        """invoked_skills attachment 在 skill_listing 之前（更靠近消息开头）"""
+        registry = make_skill_registry("commit")
+        store = make_invoked_store_with({"commit": "# Commit"})
+        tracker = FileStateTracker()
+        collector = AttachmentCollector(tracker)
+        compactor = make_no_compact_compactor()
+
+        service = PreModelCallMessageService(
+            compactor=compactor,
+            context_messages=[],
+            attachment_collector=collector,
+            skill_registry=registry,
+            invoked_skill_store=store,
+        )
+
+        result = await service.handle([make_user_msg("hello")])
+
+        positions: dict[str, int] = {}
+        for i, m in enumerate(result.model_messages):
+            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict):
+                src = m.metadata.get("source")
+                if src in (_INVOKED_SKILLS_SOURCE, _SKILL_LISTING_SOURCE):
+                    positions[str(src)] = i
+
+        # invoked_skills（0a）应比 skill_listing（0b）更靠前
+        assert positions.get(_INVOKED_SKILLS_SOURCE, 999) < positions.get(_SKILL_LISTING_SOURCE, 999)

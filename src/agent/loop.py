@@ -29,6 +29,9 @@ from src.agent.message.memory_message_service import MemoryMessageService
 from src.agent.message.pre_model_call_service import PreModelCallMessageService
 from src.agent.message.transcript_service import TranscriptService
 from src.agent.prompt.prompt_builder import PromptBuilder
+from src.agent.skills.invoked_store import InvokedSkillStore
+from src.agent.skills.registry import SkillRegistry, get_default_skill_dirs
+from src.agent.skills.tool import invoke_skill
 from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
 from src.config.settings import get_backend, get_compact_config
@@ -202,10 +205,25 @@ async def run_agent_loop(
         session_id=task.session_id,
         summarize_fn=_make_summarize_fn(agent),
     )
+
+    # Skill 系统初始化
+    skill_registry = SkillRegistry.load(get_default_skill_dirs())
+    invoked_store = InvokedSkillStore(backend, task.user_id, task.session_id)
+    await invoked_store.load()
+
+    # 若有可用 skill，注册 Skill 工具到 deps
+    if skill_registry.has_skills():
+        deps.skill_registry = skill_registry
+        deps.invoked_skill_store = invoked_store
+        deps.available_tools = [t for t in deps.available_tools if t != "Skill"] + ["Skill"]
+        deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
+
     pre_call_service = PreModelCallMessageService(
         compactor=compactor,
         context_messages=context_messages,
         attachment_collector=attachment_collector,
+        skill_registry=skill_registry if skill_registry.has_skills() else None,
+        invoked_skill_store=invoked_store if skill_registry.has_skills() else None,
     )
 
     if message_history is None:

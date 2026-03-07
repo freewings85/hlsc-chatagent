@@ -1,10 +1,16 @@
 """AgentDeps：Agent 的依赖对象，所有状态通过此对象传递"""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Callable, Coroutine
 
 from src.agent.file_state import FileStateTracker
 from src.common.filesystem_backend import BackendProtocol
+
+if TYPE_CHECKING:
+    from src.agent.skills.invoked_store import InvokedSkillStore
+    from src.agent.skills.registry import SkillRegistry
 
 # tool 函数类型：async def fn(ctx: RunContext[AgentDeps], ...) -> str
 ToolFunc = Callable[..., Coroutine[Any, Any, str]]
@@ -27,3 +33,6 @@ class AgentDeps:
     backend: BackendProtocol | None = None
     # 文件读写状态追踪（用于 changed_files attachment）
     file_state_tracker: FileStateTracker = field(default_factory=FileStateTracker)
+    # Skill 系统（None 时 Skill 工具不可用）
+    skill_registry: SkillRegistry | None = None
+    invoked_skill_store: InvokedSkillStore | None = None
