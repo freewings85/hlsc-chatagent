@@ -1,0 +1,45 @@
+CASE: message_persistence_multi_turn
+DESCRIPTION: 多轮对话验证 MemoryMessageService 消息持久化。每轮写/读文件，验证跨轮次消息历史保留（三层消息架构：MemoryMessageService 持久化工作集）。
+TOOLS_TRIGGERED: write, read, bash
+COVERAGE:
+  - src/agent/message/memory_message_service.py (load, insert_batch, 多轮累积)
+  - src/agent/loop.py (post-loop insert_batch 写 messages.jsonl)
+  - src/agent/message/transcript_service.py (append 写 transcript.jsonl)
+  - src/agent/message/pre_model_call_service.py (每轮 handle：context injection)
+
+SETUP:
+  DELETE_IF_EXISTS: /persist_test_data.txt
+
+--- TURN 1 ---
+INPUT:
+请使用 write 工具创建文件 /persist_test_data.txt，内容为 "TURN1_MARKER_HELLO"。
+
+EXPECT_TOOL: write
+VERIFY_FILE_EXISTS: /persist_test_data.txt
+VERIFY_FILE_CONTAINS: TURN1_MARKER_HELLO
+--- END TURN 1 ---
+
+--- TURN 2 ---
+INPUT:
+很好。现在请使用 read 工具读取 /persist_test_data.txt 的内容，并告诉我文件里有什么。
+
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: TURN1_MARKER_HELLO
+EXPECT_RESPONSE_CONTAINS: TURN1_MARKER_HELLO
+--- END TURN 2 ---
+
+--- TURN 3 ---
+INPUT:
+根据你之前读取的文件内容，告诉我文件中的 MARKER 是什么（第一轮创建的标记）？直接告诉我 MARKER 名称，不需要使用工具。
+
+EXPECT_TOOL: (none)
+EXPECT_RESPONSE_CONTAINS: TURN1_MARKER_HELLO
+--- END TURN 3 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100（保持同一个 session）
+2. 第一轮：发送 write 任务，确认 persist_test_data.txt 被创建，内容含 TURN1_MARKER_HELLO
+3. 第二轮：发送 read 任务，确认工具结果和 Agent 回复都包含 TURN1_MARKER_HELLO
+4. 第三轮：纯文字问答，确认 Agent 记得第一轮创建的文件内容（消息历史跨轮保留）
+5. 验证：tests/e2e 区的 messages.jsonl 文件包含所有轮次的消息

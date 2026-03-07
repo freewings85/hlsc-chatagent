@@ -57,7 +57,7 @@ def _make_summarize_fn(agent: Agent[AgentDeps, str]) -> SummarizeFn:
 
     使用同一个 agent 的模型，以简单 prompt 生成对话摘要。
     """
-    async def summarize_fn(messages: list[ModelMessage]) -> str:  # pragma: no cover
+    async def summarize_fn(messages: list[ModelMessage]) -> str:
         history_text = _format_messages_for_summary(messages)
         prompt = (
             "请将以下对话历史压缩为一段简洁的摘要，保留关键信息、决策和上下文，"
@@ -232,7 +232,7 @@ async def run_agent_loop(
                     pre_result = await pre_call_service.handle(history)
 
                     # 若 compact 发生，更新工作集并清除文件状态追踪
-                    if pre_result.compacted:  # pragma: no cover
+                    if pre_result.compacted:
                         await memory_service.update(
                             task.user_id, task.session_id, pre_result.working_messages,
                         )

@@ -320,3 +320,76 @@ class TestFormatMessagesForSummary:
 
         result = _format_messages_for_summary([])
         assert result == ""
+
+
+class TestCompactBlockIntegration:
+    """US-008: loop.py compact block（line 235）集成测试"""
+
+    @pytest.mark.asyncio
+    async def test_compact_block_triggered_in_loop(self, make_task, make_emitter) -> None:
+        """microcompact 触发时 compact block 执行（移除 # pragma: no cover 后覆盖此路径）"""
+        from unittest.mock import patch
+
+        from pydantic_ai.messages import ModelRequest, ToolReturnPart
+
+        from src.agent.compact.config import CompactConfig
+        from src.agent.deps import AgentDeps
+
+        # 大 tool result 消息（两条各 5000 字符 ≈ 2500 tokens）
+        big_content = "x" * 5000
+        tool_msg1 = ModelRequest(
+            parts=[ToolReturnPart(tool_name="read", content=big_content, tool_call_id="c1")]
+        )
+        tool_msg2 = ModelRequest(
+            parts=[ToolReturnPart(tool_name="read", content=big_content, tool_call_id="c2")]
+        )
+        message_history = [tool_msg1, tool_msg2]
+
+        model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
+        agent = create_agent(model=model)
+
+        # microcompact_threshold = 1900 - 1 = 1899；2500 tokens > 1899 → 触发 microcompact
+        small_config = CompactConfig(
+            context_window=2000,
+            output_reserve=100,
+            auto_compact_enabled=True,
+            microcompact_enabled=True,
+            keep_recent_tool_results=1,
+            min_savings_threshold=1,
+        )
+
+        # 使用独立 user/session 避免干扰其他测试的后端数据
+        task, _ = make_task("继续对话", user_id="compact-test-user", session_id="compact-test-session")
+        event_queue, emitter = make_emitter()
+        deps = AgentDeps()
+
+        with patch("src.agent.loop.get_compact_config", return_value=small_config):
+            await run_agent_loop(emitter, task, agent, deps, message_history=message_history)
+
+        events = await _collect_events(event_queue)
+        # compact 后 loop 仍然正常完成
+        end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
+        assert len(end_events) == 1
+
+
+class TestMakeSummarizeFn:
+    """US-009: _make_summarize_fn 内部函数测试（移除 # pragma: no cover）"""
+
+    @pytest.mark.asyncio
+    async def test_summarize_fn_returns_str(self) -> None:
+        """_make_summarize_fn 返回的闭包调用时通过 agent.run() 生成摘要字符串"""
+        from pydantic_ai import Agent
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+        from src.agent.loop import _make_summarize_fn
+
+        model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
+        # 使用不带 DynamicToolset 的 Agent，因为 _make_summarize_fn 内部调 agent.run() 不传 deps
+        agent: Agent[None, str] = Agent(model, system_prompt="你是助手")
+
+        fn = _make_summarize_fn(agent)  # type: ignore[arg-type]
+        messages = [ModelRequest(parts=[UserPromptPart(content="对话历史内容")])]
+
+        result = await fn(messages)
+        assert isinstance(result, str)
+        assert len(result) > 0

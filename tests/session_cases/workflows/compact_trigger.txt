@@ -1,0 +1,70 @@
+CASE: compact_trigger_microcompact
+DESCRIPTION: 多轮对话触发 microcompact（层 1 压缩）。每轮读取大文件，工具结果累积使 token 数超过 microcompact 阈值，验证 AttachmentCollector 和 PreModelCallMessageService 在压缩后对话仍能继续。注意：触发压缩需要多轮（通常 5-10 轮），具体取决于模型配置的 context_window 大小。
+TOOLS_TRIGGERED: read, write
+COVERAGE:
+  - src/agent/compact/compactor.py (check: microcompact Layer 1)
+  - src/agent/loop.py (compact block: memory_service.update + file_state_tracker.clear)
+  - src/agent/message/pre_model_call_service.py (handle: compact 触发)
+  - src/agent/message/memory_message_service.py (update: full replace after compact)
+
+SETUP:
+  DELETE_IF_EXISTS: /large_data_file.txt
+  CREATE: /large_data_file.txt | line_001: 数据内容一 alpha beta gamma delta epsilon zeta eta theta iota kappa
+line_002: 数据内容二 lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega
+line_003: 数据内容三 Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod
+line_004: 数据内容四 tempor incididunt ut labore et dolore magna aliqua ut enim ad minim
+line_005: 数据内容五 veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+line_006: 数据内容六 commodo consequat duis aute irure dolor in reprehenderit in voluptate
+line_007: 数据内容七 velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat
+line_008: 数据内容八 cupidatat non proident sunt in culpa qui officia deserunt mollit anim
+line_009: 数据内容九 id est laborum sed ut perspiciatis unde omnis iste natus error sit
+line_010: 数据内容十 voluptatem accusantium doloremque laudantium totam rem aperiam eaque ipsa
+
+--- TURN 1 ---
+INPUT:
+请使用 read 工具读取 /large_data_file.txt，告诉我第1行的内容。
+
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: line_001
+--- END TURN 1 ---
+
+--- TURN 2 ---
+INPUT:
+好的。再次使用 read 工具读取 /large_data_file.txt，告诉我第5行的内容。
+
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: line_005
+--- END TURN 2 ---
+
+--- TURN 3 ---
+INPUT:
+继续。再次使用 read 工具读取 /large_data_file.txt，这次告诉我第8行的内容。
+
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: line_008
+--- END TURN 3 ---
+
+--- TURN 4 ---
+INPUT:
+很好。再读一次 /large_data_file.txt，告诉我第10行的内容，以及文件共有多少行。
+
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: line_010
+--- END TURN 4 ---
+
+--- TURN 5 ---
+INPUT:
+最后，请总结一下你读取到的数据文件内容，包含哪些行？不需要使用工具，直接从你的记忆中回答。
+
+EXPECT_TOOL: (none)
+EXPECT_RESPONSE_CONTAINS: line_001
+--- END TURN 5 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100（保持同一个 session）
+2. 第 1-4 轮：每轮发送 read 请求，每次都读取同一个大文件
+3. 观察：当 token 数超过 microcompact 阈值时，服务端日志会显示 "Microcompact" 消息
+4. 第 5 轮：纯文字问答，验证 Agent 在压缩后仍能回忆之前的对话内容
+5. 注意：实际触发时机取决于 COMPACT_CONTEXT_WINDOW 配置（默认 200000 tokens 需要更多轮次）
+6. 可以设置环境变量 COMPACT_CONTEXT_WINDOW=5000 COMPACT_MIN_SAVINGS_THRESHOLD=100 来更快触发
