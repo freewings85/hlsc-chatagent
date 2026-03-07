@@ -11,6 +11,7 @@ check() 返回 CompactResult，包含压缩结果和需要恢复的附件。
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ToolReturnPart,
+    UserPromptPart,
 )
 
 from src.agent.compact.config import CompactConfig
@@ -28,6 +30,8 @@ from src.agent.compact.token_counter import (
 
 if TYPE_CHECKING:
     from src.agent.message.history_message_loader import HistoryMessageLoader
+
+SummarizeFn = Callable[[list[ModelMessage]], Awaitable[str]]
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +69,13 @@ class Compactor:
         history_loader: HistoryMessageLoader | None = None,
         user_id: str = "",
         session_id: str = "",
+        summarize_fn: SummarizeFn | None = None,
     ) -> None:
         self._config = config or CompactConfig()
         self._history_loader = history_loader
         self._user_id = user_id
         self._session_id = session_id
+        self._summarize_fn = summarize_fn
 
     async def check(self, messages: list[ModelMessage]) -> CompactResult:
         """检查并执行压缩。
@@ -104,15 +110,47 @@ class Compactor:
                     pre_tokens=total_tokens,
                 )
 
-        # Layer 2: Full Compact
+        # Layer 2: Full Compact（需要 summarize_fn 才执行）
         if total_tokens >= self._config.full_compact_threshold:
-            # TODO: 调用 LLM 生成摘要，替换消息
-            # 实现后返回 CompactResult(layer="full", attachments=[...])
-            # attachments 包含需要恢复的上下文：最近读过的文件、任务状态等
-            logger.info(
-                "Full compact 需要触发 (tokens=%d, threshold=%d)，但尚未实现",
-                total_tokens, self._config.full_compact_threshold,
-            )
+            if self._summarize_fn is not None:
+                summary_text = await self._summarize_fn(messages)
+
+                # compact_boundary 标记（is_meta=False，需写入 transcript）
+                boundary = ModelRequest(
+                    parts=[UserPromptPart(content="[对话已压缩，以下为摘要]")],
+                    metadata={"is_compact_boundary": True},
+                )
+                # LLM 生成的摘要（is_meta=True + is_compact_summary=True，需写入 transcript）
+                summary_msg = ModelRequest(
+                    parts=[UserPromptPart(content=summary_text)],
+                    metadata={"is_meta": True, "is_compact_summary": True},
+                )
+
+                messages.clear()
+                messages.extend([boundary, summary_msg])
+
+                logger.info(
+                    "Full compact: 压缩 %d tokens → boundary + summary",
+                    total_tokens,
+                )
+
+                # 持久化压缩后的工作副本
+                if self._history_loader:
+                    await self._history_loader.save(
+                        self._user_id, self._session_id, messages,
+                    )
+
+                return CompactResult(
+                    compacted=True,
+                    layer="full",
+                    tokens_saved=total_tokens,
+                    pre_tokens=total_tokens,
+                )
+            else:
+                logger.info(
+                    "Full compact 需要触发 (tokens=%d, threshold=%d)，但 summarize_fn 未配置",
+                    total_tokens, self._config.full_compact_threshold,
+                )
 
         return CompactResult(pre_tokens=total_tokens)
 

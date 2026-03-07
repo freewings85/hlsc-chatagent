@@ -151,7 +151,11 @@ class TestAgentLoop:
         with pytest.raises(RuntimeError, match="test error"):
             await run_agent_loop(emitter, task, agent, deps, message_history=[])
 
-        # emitter 应该在 finally 中关闭
+        # 异常时先发 ERROR 事件，再关闭 emitter（sentinel=None）
+        error_event = await event_queue.get()
+        assert error_event is not None
+        assert error_event.type == EventType.ERROR
+        assert "test error" in error_event.data["message"]
         sentinel = await event_queue.get()
         assert sentinel is None
 
@@ -211,7 +215,10 @@ class TestAgentLoopEdgeCases:
         with pytest.raises(UnexpectedModelBehavior):
             await run_agent_loop(emitter, task, agent, deps, message_history=[])
 
-        # emitter 应在 finally 中关闭
+        # 异常时先发 ERROR 事件，再关闭 emitter（sentinel=None）
+        error_event = await event_queue.get()
+        assert error_event is not None
+        assert error_event.type == EventType.ERROR
         sentinel = await event_queue.get()
         assert sentinel is None
 
@@ -269,3 +276,47 @@ class TestAgentLoopEdgeCases:
         # 应有 CHAT_REQUEST_END
         end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
         assert len(end_events) == 1
+
+
+class TestFormatMessagesForSummary:
+    """_format_messages_for_summary 辅助函数测试"""
+
+    def test_formats_user_and_assistant_messages(self) -> None:
+        from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
+
+        from src.agent.loop import _format_messages_for_summary
+
+        messages = [
+            ModelRequest(parts=[UserPromptPart(content="用户问题")]),
+            ModelResponse(parts=[TextPart(content="助手回答")]),
+        ]
+        result = _format_messages_for_summary(messages)
+        assert "用户: 用户问题" in result
+        assert "助手: 助手回答" in result
+
+    def test_truncates_long_content(self) -> None:
+        from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+        from src.agent.loop import _format_messages_for_summary
+
+        long_content = "x" * 1000
+        messages = [ModelRequest(parts=[UserPromptPart(content=long_content)])]
+        result = _format_messages_for_summary(messages)
+        assert len(result) <= 600  # 截断到 500 + "用户: " 前缀
+
+    def test_skips_non_text_parts(self) -> None:
+        from pydantic_ai.messages import ModelRequest, ToolReturnPart
+
+        from src.agent.loop import _format_messages_for_summary
+
+        messages = [
+            ModelRequest(parts=[ToolReturnPart(tool_name="r", content="result", tool_call_id="c1")])
+        ]
+        result = _format_messages_for_summary(messages)
+        assert result == ""  # ToolReturnPart 不被处理
+
+    def test_empty_messages_returns_empty_string(self) -> None:
+        from src.agent.loop import _format_messages_for_summary
+
+        result = _format_messages_for_summary([])
+        assert result == ""

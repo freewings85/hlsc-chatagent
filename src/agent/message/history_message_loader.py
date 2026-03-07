@@ -38,6 +38,23 @@ def _is_meta(msg: ModelMessage) -> bool:
     )
 
 
+def _should_persist(msg: ModelMessage) -> bool:
+    """判断消息是否需要写入持久化存储。
+
+    规则（参考 Claude Code isSynthetic 逻辑）：
+    - ModelResponse（模型回复）永远存
+    - 非 is_meta 的 ModelRequest（含 compact_boundary）永远存
+    - is_meta=True 的消息：只有 is_compact_summary=True 的摘要需要存
+      （context injection、attachment 等临时消息不存）
+    """
+    if not isinstance(msg, ModelRequest):
+        return True
+    meta = msg.metadata or {}
+    if not meta.get("is_meta"):
+        return True
+    return bool(meta.get("is_compact_summary", False))
+
+
 def _messages_path(user_id: str, session_id: str) -> str:
     return f"/{user_id}/sessions/{session_id}/messages.jsonl"
 

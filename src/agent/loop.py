@@ -22,10 +22,12 @@ from pydantic_ai.models import Model
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
-from src.agent.compact.compactor import CompactResult, Compactor
+from src.agent.compact.compactor import Compactor, SummarizeFn
 from src.agent.deps import AgentDeps
-from src.agent.message.context_injector import inject_context
-from src.agent.message.history_message_loader import HistoryMessageLoader
+from src.agent.message.attachment_collector import AttachmentCollector
+from src.agent.message.memory_message_service import MemoryMessageService
+from src.agent.message.pre_model_call_service import PreModelCallMessageService
+from src.agent.message.transcript_service import TranscriptService
 from src.agent.prompt.prompt_builder import PromptBuilder
 from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
@@ -48,6 +50,41 @@ def create_agent(
         toolsets=[DynamicToolset(get_tools, per_run_step=True)],
         history_processors=history_processors or [],
     )
+
+
+def _make_summarize_fn(agent: Agent[AgentDeps, str]) -> SummarizeFn:
+    """创建用于 full compact 的 LLM 摘要回调。
+
+    使用同一个 agent 的模型，以简单 prompt 生成对话摘要。
+    """
+    async def summarize_fn(messages: list[ModelMessage]) -> str:  # pragma: no cover
+        history_text = _format_messages_for_summary(messages)
+        prompt = (
+            "请将以下对话历史压缩为一段简洁的摘要，保留关键信息、决策和上下文，"
+            "使后续对话能在此基础上继续。\n\n"
+            f"对话历史：\n{history_text}"
+        )
+        result = await agent.run(prompt)
+        return result.output
+
+    return summarize_fn
+
+
+def _format_messages_for_summary(messages: list[ModelMessage]) -> str:
+    """将消息列表格式化为可读文本（用于摘要 prompt）。"""
+    from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
+
+    lines: list[str] = []
+    for msg in messages:
+        if isinstance(msg, ModelRequest):
+            for part in msg.parts:
+                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                    lines.append(f"用户: {part.content[:500]}")
+        elif isinstance(msg, ModelResponse):
+            for part in msg.parts:
+                if isinstance(part, TextPart):
+                    lines.append(f"助手: {part.content[:500]}")
+    return "\n".join(lines)
 
 
 async def _emit_model_stream(
@@ -139,43 +176,43 @@ async def run_agent_loop(
 ) -> None:
     """手动驱动 agent loop，通过 emitter 发出事件。
 
-    Producer 职责：
-    - 驱动节点流转（ModelRequestNode → CallToolsNode → ...）
-    - 通过 emitter.emit() 发出事件，不关心谁在消费
-    - 子函数拿到 emitter 即可发事件，无需层层传递 generator
-
-    消息操作方式：
-    - 通过 run._graph_run.state.message_history 直接操作内部消息列表
-    - compact / attachment / context 在 ModelRequestNode 前手动修改消息
-    - 该列表与 run.all_messages() 是同一引用
+    三层消息架构（参考设计文档 doc/agentloop主设计.md）：
+    - MemoryMessageService  — 会话消息工作集（缓存 + messages.jsonl）
+    - PreModelCallMessageService — 每轮 LLM 前：context + attachment + compact
+    - TranscriptService     — append-only 审计日志（transcript.jsonl）
 
     流式事件：
     - ModelRequestNode: 通过 node.stream(ctx) 逐 token 发出 TEXT / TOOL_CALL 事件
     - CallToolsNode: 通过 node.stream(ctx) 发出 TOOL_RESULT 事件
     - stream 完成后 run.next(node) 不会重复执行（内部检查 _result/_next_node）
     """
+    backend = get_backend()
+
+    # 服务初始化
+    memory_service = MemoryMessageService(backend)
+    transcript_service = TranscriptService(backend)
+    prompt_builder: PromptBuilder = PromptBuilder(backend)
+    context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
+        user_id=task.user_id,
+    )
+    attachment_collector = AttachmentCollector(deps.file_state_tracker)
+    compactor = Compactor(
+        config=get_compact_config(),
+        user_id=task.user_id,
+        session_id=task.session_id,
+        summarize_fn=_make_summarize_fn(agent),
+    )
+    pre_call_service = PreModelCallMessageService(
+        compactor=compactor,
+        context_messages=context_messages,
+        attachment_collector=attachment_collector,
+    )
+
+    if message_history is None:
+        message_history = await memory_service.load(task.user_id, task.session_id)
+
     try:
         iteration: int = 0
-
-        # 1. PromptBuilder — 加载系统提示词 + 上下文消息
-        backend = get_backend()
-        prompt_builder: PromptBuilder = PromptBuilder(backend)
-        context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
-            user_id=task.user_id,
-        )
-
-        # 2. HistoryMessageLoader — 加载历史消息
-        history_loader: HistoryMessageLoader = HistoryMessageLoader(backend)
-        if message_history is None:
-            message_history = await history_loader.load(task.user_id, task.session_id)
-
-        # 3. Compactor — 两层递进压缩
-        compactor: Compactor = Compactor(
-            config=get_compact_config(),
-            history_loader=history_loader,
-            user_id=task.user_id,
-            session_id=task.session_id,
-        )
 
         async with agent.iter(
             task.message,
@@ -189,22 +226,26 @@ async def run_agent_loop(
                     break
 
                 if isinstance(node, ModelRequestNode):
-                    # 注入上下文（agent.md + memory.md），每轮 ModelRequestNode 前重新注入
                     history: list[ModelMessage] = run._graph_run.state.message_history
-                    inject_context(history, context_messages)
 
-                    # 4. Compactor — 两层递进压缩（microcompact + full compact）
-                    compact_result: CompactResult = await compactor.check(history)
+                    # 每轮 LLM 前：context injection + attachment + compact
+                    pre_result = await pre_call_service.handle(history)
 
-                    # TODO: 5. AttachmentCollector.inject(history, compact_result)
-                    #   — compact 后恢复上下文（最近文件、任务状态等）
-                    #   — 每轮动态 attachment（changed_files、diagnostics 等）
+                    # 若 compact 发生，更新工作集并清除文件状态追踪
+                    if pre_result.compacted:  # pragma: no cover
+                        await memory_service.update(
+                            task.user_id, task.session_id, pre_result.working_messages,
+                        )
+                        deps.file_state_tracker.clear()
 
-                    # 7. 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
+                    # 注入处理后的消息到 run 内部状态
+                    run._graph_run.state.message_history[:] = pre_result.model_messages
+
+                    # 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
                     await _emit_model_stream(node, run.ctx, emitter, task)
 
                 elif isinstance(node, CallToolsNode):
-                    # 8. 工具执行 → emitter.emit(tool_result 事件)
+                    # 工具执行 → emitter.emit(tool_result 事件)
                     await _emit_tool_events(node, run.ctx, emitter, task)
 
                 node = await run.next(node)
@@ -221,18 +262,22 @@ async def run_agent_loop(
             data={},
         ))
 
-        # 9. 追加新消息到 messages.jsonl（append-only，过滤 is_meta）
+        # 持久化新消息（过滤 is_meta，分别写 messages.jsonl 和 transcript.jsonl）
         if run.result is not None:
             new_messages: list[ModelMessage] = run.result.all_messages()
-            # all_messages() 包含历史 + 本轮新增，取本轮新增部分
             history_len: int = len(message_history) if message_history else 0
-            await history_loader.append(
-                task.user_id, task.session_id, new_messages[history_len:],
-            )
+            appended = new_messages[history_len:]
+            await transcript_service.append(task.user_id, task.session_id, appended)
+            await memory_service.insert_batch(task.user_id, task.session_id, appended)
 
-    except Exception:
+    except Exception as exc:
         # 发送错误事件通知客户端
-        # TODO: emitter.emit(EventModel(type=EventType.ERROR, ...))
+        await emitter.emit(EventModel(
+            conversation_id=task.session_id,
+            request_id=task.request_id,
+            type=EventType.ERROR,
+            data={"message": str(exc)},
+        ))
         raise
     finally:
         await emitter.close()

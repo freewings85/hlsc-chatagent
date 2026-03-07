@@ -1,0 +1,71 @@
+"""TranscriptService：append-only 审计日志（transcript.jsonl）。
+
+只写 transcript.jsonl，不写 messages.jsonl（由 MemoryMessageService 负责）。
+
+过滤规则（参考 Claude Code isSynthetic 逻辑）：
+- ModelResponse 永远写入
+- 非 is_meta 的 ModelRequest（含 compact_boundary）永远写入
+- is_meta=True 的消息：只写 is_compact_summary=True 的摘要
+
+路径约定：/{user_id}/sessions/{session_id}/transcript.jsonl
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections import defaultdict
+from typing import TYPE_CHECKING
+
+from pydantic_ai.messages import ModelMessage
+
+from src.agent.message.history_message_loader import (
+    _serialize_messages,
+    _should_persist,
+    _transcript_path,
+)
+
+if TYPE_CHECKING:
+    from src.common.filesystem_backend import BackendProtocol
+
+
+class TranscriptService:
+    """append-only 审计日志。
+
+    职责：本轮对话结束后，将新消息追加到 transcript.jsonl。
+    永远只追加，从不删除（对应 Claude Code `Gb = appendFileSync` 设计）。
+    """
+
+    def __init__(self, backend: BackendProtocol) -> None:
+        self._backend = backend
+        self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+    async def append(
+        self,
+        user_id: str,
+        session_id: str,
+        new_messages: list[ModelMessage],
+    ) -> None:
+        """追加新消息到 transcript.jsonl。
+
+        过滤规则：_should_persist（保留 compact_summary，排除其他 is_meta）。
+        """
+        persist = [m for m in new_messages if _should_persist(m)]
+        if not persist:
+            return
+
+        append_content = _serialize_messages(persist)
+        path = _transcript_path(user_id, session_id)
+        lock_key = f"{user_id}:{session_id}"
+
+        async with self._locks[lock_key]:
+            existing = ""
+            if await self._backend.aexists(path):
+                responses = await self._backend.adownload_files([path])
+                resp = responses[0]
+                if resp.error is not None or resp.content is None:
+                    raise OSError(f"读取失败，中止追加以防数据丢失: {path}")
+                existing = resp.content.decode("utf-8")
+                await self._backend.adelete(path)
+            result = await self._backend.awrite(path, existing + append_content)
+            if result.error is not None:
+                raise OSError(f"写入失败: {path}: {result.error}")

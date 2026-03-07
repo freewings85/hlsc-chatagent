@@ -319,3 +319,96 @@ class TestCompactWithPersistence:
         # 前 3 个被替换
         compressed = [tr for tr in tool_returns if tr.content == _PLACEHOLDER]
         assert len(compressed) == 3
+
+
+class TestFullCompact:
+    """Full compact（Layer 2）测试"""
+
+    @pytest.mark.asyncio
+    async def test_full_compact_no_summarize_fn_no_compact(self) -> None:
+        """full compact 阈值超出但没有 summarize_fn 时，不执行压缩"""
+        from pydantic_ai.messages import UserPromptPart
+
+        config = CompactConfig(
+            context_window=100,
+            output_reserve=10,
+            auto_compact_enabled=True,
+            microcompact_enabled=False,
+            min_savings_threshold=999999,  # 禁用 microcompact
+        )
+        compactor = Compactor(config=config, summarize_fn=None)
+
+        big_msg = ModelRequest(parts=[UserPromptPart(content="x" * 1000)])
+        messages: list[ModelMessage] = [big_msg]
+        result = await compactor.check(messages)
+
+        # 没有 summarize_fn，不执行 full compact
+        assert result.compacted is False
+        assert len(messages) == 1  # 消息未被替换
+
+    @pytest.mark.asyncio
+    async def test_full_compact_with_summarize_fn_replaces_messages(self) -> None:
+        """full compact 触发时调用 summarize_fn，消息被替换为 [boundary, summary]"""
+        from unittest.mock import AsyncMock
+        from pydantic_ai.messages import UserPromptPart
+
+        config = CompactConfig(
+            context_window=100,
+            output_reserve=10,
+            auto_compact_enabled=True,
+            microcompact_enabled=False,
+            min_savings_threshold=999999,
+        )
+        mock_summarize = AsyncMock(return_value="对话摘要内容")
+        compactor = Compactor(config=config, summarize_fn=mock_summarize)
+
+        big_msg = ModelRequest(parts=[UserPromptPart(content="x" * 1000)])
+        messages: list[ModelMessage] = [big_msg]
+        result = await compactor.check(messages)
+
+        assert result.compacted is True
+        assert result.layer == "full"
+        mock_summarize.assert_called_once()
+
+        # 消息被替换为 [boundary, summary_msg]
+        assert len(messages) == 2
+        contents = [str(m.parts[0].content) for m in messages if isinstance(m, ModelRequest)]  # type: ignore[union-attr]
+        assert any("压缩" in c for c in contents)
+        assert any("对话摘要内容" in c for c in contents)
+
+    @pytest.mark.asyncio
+    async def test_full_compact_persists_to_history_loader(self, tmp_path) -> None:
+        """full compact 后通过 history_loader.save() 持久化压缩后的消息"""
+        from unittest.mock import AsyncMock
+        from pydantic_ai.messages import UserPromptPart
+        from src.agent.message.history_message_loader import HistoryMessageLoader
+        from src.storage.local_backend import FilesystemBackend
+
+        backend = FilesystemBackend(root_dir=str(tmp_path), virtual_mode=True)
+        loader = HistoryMessageLoader(backend)
+
+        config = CompactConfig(
+            context_window=100,
+            output_reserve=10,
+            auto_compact_enabled=True,
+            microcompact_enabled=False,
+            min_savings_threshold=999999,
+        )
+        mock_summarize = AsyncMock(return_value="摘要")
+        compactor = Compactor(
+            config=config,
+            summarize_fn=mock_summarize,
+            history_loader=loader,
+            user_id="u",
+            session_id="s",
+        )
+
+        big_msg = ModelRequest(parts=[UserPromptPart(content="x" * 1000)])
+        messages: list[ModelMessage] = [big_msg]
+        result = await compactor.check(messages)
+
+        assert result.compacted is True
+
+        # 验证持久化：从文件加载后应该有 boundary + summary
+        loaded = await loader.load("u", "s")
+        assert len(loaded) >= 1  # 至少有摘要消息被存下来
