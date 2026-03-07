@@ -1,0 +1,34 @@
+CASE: file_discovery_workflow
+DESCRIPTION: Agent 先用 glob 发现文件列表，再用 grep 在其中搜索内容，最后用 read 读取目标文件。覆盖三种 FS 工具的组合使用路径。
+TOOLS_TRIGGERED: glob, grep, read
+COVERAGE:
+  - src/agent/tools/fs.py (glob: 有匹配路径; grep: 找到内容; read: 成功路径)
+  - src/storage/local_backend.py (aglob_info, agrep_raw, aread 路径)
+  - src/agent/loop.py (三次工具调用，顺序流转)
+  - src/agent/file_state.py (on_read 记录 tracker)
+
+SETUP:
+  CREATE: /discovery_alpha.txt | DISCOVERY_MARKER_alpha_content here
+  CREATE: /discovery_beta.txt | no special marker in beta
+  CREATE: /discovery_gamma.txt | DISCOVERY_MARKER_gamma_also_here
+
+--- TURN 1 ---
+INPUT:
+请完成以下文件发现任务：
+1. 先用 glob 工具找出所有 discovery_*.txt 文件
+2. 再用 grep 工具在这些文件里搜索 "DISCOVERY_MARKER_alpha"
+3. 最后用 read 工具读取找到的那个文件
+
+EXPECT_TOOL: glob
+EXPECT_TOOL: grep
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: DISCOVERY_MARKER_alpha
+--- END TURN 1 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 确保 data/playwright_tests/ 下有 discovery_alpha.txt, discovery_beta.txt, discovery_gamma.txt
+3. 输入上述多步任务指令
+4. 观察：依次出现 glob、grep、read 三个工具块
+5. read 工具块展开后应显示 DISCOVERY_MARKER_alpha_content 内容

@@ -1,0 +1,32 @@
+CASE: edit_existing_file
+DESCRIPTION: Agent 先读取文件再修改其中字符串，覆盖 read + edit 工具组合路径。
+TOOLS_TRIGGERED: read, edit
+COVERAGE:
+  - src/agent/tools/fs.py (read: 成功路径; edit: 替换成功, tracker on_write 更新)
+  - src/agent/file_state.py (on_read then on_write: entry 被覆盖而非累积)
+  - src/agent/loop.py (多工具调用：两个 CallToolsNode 执行)
+  - src/agent/message/history_message_loader.py (多轮消息追加)
+
+SETUP:
+  CREATE: /edit_target.txt | OLD_VALUE_edit_marker
+  Extra content line here
+
+--- TURN 1 ---
+INPUT:
+请先使用 read 工具读取 /edit_target.txt，然后用 edit 工具把其中的 "OLD_VALUE_edit_marker" 替换成 "NEW_VALUE_after_edit"。
+
+EXPECT_TOOL: read
+EXPECT_TOOL: edit
+EXPECT_RESULT_CONTAINS: 已替换
+VERIFY_FILE_CONTAINS: NEW_VALUE_after_edit
+VERIFY_FILE_NOT_CONTAINS: OLD_VALUE_edit_marker
+--- END TURN 1 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 确保 data/playwright_tests/edit_target.txt 中有 "OLD_VALUE_edit_marker"
+3. 输入：请先使用 read 工具读取 /edit_target.txt，然后用 edit 工具把其中的 "OLD_VALUE_edit_marker" 替换成 "NEW_VALUE_after_edit"。
+4. 发送
+5. 观察：依次出现 "read" 和 "edit" 两个工具调用块
+6. 检查文件内容已变为 NEW_VALUE_after_edit

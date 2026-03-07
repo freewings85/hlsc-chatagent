@@ -1,0 +1,36 @@
+CASE: grep_search_content
+DESCRIPTION: Agent 在文件中搜索特定字符串，覆盖 grep 工具路径。
+TOOLS_TRIGGERED: grep
+COVERAGE:
+  - src/agent/tools/fs.py (grep: 有匹配, 无匹配, glob_pattern 过滤)
+  - src/storage/local_backend.py (_ripgrep_search / _python_search)
+  - src/agent/loop.py (工具调用流程)
+
+SETUP:
+  CREATE: /grep_target_a.py | GREP_MARKER_UNIQUE_XY7 = "test"\nother_content = 1
+  CREATE: /grep_target_b.txt | no marker here, just text
+
+--- TURN 1 ---
+INPUT:
+请使用 grep 工具在所有文件中搜索字符串 "GREP_MARKER_UNIQUE_XY7"，告诉我在哪里找到了这个字符串。
+
+EXPECT_TOOL: grep
+EXPECT_RESULT_CONTAINS: GREP_MARKER_UNIQUE_XY7
+EXPECT_RESULT_CONTAINS: grep_target_a
+--- END TURN 1 ---
+
+--- TURN 2 ---
+INPUT:
+再用 grep 工具搜索 "NONEXISTENT_STRING_ZZZ999"，预期应该没有匹配结果。
+
+EXPECT_TOOL: grep
+EXPECT_RESULT_CONTAINS: 无匹配
+--- END TURN 2 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 第一轮：输入"请使用 grep 工具在所有文件中搜索字符串 GREP_MARKER_UNIQUE_XY7"
+3. 观察：出现 grep 工具块，展开结果应显示 grep_target_a.py:1 的匹配行
+4. 第二轮：输入搜索不存在的字符串
+5. 观察：grep 工具块显示无匹配

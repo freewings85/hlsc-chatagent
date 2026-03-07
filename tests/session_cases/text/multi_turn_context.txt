@@ -1,0 +1,34 @@
+CASE: multi_turn_context_retention
+DESCRIPTION: 多轮纯文字对话，验证 Agent 能记住上一轮上下文，覆盖 history_message_loader 多轮追加逻辑。
+TOOLS_TRIGGERED: (none)
+COVERAGE:
+  - src/agent/message/history_message_loader.py (多轮消息加载，上下文保留)
+  - src/agent/loop.py (多次循环: UserPromptNode → ModelRequestNode → End)
+  - src/server/app.py (多次 POST /chat/stream 请求，session_id 共享)
+
+SETUP:
+  (无需预创建文件)
+
+--- TURN 1 ---
+INPUT:
+我的名字叫小明，请记住这个名字。
+
+EXPECT_TOOL: (none)
+EXPECT_RESPONSE_CONTAINS: 小明
+--- END TURN 1 ---
+
+--- TURN 2 ---
+INPUT:
+我之前告诉你的名字是什么？
+
+EXPECT_TOOL: (none)
+EXPECT_RESPONSE_CONTAINS: 小明
+--- END TURN 2 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100（保持同一个 session）
+2. 第一轮：输入"我的名字叫小明，请记住这个名字。"
+3. 观察：Agent 确认记住名字
+4. 第二轮：输入"我之前告诉你的名字是什么？"
+5. 观察：Agent 回复中包含"小明"，说明上下文被保留

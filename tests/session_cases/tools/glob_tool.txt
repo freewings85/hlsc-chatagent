@@ -1,0 +1,37 @@
+CASE: glob_find_files
+DESCRIPTION: Agent 使用 glob 模式匹配列出文件，覆盖 glob 工具路径。
+TOOLS_TRIGGERED: glob
+COVERAGE:
+  - src/agent/tools/fs.py (glob: 有匹配路径, 无匹配路径)
+  - src/storage/local_backend.py (glob_info, aglob_info)
+  - src/agent/loop.py (工具调用流程)
+
+SETUP:
+  CREATE: /glob_test_alpha.txt | alpha file content
+  CREATE: /glob_test_beta.txt | beta file content
+  CREATE: /glob_test_gamma.py | print("gamma")
+
+--- TURN 1 ---
+INPUT:
+请使用 glob 工具查找所有 .txt 文件（glob 模式：*.txt），告诉我找到了哪些文件。
+
+EXPECT_TOOL: glob
+EXPECT_RESPONSE_CONTAINS: glob_test_alpha
+--- END TURN 1 ---
+
+--- TURN 2 ---
+INPUT:
+再用 glob 工具查找所有 .nonexistent 扩展名的文件，预期应该没有匹配。
+
+EXPECT_TOOL: glob
+EXPECT_RESULT_CONTAINS: 无匹配
+--- END TURN 2 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 确保 data/playwright_tests/ 中有 glob_test_alpha.txt, glob_test_beta.txt, glob_test_gamma.py
+3. 第一轮：输入"请使用 glob 工具查找所有 .txt 文件（glob 模式：*.txt）"
+4. 观察：出现 glob 工具块，结果中包含两个 .txt 文件路径
+5. 第二轮：输入"再用 glob 工具查找所有 .nonexistent 扩展名的文件"
+6. 观察：出现 glob 工具块，结果显示无匹配

@@ -3,6 +3,9 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine
 
+from src.agent.file_state import FileStateTracker
+from src.common.filesystem_backend import BackendProtocol
+
 # tool 函数类型：async def fn(ctx: RunContext[AgentDeps], ...) -> str
 ToolFunc = Callable[..., Coroutine[Any, Any, str]]
 
@@ -20,3 +23,7 @@ class AgentDeps:
     # tool 执行过程中可修改的状态
     tool_call_count: int = 0
     last_tool_result: str = ""
+    # 文件系统后端（None 时工具内部 fallback 到 get_backend()）
+    backend: BackendProtocol | None = None
+    # 文件读写状态追踪（用于 changed_files attachment）
+    file_state_tracker: FileStateTracker = field(default_factory=FileStateTracker)

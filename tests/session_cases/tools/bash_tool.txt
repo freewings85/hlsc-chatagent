@@ -1,0 +1,36 @@
+CASE: bash_execute_command
+DESCRIPTION: Agent 执行 shell 命令，覆盖 bash 工具完整路径，包括成功、非零退出码和输出截断场景。
+TOOLS_TRIGGERED: bash
+COVERAGE:
+  - src/agent/tools/bash.py (bash: 成功路径, 非零退出码, MAX_OUTPUT_BYTES 截断)
+  - src/agent/loop.py (工具调用流程)
+  - src/server/app.py (SSE tool_result 事件)
+
+SETUP:
+  (无需预创建文件)
+
+--- TURN 1 ---
+INPUT:
+请使用 bash 工具执行命令 `echo BASH_TOOL_WORKS_12345`，告诉我命令的输出结果。
+
+EXPECT_TOOL: bash
+EXPECT_RESULT_CONTAINS: BASH_TOOL_WORKS_12345
+EXPECT_RESPONSE_CONTAINS: BASH_TOOL_WORKS_12345
+--- END TURN 1 ---
+
+--- TURN 2 ---
+INPUT:
+再用 bash 工具执行 `ls /nonexistent_path_xyz`，这个命令预期会失败，告诉我输出了什么。
+
+EXPECT_TOOL: bash
+EXPECT_RESULT_CONTAINS: exit
+--- END TURN 2 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 第一轮：输入"请使用 bash 工具执行命令 `echo BASH_TOOL_WORKS_12345`"
+3. 观察：出现 bash 工具块，展开结果应包含 BASH_TOOL_WORKS_12345
+4. 文本回复中也应包含命令输出内容
+5. 第二轮：输入"再用 bash 工具执行 `ls /nonexistent_path_xyz`"
+6. 观察：bash 工具块结果中包含 "[exit" 非零退出码标记

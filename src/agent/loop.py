@@ -112,15 +112,9 @@ async def _emit_tool_events(
     async with node.stream(ctx) as event_stream:
         async for event in event_stream:
             if isinstance(event, FunctionToolCallEvent):
-                await emitter.emit(EventModel(
-                    conversation_id=task.session_id,
-                    request_id=task.request_id,
-                    type=EventType.TOOL_CALL_START,
-                    data={
-                        "tool_name": event.part.tool_name,
-                        "tool_call_id": event.part.tool_call_id or "",
-                    },
-                ))
+                # TOOL_CALL_START 已由 _emit_model_stream 中的 PartStartEvent(ToolCallPart) 发出
+                # 此处不重复发送，避免前端创建两个相同 tool_call_id 的工具块
+                pass
             elif isinstance(event, FunctionToolResultEvent):
                 content = event.result.content if hasattr(event.result, "content") else str(event.result)
                 await emitter.emit(EventModel(

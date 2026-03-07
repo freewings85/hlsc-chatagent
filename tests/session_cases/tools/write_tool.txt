@@ -1,0 +1,30 @@
+CASE: write_new_file
+DESCRIPTION: Agent 创建一个新文件，覆盖 write 工具的完整路径。
+TOOLS_TRIGGERED: write
+COVERAGE:
+  - src/agent/tools/fs.py (write: 成功路径, on_write 写入 tracker)
+  - src/agent/file_state.py (on_write: offset=None/limit=None, mtime 记录)
+  - src/agent/loop.py (工具调用完整流程)
+  - src/server/app.py (SSE tool_result 事件)
+
+SETUP:
+  DELETE_IF_EXISTS: /write_output.txt
+
+--- TURN 1 ---
+INPUT:
+请使用 write 工具创建一个新文件 /write_output.txt，文件内容是：write_tool_success_marker
+
+EXPECT_TOOL: write
+EXPECT_RESULT_CONTAINS: write_output.txt
+VERIFY_FILE_EXISTS: /write_output.txt
+VERIFY_FILE_CONTAINS: write_tool_success_marker
+--- END TURN 1 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 在输入框输入：请使用 write 工具创建一个新文件 /write_output.txt，文件内容是：write_tool_success_marker
+3. 点击发送
+4. 观察：应出现名为 "write" 的工具调用块
+5. 展开工具块，结果中应包含成功信息
+6. 检查磁盘上 data/playwright_tests/write_output.txt 是否存在，内容是否包含 write_tool_success_marker

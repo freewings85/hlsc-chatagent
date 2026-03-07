@@ -74,23 +74,39 @@ class TaskWorker:
                     break
                 await handler.handle(event)
 
+        from src.agent.deps import AgentDeps
+        from src.agent.loop import create_agent, run_agent_loop
+        from src.agent.model import create_model
+        from src.agent.tools import ALL_FS_TOOLS, create_default_tool_map
+        from src.event.event_model import EventModel
+        from src.event.event_type import EventType
+
+        model = create_model()
+        agent = create_agent(model)
+        deps: AgentDeps = AgentDeps(
+            session_id=task.session_id,
+            user_id=task.user_id,
+            available_tools=list(ALL_FS_TOOLS),
+            tool_map=create_default_tool_map(),
+        )
+
         try:
-            # TODO: 构建 agent 和 deps
-            # agent = create_agent(model, system_prompt)
-            # deps = AgentDeps(...)
-            # await asyncio.gather(
-            #     run_agent_loop(emitter, task, agent, deps),
-            #     _consume_events(),
-            # )
-            pass
+            await asyncio.gather(
+                run_agent_loop(emitter, task, agent, deps),
+                _consume_events(),
+            )
         except Exception:
             logger.exception(
-                "Worker %d failed on task %s",
-                0,  # TODO: 传入 worker_id
+                "Worker failed on task %s",
                 task.task_id,
             )
-            # TODO: 发送错误事件通知客户端
-            # error_event = EventModel(type=EventType.ERROR, ...)
-            # await handler.handle(error_event)
+            # 发送错误事件通知客户端
+            error_event: EventModel = EventModel(
+                conversation_id=task.session_id,
+                request_id=task.request_id,
+                type=EventType.ERROR,
+                data={"error": "Agent 执行异常"},
+            )
+            await handler.handle(error_event)
         finally:
             await handler.close()

@@ -1,0 +1,45 @@
+CASE: multi_turn_tool_session
+DESCRIPTION: 多轮对话中混合使用工具，验证跨轮次工具调用和上下文保留。涵盖 history_message_loader 多轮追加 + ToolReturnPart 在后续轮次的正确序列化。
+TOOLS_TRIGGERED: write, read, bash
+COVERAGE:
+  - src/agent/message/history_message_loader.py (ToolReturnPart 跨轮持久化，多轮加载)
+  - src/agent/tools/fs.py (write 成功路径; read 成功路径)
+  - src/agent/tools/bash.py (bash 成功路径)
+  - src/agent/loop.py (UserPromptNode 多次触发，历史消息正确附加)
+  - src/agent/file_state.py (on_write 后 on_read: tracker 正确更新)
+
+SETUP:
+  DELETE_IF_EXISTS: /session_data.txt
+
+--- TURN 1 ---
+INPUT:
+请使用 write 工具创建文件 /session_data.txt，内容为 "session_turn1_content"。
+
+EXPECT_TOOL: write
+VERIFY_FILE_EXISTS: /session_data.txt
+VERIFY_FILE_CONTAINS: session_turn1_content
+--- END TURN 1 ---
+
+--- TURN 2 ---
+INPUT:
+很好。现在请使用 read 工具读取刚才创建的 /session_data.txt，告诉我文件内容。
+
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: session_turn1_content
+EXPECT_RESPONSE_CONTAINS: session_turn1_content
+--- END TURN 2 ---
+
+--- TURN 3 ---
+INPUT:
+最后，用 bash 工具执行 `wc -c /session_data.txt`（等效路径），不用关心路径是否正确，只需尝试执行即可，告诉我命令输出。
+
+EXPECT_TOOL: bash
+--- END TURN 3 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100（保持同一个 session）
+2. 第一轮：发送 write 任务，确认 session_data.txt 被创建
+3. 第二轮：发送 read 任务，确认 Agent 回复包含 session_turn1_content
+4. 第三轮：发送 bash 任务，确认 bash 工具块出现
+5. 全程 session_id 不变，验证多轮上下文保留

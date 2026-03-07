@@ -1,0 +1,30 @@
+CASE: read_basic_file
+DESCRIPTION: Agent 读取一个已有文件并输出内容，覆盖 read 工具的完整路径。
+TOOLS_TRIGGERED: read
+COVERAGE:
+  - src/agent/tools/fs.py (read: 成功路径, on_read 写入 tracker)
+  - src/agent/file_state.py (on_read: offset=None/limit=None 完整读)
+  - src/agent/loop.py (_emit_model_stream ToolCallPart, _emit_tool_events FunctionToolResultEvent)
+  - src/server/app.py (chat_stream SSE 端点)
+
+SETUP:
+  CREATE: /read_me.txt | playwright_read_marker_SUCCESS
+  Content line 2: this is test data
+
+--- TURN 1 ---
+INPUT:
+请使用 read 工具读取 /read_me.txt 文件，告诉我文件里面写了什么内容。
+
+EXPECT_TOOL: read
+EXPECT_RESULT_CONTAINS: playwright_read_marker_SUCCESS
+EXPECT_RESPONSE_CONTAINS: playwright_read_marker_SUCCESS
+--- END TURN 1 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 在输入框输入：请使用 read 工具读取 /read_me.txt 文件，告诉我文件里面写了什么内容。
+3. 点击发送
+4. 观察：应出现名为 "read" 的工具调用块
+5. 展开工具块，结果中应包含 "playwright_read_marker_SUCCESS"
+6. 文本回复中应提到文件内容

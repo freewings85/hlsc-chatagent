@@ -1,0 +1,100 @@
+{
+  "project": "chatagent-coverage",
+  "branchName": "ralph/coverage-100",
+  "description": "chatagent 代码覆盖率提升至 ≥99%：补全 fs.py/bash.py/file_state.py 未覆盖路径的单元测试，修复 E2E 测试数据污染，最终所有测试通过且覆盖率达标",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "修复并测试 fs.py error fallback 路径",
+      "description": "As a developer, I want the fs.py error fallback paths to be both correct and tested so that the tools don't bypass virtual_mode when an exception occurs.",
+      "acceptanceCriteria": [
+        "读取 src/agent/tools/fs.py，检查第 56-60、101-108、140-144 行 fallback 是否绕过 virtual_mode；如有 bug 则修复",
+        "在 tests/agent/tools/test_fs_tools.py 添加测试：mock backend 使其无 _resolve_path 属性，触发 except AttributeError 路径",
+        "在 tests/agent/tools/test_fs_tools.py 添加测试：grep 工具的 agrep_raw 返回 str（错误消息）时直接返回该字符串（第 193 行）",
+        "uv run pytest tests/agent/tools/test_fs_tools.py -v 全部通过",
+        "uv run pytest tests/agent/tools/ --cov=src/agent/tools/fs.py --cov-report=term-missing 显示 fs.py 覆盖率 100%",
+        "Typecheck passes: uv run mypy src/agent/tools/fs.py --ignore-missing-imports"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "fallback 路径：backend._resolve_path 不存在时降级用 Path(file_path)，这可能绕过 virtual_mode 沙箱，需检查并修复"
+    },
+    {
+      "id": "US-002",
+      "title": "测试 bash.py timeout 和 output truncation 路径",
+      "description": "As a developer, I want bash tool's timeout and output truncation logic to be tested so that edge cases don't silently fail.",
+      "acceptanceCriteria": [
+        "在 tests/agent/tools/test_bash.py 添加超时测试：patch asyncio.wait_for 使其抛出 asyncio.TimeoutError，验证返回消息含 '超时' 或 timeout",
+        "在 tests/agent/tools/test_bash.py 添加截断测试：命令输出超过 MAX_OUTPUT_BYTES (30000) 字节，验证返回内容含截断提示",
+        "uv run pytest tests/agent/tools/test_bash.py -v 全部通过",
+        "uv run pytest tests/agent/tools/ --cov=src/agent/tools/bash.py --cov-report=term-missing 显示 bash.py 覆盖率 100%",
+        "Typecheck passes: uv run mypy src/agent/tools/bash.py --ignore-missing-imports"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "bash.py 第 42-43 行 TimeoutError 分支，第 52 行截断分支"
+    },
+    {
+      "id": "US-003",
+      "title": "测试 file_state.py 外部文件修改检测路径",
+      "description": "As a developer, I want the get_changed_files() method tested for the mtime-change branch so that the AttachmentCollector can rely on it.",
+      "acceptanceCriteria": [
+        "在 tests/agent/tools/test_fs_tools.py 或 tests/agent/ 下相关文件中添加测试：on_read 记录文件后，在磁盘上修改文件内容（改变 mtime），调用 get_changed_files() 返回该文件",
+        "添加测试：on_read 后文件未修改，get_changed_files() 返回空列表",
+        "uv run pytest -k 'file_state' -v 全部通过",
+        "uv run pytest tests/ --cov=src/agent/file_state.py --cov-report=term-missing 显示 file_state.py 覆盖率 100%",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "file_state.py 第 91-92 行：current_mtime != entry.timestamp 时 append ChangedFile"
+    },
+    {
+      "id": "US-004",
+      "title": "补充 history_message_loader.py 和 task_queue.py 边界路径测试",
+      "description": "As a developer, I want all uncovered lines in history_message_loader.py and task_queue.py to be tested so we reach overall coverage target.",
+      "acceptanceCriteria": [
+        "运行 uv run pytest tests/ --cov=src/agent/message/history_message_loader.py --cov-report=term-missing 查看第 130、169 行场景",
+        "在 tests/agent/message/test_history_message_loader.py 补充触发第 130、169 行的测试用例",
+        "运行 uv run pytest tests/ --cov=src/engine/task_queue.py --cov-report=term-missing 查看第 111-112、115、118-123 行场景",
+        "在 tests/engine/test_task_queue.py 补充触发这些行的测试用例",
+        "uv run pytest tests/agent/message/ tests/engine/ -v 全部通过",
+        "history_message_loader.py 和 task_queue.py 覆盖率均达到 100%",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "先用 --cov-report=term-missing 确认具体未覆盖行，再针对性补测试"
+    },
+    {
+      "id": "US-005",
+      "title": "修复 E2E 测试数据隔离问题",
+      "description": "As a developer, I want E2E session case tests to clean up TEST_DATA_DIR between test functions so that tests don't interfere with each other regardless of execution order.",
+      "acceptanceCriteria": [
+        "在 tests/e2e/conftest.py 或 tests/e2e/test_session_cases.py 中，每个 test function 开始前清空 TEST_DATA_DIR 目录内容（保留目录本身）",
+        "验证：单独运行 uv run pytest 'tests/e2e/test_session_cases.py::test_session_case[chromium-tools/glob_tool]' -v 通过",
+        "验证：逆序运行所有 session cases 依然全部通过（或按随机顺序）",
+        "所有 11 个 session case 仍然通过",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "当前 glob_tool case 在完整 suite 运行时会找到前面测试遗留的文件，属于测试隔离缺陷"
+    },
+    {
+      "id": "US-006",
+      "title": "最终验证：覆盖率 ≥ 99% 且所有测试通过",
+      "description": "As a developer, I want to confirm that all tests pass and coverage meets the target before declaring the task complete.",
+      "acceptanceCriteria": [
+        "uv run pytest tests/ --ignore=tests/e2e --cov=src --cov-report=term-missing -v 全部通过，零失败",
+        "输出中 TOTAL 覆盖率 ≥ 99%",
+        "uv run mypy src/agent/tools/ src/agent/file_state.py --ignore-missing-imports 无错误",
+        "如果覆盖率未达标，继续分析未覆盖行并补充测试，直到达标",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "这是验收 story，必须最后执行。覆盖率不达标时 passes 保持 false，ralph 继续迭代"
+    }
+  ]
+}

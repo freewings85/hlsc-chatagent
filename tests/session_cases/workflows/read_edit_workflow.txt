@@ -1,0 +1,31 @@
+CASE: read_edit_workflow
+DESCRIPTION: Agent 先读取文件，再修改其中内容，覆盖 read+edit 工具组合路径，以及 FileStateTracker 的 on_read→on_write 状态转换。
+TOOLS_TRIGGERED: read, edit
+COVERAGE:
+  - src/agent/tools/fs.py (read 成功路径; edit 替换成功, on_write 更新 tracker)
+  - src/agent/file_state.py (on_read 后 on_write: entry 被覆盖而非累积)
+  - src/agent/loop.py (多工具调用：两次 CallToolsNode 执行)
+  - src/agent/message/history_message_loader.py (多轮消息追加)
+
+SETUP:
+  CREATE: /workflow_edit_target.txt | ORIGINAL_CONTENT_marker_WF1
+  Line 2 additional content
+
+--- TURN 1 ---
+INPUT:
+请先使用 read 工具读取 /workflow_edit_target.txt，然后用 edit 工具把其中的 "ORIGINAL_CONTENT_marker_WF1" 替换成 "MODIFIED_CONTENT_marker_WF1"。
+
+EXPECT_TOOL: read
+EXPECT_TOOL: edit
+EXPECT_RESULT_CONTAINS: 已替换
+VERIFY_FILE_CONTAINS: MODIFIED_CONTENT_marker_WF1
+VERIFY_FILE_NOT_CONTAINS: ORIGINAL_CONTENT_marker_WF1
+--- END TURN 1 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 确保 data/playwright_tests/workflow_edit_target.txt 存在，内容含 ORIGINAL_CONTENT_marker_WF1
+3. 输入：请先使用 read 工具读取 /workflow_edit_target.txt，然后用 edit 工具把其中的 "ORIGINAL_CONTENT_marker_WF1" 替换成 "MODIFIED_CONTENT_marker_WF1"。
+4. 观察：依次出现 read 和 edit 两个工具块
+5. 检查文件内容变为 MODIFIED_CONTENT_marker_WF1
