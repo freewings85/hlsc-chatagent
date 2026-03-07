@@ -1,0 +1,23 @@
+CASE: skill_listing_in_system
+DESCRIPTION: 验证 skill_listing 被注入为 system-reminder，Agent 能"看到"可用 skill 列表。用户问"有哪些可用 skill"时，Agent 基于 skill_listing 回复，无需调用工具。
+TOOLS_TRIGGERED:
+COVERAGE:
+  - src/agent/message/pre_model_call_service.py (_build_skill_listing_attachment, _SKILL_LISTING_SOURCE)
+  - src/agent/skills/registry.py (SkillRegistry.format_listing, list_invocable)
+  - src/agent/loop.py (skill_registry 有 skills 时 has_skills() 检查)
+
+SETUP:
+
+--- TURN 1 ---
+INPUT:
+目前系统中有哪些可用的 skill？请列出所有你知道的 skill 名称。
+
+EXPECT_RESPONSE_CONTAINS: example
+--- END TURN 1 ---
+
+
+MANUAL_TEST_STEPS:
+1. 打开浏览器访问 http://localhost:8100
+2. 输入：目前系统中有哪些可用的 skill？请列出所有你知道的 skill 名称。
+3. 观察：Agent 无需调用工具，直接基于 system-reminder 中的 skill_listing 回复
+4. 回复中应包含 "example"（bundled skill 名称）

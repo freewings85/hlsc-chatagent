@@ -420,3 +420,20 @@ class TestBundledSkills:
         assert entry is not None
         assert "example" in entry.name
         assert entry.content  # 有正文
+
+
+class TestRegistryLoadEdgeCases:
+    def test_non_directory_file_in_base_dir_skipped(self, tmp_path: Path) -> None:
+        """base_dir 中的普通文件（非目录）被跳过，不影响加载（覆盖 line 204: if not skill_dir.is_dir: continue）"""
+        # 在 base_dir 中放一个 SKILL.md 文件（不是目录）
+        (tmp_path / "SKILL.md").write_text("not a skill dir\n")
+        # 同时放一个正常的 skill 目录
+        d = tmp_path / "commit"
+        d.mkdir()
+        (d / "SKILL.md").write_text(
+            "---\nname: commit\ndescription: Commit code\n---\n# Commit\n"
+        )
+        registry = SkillRegistry.load([tmp_path])
+        assert registry.get("commit") is not None
+        # 普通文件不应被处理
+        assert len(registry._entries) == 1

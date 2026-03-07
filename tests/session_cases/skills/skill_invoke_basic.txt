@@ -1,0 +1,30 @@
+CASE: skill_invoke_basic
+DESCRIPTION: 验证 Skill 工具的基本调用流程。用户指定 skill 名称，Agent 调用 Skill tool 返回 SKILL.md 内容和 metadata tag，InvokedSkillStore 记录已调用的 skill。测试依赖 bundled/example/SKILL.md 内置 skill。
+TOOLS_TRIGGERED: Skill
+COVERAGE:
+  - src/agent/skills/tool.py (invoke_skill: registry lookup, metadata tag, store.record)
+  - src/agent/skills/registry.py (SkillRegistry.get, format_listing)
+  - src/agent/skills/invoked_store.py (InvokedSkillStore.record, _flush_locked)
+  - src/agent/message/pre_model_call_service.py (_build_skill_listing_attachment)
+  - src/agent/loop.py (skill_registry 注入, Skill tool 注册)
+
+SETUP:
+  DELETE_IF_EXISTS: /u1/sessions/test-session/invoked_skills.json
+
+--- TURN 1 ---
+INPUT:
+请使用 Skill 工具调用名为 "example" 的 skill，告诉我它包含什么指令内容。
+
+EXPECT_TOOL: Skill
+EXPECT_RESULT_CONTAINS: example
+EXPECT_RESPONSE_CONTAINS: example
+--- END TURN 1 ---
+
+
+MANUAL_TEST_STEPS:
+1. 确保 src/agent/skills/bundled/example/SKILL.md 存在（内置 skill）
+2. 打开浏览器访问 http://localhost:8100
+3. 输入：请使用 Skill 工具调用名为 "example" 的 skill，告诉我它包含什么指令内容。
+4. 观察：应出现名为 "Skill" 的工具调用块
+5. 工具结果中应包含 "example"（skill 名称）
+6. Agent 回复中应提到 example skill 的相关内容

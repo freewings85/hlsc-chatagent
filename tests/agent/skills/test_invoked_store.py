@@ -73,6 +73,37 @@ class TestInvokedSkillStoreLoad:
         await store.load()  # 不应该抛异常
         assert store.get_all() == {}
 
+    async def test_load_handles_empty_file(self, tmp_path: Path) -> None:
+        """空文件时 load 静默跳过，返回空字典（覆盖 line 84: if not raw: return）"""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from src.common.filesystem_backend import FileDownloadResponse
+
+        backend = make_backend(tmp_path)
+        path = _invoked_skills_path("u1", "s1")
+
+        # 模拟文件存在但内容为纯空白
+        mock_resp = FileDownloadResponse(path=path, content=b"   \n   ", error=None)
+        with patch.object(backend, "aexists", return_value=True), \
+             patch.object(backend, "adownload_files", return_value=[mock_resp]):
+            store = InvokedSkillStore(backend, "u1", "s1")
+            await store.load()
+            assert store.get_all() == {}
+
+    async def test_load_handles_download_error(self, tmp_path: Path) -> None:
+        """adownload_files 返回 error 时 load 静默跳过（覆盖 line 81: resp.error is not None）"""
+        from unittest.mock import patch
+        from src.common.filesystem_backend import FileDownloadResponse
+
+        backend = make_backend(tmp_path)
+        # FileOperationError 是 Literal 类型，用字符串字面值
+        mock_resp = FileDownloadResponse(path="/u1/sessions/s1/invoked_skills.json",
+                                         content=None, error="file_not_found")
+        with patch.object(backend, "aexists", return_value=True), \
+             patch.object(backend, "adownload_files", return_value=[mock_resp]):
+            store = InvokedSkillStore(backend, "u1", "s1")
+            await store.load()
+            assert store.get_all() == {}
+
 
 class TestInvokedSkillStoreRecord:
     async def test_record_stores_in_memory(self, tmp_path: Path) -> None:
@@ -137,6 +168,37 @@ class TestInvokedSkillStoreGetAll:
         backend = make_backend(tmp_path)
         store = make_store(backend)
         assert store.get_all() == {}
+
+
+class TestInvokedSkillStoreFlushErrors:
+    """测试 _flush_locked 的错误路径（lines 126, 130）。"""
+
+    async def test_flush_raises_on_delete_failure(self, tmp_path: Path) -> None:
+        """adelete 返回 False 时 record() 应抛出 OSError（覆盖 line 126）"""
+        from unittest.mock import patch
+        from src.common.filesystem_backend import WriteResult
+
+        backend = make_backend(tmp_path)
+        store = make_store(backend)
+
+        with patch.object(backend, "aexists", return_value=True), \
+             patch.object(backend, "adelete", return_value=False):
+            with pytest.raises(OSError, match="无法删除"):
+                await store.record(make_skill("commit"))
+
+    async def test_flush_raises_on_write_failure(self, tmp_path: Path) -> None:
+        """awrite 返回 error 时 record() 应抛出 OSError（覆盖 line 130）"""
+        from unittest.mock import patch
+        from src.common.filesystem_backend import WriteResult
+
+        backend = make_backend(tmp_path)
+        store = make_store(backend)
+
+        mock_result = WriteResult(path="/u1/sessions/s1/invoked_skills.json", error="permission_denied")
+        with patch.object(backend, "aexists", return_value=False), \
+             patch.object(backend, "awrite", return_value=mock_result):
+            with pytest.raises(OSError, match="写入 invoked_skills 失败"):
+                await store.record(make_skill("commit"))
 
 
 class TestInvokedSkillStoreRoundTrip:
