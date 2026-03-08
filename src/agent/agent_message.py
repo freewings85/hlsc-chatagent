@@ -1,0 +1,238 @@
+"""AgentMessage：扁平的消息类型，替代 Pydantic AI 的 ModelRequest/ModelResponse。
+
+两种消息类型：
+- UserMessage：用户消息（含工具结果返回）
+- AssistantMessage：助手回复（含工具调用）
+
+所有持久化和日志使用 AgentMessage。Pydantic AI 的 ModelMessage 只在 agent loop
+内部使用（模型调用边界），通过 to_model_messages / from_model_messages 转换。
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, TypeAdapter
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    RetryPromptPart,
+    SystemPromptPart,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------------------------------- #
+# 数据类型
+# --------------------------------------------------------------------------- #
+
+
+class ToolCall(BaseModel):
+    """Assistant 发起的工具调用。"""
+
+    tool_name: str
+    tool_call_id: str
+    args: str  # JSON string
+
+
+class ToolResult(BaseModel):
+    """工具执行结果。"""
+
+    tool_name: str
+    tool_call_id: str
+    content: str
+
+
+class UserMessage(BaseModel):
+    """用户消息（含工具结果返回）。
+
+    content: 用户文本（可为空，如纯 tool_results 返回时）
+    tool_results: 工具执行结果列表
+    metadata: 元信息（is_meta, source, is_compact_boundary, is_compact_summary 等）
+    """
+
+    role: Literal["user"] = "user"
+    content: str = ""
+    tool_results: list[ToolResult] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AssistantMessage(BaseModel):
+    """助手回复（含工具调用）。"""
+
+    role: Literal["assistant"] = "assistant"
+    content: str = ""
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+
+
+AgentMessage = UserMessage | AssistantMessage
+
+AgentMessageListAdapter: TypeAdapter[list[AgentMessage]] = TypeAdapter(
+    list[AgentMessage],
+)
+
+
+# --------------------------------------------------------------------------- #
+# 转换函数
+# --------------------------------------------------------------------------- #
+
+
+def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
+    """ModelMessage 列表 → AgentMessage 列表。
+
+    - SystemPromptPart 被跳过（由 Pydantic AI 自动注入，不属于对话内容）
+    - 如果一个 ModelRequest 只包含 SystemPromptPart，则整个消息被跳过
+    """
+    result: list[AgentMessage] = []
+
+    for msg in messages:
+        if isinstance(msg, ModelRequest):
+            content_parts: list[str] = []
+            tool_results: list[ToolResult] = []
+
+            for part in msg.parts:
+                if isinstance(part, SystemPromptPart):
+                    continue
+                elif isinstance(part, UserPromptPart):
+                    text = part.content if isinstance(part.content, str) else str(part.content)
+                    if text:
+                        content_parts.append(text)
+                elif isinstance(part, ToolReturnPart):
+                    content = part.content if isinstance(part.content, str) else str(part.content)
+                    tool_results.append(ToolResult(
+                        tool_name=part.tool_name,
+                        tool_call_id=part.tool_call_id or "",
+                        content=content,
+                    ))
+                elif isinstance(part, RetryPromptPart):
+                    retry_content = part.content if isinstance(part.content, str) else str(part.content)
+                    content_parts.append(f"[retry] {retry_content}")
+
+            # 跳过 SystemPromptPart-only 的消息
+            if not content_parts and not tool_results:
+                continue
+
+            result.append(UserMessage(
+                content="\n".join(content_parts),
+                tool_results=tool_results,
+                metadata=dict(msg.metadata) if msg.metadata else {},
+            ))
+
+        elif isinstance(msg, ModelResponse):
+            content = ""
+            tool_calls: list[ToolCall] = []
+
+            for part in msg.parts:
+                if isinstance(part, TextPart):
+                    content += part.content
+                elif isinstance(part, ToolCallPart):
+                    args = part.args if isinstance(part.args, str) else json.dumps(part.args, ensure_ascii=False)
+                    tool_calls.append(ToolCall(
+                        tool_name=part.tool_name,
+                        tool_call_id=part.tool_call_id or "",
+                        args=args,
+                    ))
+
+            result.append(AssistantMessage(
+                content=content,
+                tool_calls=tool_calls,
+            ))
+
+    return result
+
+
+def to_model_messages(messages: list[AgentMessage]) -> list[ModelMessage]:
+    """AgentMessage 列表 → ModelMessage 列表。"""
+    result: list[ModelMessage] = []
+
+    for msg in messages:
+        if isinstance(msg, UserMessage):
+            parts: list[UserPromptPart | ToolReturnPart | RetryPromptPart] = []
+            if msg.content:
+                parts.append(UserPromptPart(content=msg.content))
+            for tr in msg.tool_results:
+                parts.append(ToolReturnPart(
+                    tool_name=tr.tool_name,
+                    content=tr.content,
+                    tool_call_id=tr.tool_call_id,
+                ))
+            if parts:
+                result.append(ModelRequest(
+                    parts=parts,  # type: ignore[arg-type]
+                    metadata=msg.metadata if msg.metadata else None,
+                ))
+
+        elif isinstance(msg, AssistantMessage):
+            parts_resp: list[TextPart | ToolCallPart] = []
+            if msg.content:
+                parts_resp.append(TextPart(content=msg.content))
+            for tc in msg.tool_calls:
+                parts_resp.append(ToolCallPart(
+                    tool_name=tc.tool_name,
+                    tool_call_id=tc.tool_call_id,
+                    args=tc.args,
+                ))
+            if parts_resp:
+                result.append(ModelResponse(parts=parts_resp))  # type: ignore[arg-type]
+
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# 过滤
+# --------------------------------------------------------------------------- #
+
+
+def should_persist(msg: AgentMessage) -> bool:
+    """判断 AgentMessage 是否需要写入持久化存储。
+
+    规则：
+    - AssistantMessage → 永远存
+    - UserMessage 非 is_meta → 永远存
+    - is_meta=True → 只存 is_compact_summary=True
+    """
+    if isinstance(msg, AssistantMessage):
+        return True
+    # UserMessage
+    if not msg.metadata.get("is_meta"):
+        return True
+    return bool(msg.metadata.get("is_compact_summary", False))
+
+
+# --------------------------------------------------------------------------- #
+# 序列化
+# --------------------------------------------------------------------------- #
+
+
+def serialize_agent_messages(messages: list[AgentMessage]) -> str:
+    """将 AgentMessage 列表序列化为 JSONL 字符串。每行一个 JSON 对象。"""
+    lines: list[str] = []
+    for msg in messages:
+        json_str = msg.model_dump_json()
+        lines.append(json_str)
+    return "\n".join(lines) + "\n" if lines else ""
+
+
+def deserialize_agent_messages(raw: str) -> list[AgentMessage]:
+    """从 JSONL 字符串解析 AgentMessage 列表。每行一个 JSON 对象。"""
+    messages: list[AgentMessage] = []
+
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = AgentMessageListAdapter.validate_json(f"[{line}]")
+            messages.extend(parsed)
+        except Exception:
+            logger.warning("跳过损坏的 JSONL 行（行长度 %d）", len(line))
+
+    return messages

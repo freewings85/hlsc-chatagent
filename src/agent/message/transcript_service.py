@@ -2,9 +2,9 @@
 
 只写 transcript.jsonl，不写 messages.jsonl（由 MemoryMessageService 负责）。
 
-过滤规则（参考 Claude Code isSynthetic 逻辑）：
-- ModelResponse 永远写入
-- 非 is_meta 的 ModelRequest（含 compact_boundary）永远写入
+过滤规则：
+- AssistantMessage 永远写入
+- 非 is_meta 的 UserMessage（含 compact_boundary）永远写入
 - is_meta=True 的消息：只写 is_compact_summary=True 的摘要
 
 路径约定：/{user_id}/sessions/{session_id}/transcript.jsonl
@@ -16,13 +16,12 @@ import asyncio
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from pydantic_ai.messages import ModelMessage
-
-from src.agent.message.history_message_loader import (
-    _serialize_messages,
-    _should_persist,
-    _transcript_path,
+from src.agent.agent_message import (
+    AgentMessage,
+    serialize_agent_messages,
+    should_persist,
 )
+from src.agent.message.history_message_loader import _transcript_path
 
 if TYPE_CHECKING:
     from src.common.filesystem_backend import BackendProtocol
@@ -43,17 +42,17 @@ class TranscriptService:
         self,
         user_id: str,
         session_id: str,
-        new_messages: list[ModelMessage],
+        new_messages: list[AgentMessage],
     ) -> None:
         """追加新消息到 transcript.jsonl。
 
-        过滤规则：_should_persist（保留 compact_summary，排除其他 is_meta）。
+        过滤规则：should_persist（保留 compact_summary，排除其他 is_meta）。
         """
-        persist = [m for m in new_messages if _should_persist(m)]
+        persist = [m for m in new_messages if should_persist(m)]
         if not persist:
             return
 
-        append_content = _serialize_messages(persist)
+        append_content = serialize_agent_messages(persist)
         path = _transcript_path(user_id, session_id)
         lock_key = f"{user_id}:{session_id}"
 

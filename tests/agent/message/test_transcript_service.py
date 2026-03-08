@@ -5,31 +5,31 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
+from src.agent.agent_message import AssistantMessage, UserMessage
 from src.agent.message.transcript_service import TranscriptService
 from src.storage.local_backend import FilesystemBackend
 
 
-def make_user_msg(content: str) -> ModelRequest:
-    return ModelRequest(parts=[UserPromptPart(content=content)])
+def make_user_msg(content: str) -> UserMessage:
+    return UserMessage(content=content)
 
 
-def make_assistant_msg(content: str) -> ModelResponse:
-    return ModelResponse(parts=[TextPart(content=content)])
+def make_assistant_msg(content: str) -> AssistantMessage:
+    return AssistantMessage(content=content)
 
 
-def make_meta_msg(content: str, is_compact_summary: bool = False) -> ModelRequest:
+def make_meta_msg(content: str, is_compact_summary: bool = False) -> UserMessage:
     meta: dict = {"is_meta": True}
     if is_compact_summary:
         meta["is_compact_summary"] = True
-    return ModelRequest(parts=[UserPromptPart(content=content)], metadata=meta)
+    return UserMessage(content=content, metadata=meta)
 
 
-def make_boundary_msg() -> ModelRequest:
+def make_boundary_msg() -> UserMessage:
     """compact_boundary 标记（is_meta=False，需要持久化）"""
-    return ModelRequest(
-        parts=[UserPromptPart(content="[对话已压缩]")],
+    return UserMessage(
+        content="[对话已压缩]",
         metadata={"is_compact_boundary": True},
     )
 
@@ -103,8 +103,8 @@ class TestAppend:
         path = "/u/sessions/s/transcript.jsonl"
         assert not await backend.aexists(path)
 
-    async def test_append_model_response_always_written(self, service: TranscriptService, backend: FilesystemBackend) -> None:
-        """ModelResponse（模型回复）永远写入"""
+    async def test_append_assistant_always_written(self, service: TranscriptService, backend: FilesystemBackend) -> None:
+        """AssistantMessage 永远写入"""
         await service.append("u", "s", [make_assistant_msg("I am the assistant")])
 
         path = "/u/sessions/s/transcript.jsonl"

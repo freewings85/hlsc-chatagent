@@ -13,14 +13,13 @@ import asyncio
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from pydantic_ai.messages import ModelMessage
-
-from src.agent.message.history_message_loader import (
-    _deserialize_messages,
-    _messages_path,
-    _serialize_messages,
-    _should_persist,
+from src.agent.agent_message import (
+    AgentMessage,
+    deserialize_agent_messages,
+    serialize_agent_messages,
+    should_persist,
 )
+from src.agent.message.history_message_loader import _messages_path
 
 if TYPE_CHECKING:
     from src.common.filesystem_backend import BackendProtocol
@@ -37,13 +36,13 @@ class MemoryMessageService:
 
     def __init__(self, backend: BackendProtocol) -> None:
         self._backend = backend
-        self._cache: dict[str, list[ModelMessage]] = {}
+        self._cache: dict[str, list[AgentMessage]] = {}
         self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     def _cache_key(self, user_id: str, session_id: str) -> str:
         return f"{user_id}:{session_id}"
 
-    async def load(self, user_id: str, session_id: str) -> list[ModelMessage]:
+    async def load(self, user_id: str, session_id: str) -> list[AgentMessage]:
         """加载消息工作集，优先从缓存读取。"""
         key = self._cache_key(user_id, session_id)
         if key in self._cache:
@@ -57,10 +56,10 @@ class MemoryMessageService:
         self,
         user_id: str,
         session_id: str,
-        messages: list[ModelMessage],
+        messages: list[AgentMessage],
     ) -> None:
         """全量替换工作集（compact 后调用）。过滤不应持久化的消息。"""
-        persist = [m for m in messages if _should_persist(m)]
+        persist = [m for m in messages if should_persist(m)]
         key = self._cache_key(user_id, session_id)
         self._cache[key] = list(persist)
         await self._overwrite_file(user_id, session_id, persist)
@@ -69,10 +68,10 @@ class MemoryMessageService:
         self,
         user_id: str,
         session_id: str,
-        new_messages: list[ModelMessage],
+        new_messages: list[AgentMessage],
     ) -> None:
         """追加新消息到工作集（只写 messages.jsonl，不写 transcript.jsonl）。"""
-        persist = [m for m in new_messages if _should_persist(m)]
+        persist = [m for m in new_messages if should_persist(m)]
         if not persist:
             return
 
@@ -87,7 +86,7 @@ class MemoryMessageService:
 
     # ──────────────────────── 文件操作 ────────────────────────
 
-    async def _load_from_file(self, user_id: str, session_id: str) -> list[ModelMessage]:
+    async def _load_from_file(self, user_id: str, session_id: str) -> list[AgentMessage]:
         path = _messages_path(user_id, session_id)
         if not await self._backend.aexists(path):
             return []
@@ -98,15 +97,15 @@ class MemoryMessageService:
         raw = resp.content.decode("utf-8").strip()
         if not raw:
             return []
-        return _deserialize_messages(raw)
+        return deserialize_agent_messages(raw)
 
     async def _overwrite_file(
         self,
         user_id: str,
         session_id: str,
-        messages: list[ModelMessage],
+        messages: list[AgentMessage],
     ) -> None:
-        content = _serialize_messages(messages)
+        content = serialize_agent_messages(messages)
         path = _messages_path(user_id, session_id)
         if await self._backend.aexists(path):
             deleted = await self._backend.adelete(path)
@@ -121,9 +120,9 @@ class MemoryMessageService:
         self,
         user_id: str,
         session_id: str,
-        messages: list[ModelMessage],
+        messages: list[AgentMessage],
     ) -> None:
-        append_content = _serialize_messages(messages)
+        append_content = serialize_agent_messages(messages)
         path = _messages_path(user_id, session_id)
         existing = ""
         if await self._backend.aexists(path):

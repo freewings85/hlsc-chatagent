@@ -22,6 +22,19 @@ from pydantic_ai.models import Model
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
+from src.utils.request_context import clear_request_context, set_request_context
+from src.utils.session_logger import (
+    log_error,
+    log_info,
+    log_llm_end,
+    log_llm_start,
+    log_request_end,
+    log_request_start,
+    log_tool_end,
+    log_tool_start,
+)
+
+from src.agent.agent_message import from_model_messages, to_model_messages
 from src.agent.compact.compactor import Compactor, SummarizeFn
 from src.agent.deps import AgentDeps
 from src.agent.message.attachment_collector import AttachmentCollector
@@ -95,16 +108,24 @@ async def _emit_model_stream(
     ctx: Any,
     emitter: EventEmitter,
     task: SessionRequestTask,
+    messages_count: int = 0,
+    messages: list[ModelMessage] | None = None,
 ) -> None:
     """流式消费 ModelRequestNode，逐 token 发出 TEXT / TOOL_CALL 事件。
 
     stream 结束后 node._result 已设置，后续 run.next(node) 不会重复调 LLM。
     """
+    log_llm_start("ModelRequestNode", messages_count=messages_count, messages=messages)
+
+    _text_parts: list[str] = []
+    _tool_call_names: list[str] = []
+
     async with node.stream(ctx) as agent_stream:
         async for event in agent_stream:
             if isinstance(event, PartStartEvent):
                 part = event.part
                 if isinstance(part, TextPart) and part.content:
+                    _text_parts.append(part.content)
                     await emitter.emit(EventModel(
                         conversation_id=task.session_id,
                         request_id=task.request_id,
@@ -112,6 +133,7 @@ async def _emit_model_stream(
                         data={"content": part.content},
                     ))
                 elif isinstance(part, ToolCallPart):
+                    _tool_call_names.append(part.tool_name)
                     await emitter.emit(EventModel(
                         conversation_id=task.session_id,
                         request_id=task.request_id,
@@ -124,6 +146,7 @@ async def _emit_model_stream(
             elif isinstance(event, PartDeltaEvent):
                 delta = event.delta
                 if isinstance(delta, TextPartDelta):
+                    _text_parts.append(delta.content_delta)
                     await emitter.emit(EventModel(
                         conversation_id=task.session_id,
                         request_id=task.request_id,
@@ -137,6 +160,12 @@ async def _emit_model_stream(
                         type=EventType.TOOL_CALL_ARGS,
                         data={"args_chunk": delta.args_delta},
                     ))
+
+    # LLM 响应完成后记录日志
+    if _tool_call_names:
+        log_llm_end("ModelRequestNode", tool_calls=_tool_call_names)
+    else:
+        log_llm_end("ModelRequestNode", response_preview="".join(_text_parts))
 
 
 async def _emit_tool_events(
@@ -154,15 +183,18 @@ async def _emit_tool_events(
             if isinstance(event, FunctionToolCallEvent):
                 # TOOL_CALL_START 已由 _emit_model_stream 中的 PartStartEvent(ToolCallPart) 发出
                 # 此处不重复发送，避免前端创建两个相同 tool_call_id 的工具块
-                pass
+                tool_name = getattr(event, "tool_name", None) or "unknown"
+                log_tool_start(tool_name)
             elif isinstance(event, FunctionToolResultEvent):
                 content = event.result.content if hasattr(event.result, "content") else str(event.result)
+                result_tool_name = event.result.tool_name
+                log_tool_end(result_tool_name, output_data=content)
                 await emitter.emit(EventModel(
                     conversation_id=task.session_id,
                     request_id=task.request_id,
                     type=EventType.TOOL_RESULT,
                     data={
-                        "tool_name": event.result.tool_name,
+                        "tool_name": result_tool_name,
                         "tool_call_id": getattr(event.result, "tool_call_id", ""),
                         "result": content,
                     },
@@ -189,6 +221,15 @@ async def run_agent_loop(
     - CallToolsNode: 通过 node.stream(ctx) 发出 TOOL_RESULT 事件
     - stream 完成后 run.next(node) 不会重复执行（内部检查 _result/_next_node）
     """
+    # 设置请求上下文（供 tool/service 层自动获取 session_id/request_id）
+    set_request_context(task.session_id, task.request_id)
+    log_request_start(
+        session_id=task.session_id,
+        user_query=task.message,
+        user_id=task.user_id,
+        request_id=task.request_id,
+    )
+
     backend = get_backend()
     agent_fs_backend = get_agent_fs_backend()
 
@@ -230,11 +271,16 @@ async def run_agent_loop(
         invoked_skill_store=invoked_store if skill_registry.has_skills() else None,
     )
 
+    # 加载历史：AgentMessage → ModelMessage（Pydantic AI 需要）
     if message_history is None:
-        message_history = await memory_service.load(task.user_id, task.session_id)
+        agent_history = await memory_service.load(task.user_id, task.session_id)
+        message_history = to_model_messages(agent_history)
 
     try:
         iteration: int = 0
+        # 首次 context injection 后的消息总数（context + history + user_prompt）
+        # 用于计算 loop 结束后哪些消息是"新"的（offset = _base_len - 1）
+        _base_len: int = 0
 
         async with agent.iter(
             task.message,
@@ -253,18 +299,30 @@ async def run_agent_loop(
                     # 每轮 LLM 前：context injection + attachment + compact
                     pre_result = await pre_call_service.handle(history)
 
-                    # 若 compact 发生，更新工作集并清除文件状态追踪
+                    # 若 compact 发生，转换为 AgentMessage 后更新工作集
                     if pre_result.compacted:
+                        log_info(f"[COMPACT] iteration={iteration}")
+                        agent_working = from_model_messages(pre_result.working_messages)
                         await memory_service.update(
-                            task.user_id, task.session_id, pre_result.working_messages,
+                            task.user_id, task.session_id, agent_working,
                         )
                         deps.file_state_tracker.clear()
+
+                    # 记录首次 context injection 后的消息数
+                    # model_messages = [context..., history..., user_prompt]
+                    # 新消息从 user_prompt 开始，所以 offset = _base_len - 1
+                    if _base_len == 0:
+                        _base_len = len(pre_result.model_messages)
 
                     # 注入处理后的消息到 run 内部状态
                     run._graph_run.state.message_history[:] = pre_result.model_messages
 
                     # 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
-                    await _emit_model_stream(node, run.ctx, emitter, task)
+                    await _emit_model_stream(
+                        node, run.ctx, emitter, task,
+                        messages_count=len(pre_result.model_messages),
+                        messages=pre_result.model_messages,
+                    )
 
                 elif isinstance(node, CallToolsNode):
                     # 工具执行 → emitter.emit(tool_result 事件)
@@ -284,15 +342,27 @@ async def run_agent_loop(
             data={},
         ))
 
-        # 持久化新消息（过滤 is_meta，分别写 messages.jsonl 和 transcript.jsonl）
+        # 持久化新消息：ModelMessage → AgentMessage，写 messages.jsonl 和 transcript.jsonl
+        # offset = _base_len - 1：跳过 context + 已持久化历史，保留 user_prompt 起的新消息
+        final_response: str | None = None
         if run.result is not None:
+            final_response = run.result.output
             new_messages: list[ModelMessage] = run.result.all_messages()
-            history_len: int = len(message_history) if message_history else 0
-            appended = new_messages[history_len:]
-            await transcript_service.append(task.user_id, task.session_id, appended)
-            await memory_service.insert_batch(task.user_id, task.session_id, appended)
+            new_offset: int = max(_base_len - 1, 0)
+            appended = new_messages[new_offset:]
+            # 转换为 AgentMessage 后持久化
+            new_agent_messages = from_model_messages(appended)
+            await transcript_service.append(task.user_id, task.session_id, new_agent_messages)
+            await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
 
     except Exception as exc:
+        log_error(f"Agent loop 异常: {exc}", exc=exc)
+        log_request_end(
+            session_id=task.session_id,
+            success=False,
+            error=str(exc),
+            request_id=task.request_id,
+        )
         # 发送错误事件通知客户端
         await emitter.emit(EventModel(
             conversation_id=task.session_id,
@@ -301,5 +371,13 @@ async def run_agent_loop(
             data={"message": str(exc)},
         ))
         raise
+    else:
+        log_request_end(
+            session_id=task.session_id,
+            success=True,
+            request_id=task.request_id,
+            response=final_response,
+        )
     finally:
+        clear_request_context()
         await emitter.close()

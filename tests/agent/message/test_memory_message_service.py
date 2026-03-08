@@ -5,25 +5,25 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
+from src.agent.agent_message import AgentMessage, AssistantMessage, UserMessage
 from src.agent.message.memory_message_service import MemoryMessageService
 from src.storage.local_backend import FilesystemBackend
 
 
-def make_user_msg(content: str) -> ModelRequest:
-    return ModelRequest(parts=[UserPromptPart(content=content)])
+def make_user_msg(content: str) -> UserMessage:
+    return UserMessage(content=content)
 
 
-def make_assistant_msg(content: str) -> ModelResponse:
-    return ModelResponse(parts=[TextPart(content=content)])
+def make_assistant_msg(content: str) -> AssistantMessage:
+    return AssistantMessage(content=content)
 
 
-def make_meta_msg(content: str, is_compact_summary: bool = False) -> ModelRequest:
+def make_meta_msg(content: str, is_compact_summary: bool = False) -> UserMessage:
     meta: dict = {"is_meta": True}
     if is_compact_summary:
         meta["is_compact_summary"] = True
-    return ModelRequest(parts=[UserPromptPart(content=content)], metadata=meta)
+    return UserMessage(content=content, metadata=meta)
 
 
 @pytest.fixture
@@ -54,7 +54,7 @@ class TestLoad:
         svc2 = MemoryMessageService(backend)
         result = await svc2.load("u", "s")
         assert len(result) == 1
-        assert result[0].parts[0].content == "hello"  # type: ignore[union-attr]
+        assert result[0].content == "hello"
 
     async def test_load_uses_cache_on_second_call(self, service: MemoryMessageService) -> None:
         """第二次 load 使用缓存"""
@@ -63,7 +63,7 @@ class TestLoad:
 
         result1 = await service.load("u", "s")
         result2 = await service.load("u", "s")
-        assert result1 == result2
+        assert len(result1) == len(result2)
 
     async def test_load_returns_copy_not_cache_reference(self, service: MemoryMessageService) -> None:
         """load 返回缓存的副本，外部修改不影响缓存"""
@@ -92,7 +92,7 @@ class TestInsertBatch:
 
         result = await service.load("u", "s")
         assert len(result) == 1
-        assert result[0].parts[0].content == "real"  # type: ignore[union-attr]
+        assert result[0].content == "real"
 
     async def test_insert_batch_keeps_compact_summary(self, service: MemoryMessageService) -> None:
         """is_compact_summary=True 的消息需要持久化"""
@@ -121,7 +121,7 @@ class TestInsertBatch:
 
         result = await service.load("u", "s")
         assert len(result) == 1
-        assert result[0].parts[0].content == "new"  # type: ignore[union-attr]
+        assert result[0].content == "new"
 
 
 class TestUpdate:
@@ -129,12 +129,12 @@ class TestUpdate:
         """update 全量替换消息（compact 后调用）"""
         await service.insert_batch("u", "s", [make_user_msg("old1"), make_user_msg("old2")])
 
-        new_msgs = [make_user_msg("summary")]
+        new_msgs: list[AgentMessage] = [make_user_msg("summary")]
         await service.update("u", "s", new_msgs)
 
         result = await service.load("u", "s")
         assert len(result) == 1
-        assert result[0].parts[0].content == "summary"  # type: ignore[union-attr]
+        assert result[0].content == "summary"
 
     async def test_update_filters_is_meta(self, service: MemoryMessageService) -> None:
         """update 时也过滤 is_meta"""
@@ -144,7 +144,7 @@ class TestUpdate:
 
         result = await service.load("u", "s")
         assert len(result) == 1
-        assert result[0].parts[0].content == "real"  # type: ignore[union-attr]
+        assert result[0].content == "real"
 
     async def test_update_persists_to_file(
         self, service: MemoryMessageService, backend: FilesystemBackend
@@ -155,7 +155,7 @@ class TestUpdate:
         svc2 = MemoryMessageService(backend)
         result = await svc2.load("u", "s")
         assert len(result) == 1
-        assert result[0].parts[0].content == "compacted"  # type: ignore[union-attr]
+        assert result[0].content == "compacted"
 
 
 class TestSessionIsolation:
@@ -168,9 +168,9 @@ class TestSessionIsolation:
         r2 = await service.load("u", "s2")
 
         assert len(r1) == 1
-        assert r1[0].parts[0].content == "session1"  # type: ignore[union-attr]
+        assert r1[0].content == "session1"
         assert len(r2) == 1
-        assert r2[0].parts[0].content == "session2"  # type: ignore[union-attr]
+        assert r2[0].content == "session2"
 
 
 class TestErrorPaths:

@@ -311,13 +311,15 @@ class TestCompactWithPersistence:
         assert result.attachments == []
 
         # 重新从文件加载，验证压缩后的内容被持久化了
+        # load() 返回 AgentMessage，检查 UserMessage.tool_results
+        from src.agent.agent_message import UserMessage as AgentUserMessage
         loaded = await loader.load("u1", "s1")
-        tool_returns = [
-            p for m in loaded if isinstance(m, ModelRequest)
-            for p in m.parts if isinstance(p, ToolReturnPart)
+        tool_results = [
+            tr for m in loaded if isinstance(m, AgentUserMessage)
+            for tr in m.tool_results
         ]
-        # 前 3 个被替换
-        compressed = [tr for tr in tool_returns if tr.content == _PLACEHOLDER]
+        # 前 3 个被替换为占位符
+        compressed = [tr for tr in tool_results if tr.content == _PLACEHOLDER]
         assert len(compressed) == 3
 
 

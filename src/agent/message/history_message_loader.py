@@ -10,7 +10,7 @@
   /{user_id}/sessions/{session_id}/messages.jsonl    ← 工作副本，compact 后整体覆写
   /{user_id}/sessions/{session_id}/transcript.jsonl  ← 审计日志，append-only
 
-每行一个 ModelMessage，使用 ModelMessagesTypeAdapter 序列化。
+每行一个 AgentMessage，使用 AgentMessage 序列化（向后兼容旧 ModelMessage 格式）。
 """
 
 from __future__ import annotations
@@ -21,9 +21,18 @@ from typing import TYPE_CHECKING
 
 from pydantic_ai.messages import (
     ModelMessage,
-    ModelMessagesTypeAdapter,
     ModelRequest,
     SystemPromptPart,
+)
+
+from src.agent.agent_message import (
+    AgentMessage,
+    AssistantMessage,
+    UserMessage,
+    deserialize_agent_messages,
+    from_model_messages,
+    serialize_agent_messages,
+    should_persist,
 )
 
 if TYPE_CHECKING:
@@ -31,7 +40,10 @@ if TYPE_CHECKING:
 
 
 def _is_meta(msg: ModelMessage) -> bool:
-    """判断消息是否为临时注入的 is_meta 消息。"""
+    """判断 ModelMessage 是否为临时注入的 is_meta 消息。
+
+    保留供服务层（context_injector 等）使用，它们仍操作 ModelMessage。
+    """
     return (
         isinstance(msg, ModelRequest)
         and isinstance(msg.metadata, dict)
@@ -40,21 +52,20 @@ def _is_meta(msg: ModelMessage) -> bool:
 
 
 def _has_system_prompt(msg: ModelMessage) -> bool:
-    """判断消息是否包含 SystemPromptPart（由 Pydantic AI 自动注入，不应持久化）。"""
+    """判断消息是否包含 SystemPromptPart（由 Pydantic AI 自动注入，不应持久化）。
+
+    保留供服务层使用。
+    """
     if not isinstance(msg, ModelRequest):
         return False
     return any(isinstance(p, SystemPromptPart) for p in msg.parts)
 
 
 def _should_persist(msg: ModelMessage) -> bool:
-    """判断消息是否需要写入持久化存储。
+    """判断 ModelMessage 是否需要写入持久化存储。
 
-    规则（参考 Claude Code isSynthetic 逻辑）：
-    - 包含 SystemPromptPart 的消息不存（Pydantic AI 每次运行自动注入）
-    - ModelResponse（模型回复）永远存
-    - 非 is_meta 的 ModelRequest（含 compact_boundary）永远存
-    - is_meta=True 的消息：只有 is_compact_summary=True 的摘要需要存
-      （context injection、attachment 等临时消息不存）
+    保留供服务层使用（compact 等直接操作 ModelMessage 的模块）。
+    AgentMessage 版本请用 agent_message.should_persist()。
     """
     if _has_system_prompt(msg):
         return False
@@ -74,35 +85,23 @@ def _transcript_path(user_id: str, session_id: str) -> str:
     return f"/{user_id}/sessions/{session_id}/transcript.jsonl"
 
 
-def _serialize_messages(messages: list[ModelMessage]) -> str:
-    """将消息列表序列化为 JSONL 字符串。"""
-    lines: list[str] = []
-    for msg in messages:
-        json_bytes = ModelMessagesTypeAdapter.dump_json([msg])
-        json_str = json_bytes.decode("utf-8")
-        # 去掉外层 [] 得到单条 JSON
-        inner = json_str[1:-1].strip()
-        lines.append(inner)
-    return "\n".join(lines) + "\n" if lines else ""
+def _serialize_messages(messages: list[AgentMessage] | list[ModelMessage]) -> str:  # type: ignore[type-arg]
+    """将消息列表序列化为 JSONL 字符串。
 
-
-def _deserialize_messages(raw: str) -> list[ModelMessage]:
-    """从 JSONL 字符串解析消息列表。
-
-    损坏的行（非法 JSON）会被跳过并记录日志，不会导致整个文件失败。
+    接受 AgentMessage 或 ModelMessage（自动转换）。
     """
-    messages: list[ModelMessage] = []
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            parsed = ModelMessagesTypeAdapter.validate_json(f"[{line}]")
-            messages.extend(parsed)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).warning("跳过损坏的 JSONL 行（行长度 %d）", len(line))
-    return messages
+    if messages and not isinstance(messages[0], (UserMessage, AssistantMessage)):
+        messages = from_model_messages(messages)  # type: ignore[arg-type]
+    return serialize_agent_messages(messages)  # type: ignore[arg-type]
+
+
+def _deserialize_messages(raw: str) -> list[AgentMessage]:
+    """从 JSONL 字符串解析 AgentMessage 列表。
+
+    自动兼容旧格式（ModelMessage JSON）和新格式（AgentMessage JSON）。
+    委托给 agent_message.deserialize_agent_messages。
+    """
+    return deserialize_agent_messages(raw)
 
 
 class HistoryMessageLoader:
@@ -118,7 +117,7 @@ class HistoryMessageLoader:
         self._backend = backend
         self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
-    async def load(self, user_id: str, session_id: str) -> list[ModelMessage]:
+    async def load(self, user_id: str, session_id: str) -> list[AgentMessage]:
         """从 messages.jsonl 加载历史消息。"""
         path = _messages_path(user_id, session_id)
         if not await self._backend.aexists(path):
@@ -139,16 +138,23 @@ class HistoryMessageLoader:
         self,
         user_id: str,
         session_id: str,
-        messages: list[ModelMessage],
+        messages: list[AgentMessage] | list[ModelMessage],  # type: ignore[type-arg]
     ) -> None:
         """整体覆写 messages.jsonl（compact 后调用）。
 
+        接受 AgentMessage 或 ModelMessage（自动转换后过滤和序列化）。
         过滤 is_meta 消息。写入失败时抛出异常，不静默丢数据。
 
         注意：当前 BackendProtocol.write() 不支持原子覆写（先删后写），
         写入失败时旧数据可能已被删除。生产环境需要后端支持 overwrite/rename。
         """
-        persist = [m for m in messages if not _is_meta(m)]
+        # 自动转换 ModelMessage → AgentMessage
+        agent_msgs: list[AgentMessage]
+        if messages and not isinstance(messages[0], (UserMessage, AssistantMessage)):
+            agent_msgs = from_model_messages(messages)  # type: ignore[arg-type]
+        else:
+            agent_msgs = messages  # type: ignore[assignment]
+        persist = [m for m in agent_msgs if should_persist(m)]
         content = _serialize_messages(persist)
 
         path = _messages_path(user_id, session_id)
@@ -165,15 +171,19 @@ class HistoryMessageLoader:
         self,
         user_id: str,
         session_id: str,
-        new_messages: list[ModelMessage],
+        new_messages: list[AgentMessage] | list[ModelMessage],  # type: ignore[type-arg]
     ) -> None:
         """追加新消息到 messages.jsonl 和 transcript.jsonl。
 
-        过滤 is_meta 消息。
-        messages.jsonl: 工作副本，追加新消息。
-        transcript.jsonl: 审计日志，append-only。
+        接受 AgentMessage 或 ModelMessage（自动转换后过滤和序列化）。
         """
-        persist = [m for m in new_messages if not _is_meta(m)]
+        # 自动转换 ModelMessage → AgentMessage
+        agent_msgs: list[AgentMessage]
+        if new_messages and not isinstance(new_messages[0], (UserMessage, AssistantMessage)):
+            agent_msgs = from_model_messages(new_messages)  # type: ignore[arg-type]
+        else:
+            agent_msgs = new_messages  # type: ignore[assignment]
+        persist = [m for m in agent_msgs if should_persist(m)]
         if not persist:
             return
 
