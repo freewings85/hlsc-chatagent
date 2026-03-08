@@ -7,6 +7,12 @@
   --muted: #718096;
   --accent: #7c3aed;
   --accent-hover: #6d28d9;
+  --accent-dim: #4c1d95;
+  --user-bg: #1e3a5f;
+  --tool-bg: #1a2535;
+  --tool-border: #2563eb;
+  --result-bg: #1a2e1a;
+  --result-border: #16a34a;
   --green: #4ade80;
   --red: #f87171;
   --blue: #60a5fa;
@@ -21,10 +27,4 @@ body {
   color: var(--text);
   min-height: 100vh;
   margin: 0;
-}
-
-#root {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 2rem;
 }

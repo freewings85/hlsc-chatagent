@@ -1,0 +1,9 @@
+.mcp-placeholder {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--muted);
+}
+.mcp-icon { font-size: 3rem; margin-bottom: 1rem; }
+.mcp-placeholder h2 { color: var(--text); margin-bottom: 0.75rem; font-size: 1.25rem; }
+.mcp-placeholder p { font-size: 0.9rem; line-height: 1.6; }
+.mcp-hint { margin-top: 0.5rem; font-size: 0.85rem; }
