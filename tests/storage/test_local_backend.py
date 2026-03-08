@@ -1,5 +1,7 @@
 """FilesystemBackend 测试"""
 
+import asyncio
+
 import pytest
 
 from src.storage.local_backend import FilesystemBackend
@@ -82,3 +84,43 @@ class TestFilesystemBackend:
 
         # 数据应该仍然存在
         assert backend.exists("/test.txt")
+
+    @pytest.mark.asyncio
+    async def test_concurrent_aedit_same_file(self, tmp_path) -> None:
+        """并发 aedit 同一文件时，所有修改都应保留（不丢失）。
+
+        模拟 plan.md 场景：5 个 checkbox 并发更新。
+        """
+        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
+        backend.write("/plan.md", (
+            "# 任务计划\n"
+            "- [ ] 步骤 1: 做事A\n"
+            "- [ ] 步骤 2: 做事B\n"
+            "- [ ] 步骤 3: 做事C\n"
+            "- [ ] 步骤 4: 做事D\n"
+            "- [ ] 步骤 5: 做事E\n"
+            "## 状态\n"
+            "进行中\n"
+        ))
+
+        # 并发编辑 5 个 checkbox
+        results = await asyncio.gather(
+            backend.aedit("/plan.md", "- [ ] 步骤 1: 做事A", "- [x] 步骤 1: 做事A"),
+            backend.aedit("/plan.md", "- [ ] 步骤 2: 做事B", "- [x] 步骤 2: 做事B"),
+            backend.aedit("/plan.md", "- [ ] 步骤 3: 做事C", "- [x] 步骤 3: 做事C"),
+            backend.aedit("/plan.md", "- [ ] 步骤 4: 做事D", "- [x] 步骤 4: 做事D"),
+            backend.aedit("/plan.md", "- [ ] 步骤 5: 做事E", "- [x] 步骤 5: 做事E"),
+        )
+
+        # 所有编辑应成功
+        for r in results:
+            assert r.error is None, f"Edit failed: {r.error}"
+
+        # 所有 checkbox 都应该被标记为完成
+        content = backend.read("/plan.md")
+        assert "- [x] 步骤 1" in content
+        assert "- [x] 步骤 2" in content
+        assert "- [x] 步骤 3" in content
+        assert "- [x] 步骤 4" in content
+        assert "- [x] 步骤 5" in content
+        assert "- [ ]" not in content  # 不应有未完成的

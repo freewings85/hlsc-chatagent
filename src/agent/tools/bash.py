@@ -33,11 +33,18 @@ async def bash(
     """
     effective_timeout = min(timeout, MAX_TIMEOUT_SECONDS)
 
+    # bash 在 backend 根目录下执行，与 write/read/edit 保持一致
+    cwd: str | None = None
+    backend = ctx.deps.backend
+    if backend is not None and hasattr(backend, "cwd"):
+        cwd = str(backend.cwd)
+
     try:
         proc = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
         )
     except OSError as e:
         return f"命令启动失败：{e}"

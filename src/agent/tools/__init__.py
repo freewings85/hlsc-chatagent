@@ -12,6 +12,7 @@
 from src.agent.tools.bash import bash
 from src.agent.file_state import ChangedFile, FileEntry, FileStateTracker
 from src.agent.tools.fs import edit, glob, grep, read, write
+from src.agent.tools.task import task
 
 __all__ = [
     # FileStateTracker
@@ -25,16 +26,17 @@ __all__ = [
     "glob",
     "grep",
     "bash",
+    "task",
     # 便捷工厂
     "ALL_FS_TOOLS",
     "create_default_tool_map",
 ]
 
-ALL_FS_TOOLS: list[str] = ["read", "edit", "write", "glob", "grep", "bash"]
+ALL_FS_TOOLS: list[str] = ["read", "edit", "write", "glob", "grep", "bash", "task"]
 
 
 def create_default_tool_map() -> dict:
-    """创建包含所有文件系统工具的 tool_map，用于初始化 AgentDeps。"""
+    """创建包含所有工具的 tool_map，用于初始化 AgentDeps。"""
     return {
         "read": read,
         "edit": edit,
@@ -42,4 +44,5 @@ def create_default_tool_map() -> dict:
         "glob": glob,
         "grep": grep,
         "bash": bash,
+        "task": task,
     }

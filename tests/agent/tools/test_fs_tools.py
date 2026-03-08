@@ -449,4 +449,5 @@ class TestCreateDefaultToolMap:
         assert "glob" in tool_map
         assert "grep" in tool_map
         assert "bash" in tool_map
-        assert len(tool_map) == 6
+        assert "task" in tool_map
+        assert len(tool_map) == 7

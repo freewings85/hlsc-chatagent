@@ -3,6 +3,7 @@
 Ported from deepagents.backends.filesystem.FilesystemBackend.
 """
 
+import asyncio
 import json
 import os
 import re
@@ -43,6 +44,7 @@ class FilesystemBackend(BackendProtocol):
         self.cwd = Path(root_dir).resolve() if root_dir else Path.cwd()
         self.virtual_mode = virtual_mode
         self.max_file_size_bytes = max_file_size_mb * 1024 * 1024
+        self._edit_locks: dict[str, asyncio.Lock] = {}
 
     def _resolve_path(self, key: str) -> Path:
         """Resolve a file path with security checks."""
@@ -187,6 +189,22 @@ class FilesystemBackend(BackendProtocol):
             return WriteResult(path=file_path, files_update=None)
         except (OSError, UnicodeEncodeError) as e:
             return WriteResult(error=f"Error writing file '{file_path}': {e}")
+
+    async def aedit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        """Async edit with per-file locking to prevent concurrent write races."""
+        resolved_key = str(self._resolve_path(file_path))
+        if resolved_key not in self._edit_locks:
+            self._edit_locks[resolved_key] = asyncio.Lock()
+        async with self._edit_locks[resolved_key]:
+            return await asyncio.to_thread(
+                self.edit, file_path, old_string, new_string, replace_all,
+            )
 
     def edit(
         self,

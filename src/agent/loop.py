@@ -11,6 +11,7 @@ from pydantic_ai.messages import (
     FunctionToolResultEvent,
     ModelMessage,
     ModelRequest,
+    ModelResponse,
     PartDeltaEvent,
     PartStartEvent,
     TextPart,
@@ -193,7 +194,7 @@ async def _emit_tool_events(
             if isinstance(event, FunctionToolCallEvent):
                 # TOOL_CALL_START 已由 _emit_model_stream 中的 PartStartEvent(ToolCallPart) 发出
                 # 此处不重复发送，避免前端创建两个相同 tool_call_id 的工具块
-                tool_name = getattr(event, "tool_name", None) or "unknown"
+                tool_name = event.part.tool_name if event.part else "unknown"
                 log_tool_start(tool_name)
             elif isinstance(event, FunctionToolResultEvent):
                 content = event.result.content if hasattr(event.result, "content") else str(event.result)
@@ -242,6 +243,13 @@ async def run_agent_loop(
 
     backend = get_backend()
     agent_fs_backend = get_agent_fs_backend()
+
+    # 工具的工作目录 = session 目录（write("plan.md") → data/{user_id}/sessions/{session_id}/plan.md）
+    from src.storage.local_backend import FilesystemBackend
+    from src.config.settings import get_user_fs_config
+    _user_fs_cfg = get_user_fs_config()
+    _session_root = f"{_user_fs_cfg.user_fs_dir}/{task.user_id}/sessions/{task.session_id}"
+    deps.backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
 
     # 服务初始化
     memory_service = MemoryMessageService(backend)
@@ -339,10 +347,18 @@ async def run_agent_loop(
                     run._graph_run.state.message_history[:] = pre_result.model_messages
 
                     # 校验消息交替（所有处理完成后、模型调用前）
-                    # user_prompt 由 Pydantic AI _prepare_request() 追加，此处传入做逻辑校验
+                    # Pydantic AI _prepare_request() 会追加 user turn：
+                    # - 首次调用：追加 UserPromptPart（用户原始消息）
+                    # - 后续调用：追加 ToolReturnPart（工具返回结果）
+                    # 此处用 pending_user 告知校验器"将会有一个 user turn 被追加"
+                    if _first_llm_call:
+                        pending_user: str | None = task.message
+                    else:
+                        last_msg = pre_result.model_messages[-1] if pre_result.model_messages else None
+                        pending_user = "__tool_return__" if isinstance(last_msg, ModelResponse) else None
                     alt_errors = validate_message_alternation(
                         pre_result.model_messages,
-                        user_prompt=task.message if _first_llm_call else None,
+                        user_prompt=pending_user,
                     )
                     if alt_errors:
                         log_error(
