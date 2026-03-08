@@ -350,7 +350,7 @@ async def run_agent_loop(
                             f"(iteration={iteration}): {alt_errors}"
                         )
 
-                    # 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
+                    # 流式处理 LLM 响应（node.stream 内部完成 LLM 调用并缓存结果）
                     await _emit_model_stream(
                         node, run.ctx, emitter, task,
                         messages_count=len(pre_result.model_messages),
@@ -358,12 +358,18 @@ async def run_agent_loop(
                         user_prompt=task.message if _first_llm_call else None,
                     )
                     _first_llm_call = False
+                    # stream 已完成，next() 只做状态转移（不会重复调 LLM）
+                    node = await run.next(node)
 
                 elif isinstance(node, CallToolsNode):
-                    # 工具执行 → emitter.emit(tool_result 事件)
+                    # 工具执行（node.stream 内部完成工具调用并缓存结果）
                     await _emit_tool_events(node, run.ctx, emitter, task)
+                    # stream 已完成，next() 只做状态转移（不会重复执行工具）
+                    node = await run.next(node)
 
-                node = await run.next(node)
+                else:
+                    # 未知 node 类型，直接推进
+                    node = await run.next(node)
 
                 iteration += 1
                 if iteration >= max_iterations:
