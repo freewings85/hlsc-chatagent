@@ -240,7 +240,7 @@ def _format_messages_detail(messages: Any, user_prompt: str | None = None) -> st
 
     def _format_part(part: Any, idx: int) -> None:
         if isinstance(part, SystemPromptPart):
-            lines.append(f"  [{idx}] SystemPromptPart: <<<{part.content}>>>")
+            lines.append(f"  [{idx}] SystemPromptPart ({len(part.content)} chars)")
         elif isinstance(part, UserPromptPart):
             content = part.content if isinstance(part.content, str) else str(part.content)
             lines.append(f"  [{idx}] UserPromptPart: <<<{content}>>>")

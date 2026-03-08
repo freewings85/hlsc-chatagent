@@ -86,11 +86,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         sinker=sinker,
     )
 
-    from src.agent.prompt.prompt_builder import PromptBuilder
-
     model = create_model()
-    system_prompt = PromptBuilder.load_system_prompt()
-    agent = create_agent(model, system_prompt=system_prompt)
+    agent = create_agent(model)
     deps: AgentDeps = AgentDeps(
         session_id=request.session_id,
         user_id=request.user_id,

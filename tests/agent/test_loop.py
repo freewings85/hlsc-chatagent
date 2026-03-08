@@ -36,7 +36,7 @@ class TestAgentLoop:
     async def test_simple_text_response(self, make_task, make_emitter) -> None:
         """无 tool call，直接返回文本"""
         model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
-        agent = create_agent(model=model, system_prompt="你是助手")
+        agent = create_agent(model=model)
         deps = AgentDeps()
         task, _ = make_task("你好")
         event_queue, emitter = make_emitter()

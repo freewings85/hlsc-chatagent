@@ -61,14 +61,12 @@ from src.event.event_type import EventType
 
 def create_agent(
     model: Model,
-    system_prompt: str = "你是一个通用助手。",
     history_processors: list[Any] | None = None,
 ) -> Agent[AgentDeps, str]:
-    """创建 Agent 实例"""
+    """创建 Agent 实例（system prompt 由 PreModelCallMessageService 注入）"""
     return Agent(
         model,
         deps_type=AgentDeps,
-        system_prompt=system_prompt,
         toolsets=[DynamicToolset(get_tools, per_run_step=True)],
         history_processors=history_processors or [],
     )
@@ -275,12 +273,14 @@ async def run_agent_loop(
         deps.available_tools = [t for t in deps.available_tools if t != "Skill"] + ["Skill"]
         deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
 
+    system_prompt = PromptBuilder.load_system_prompt()
     pre_call_service = PreModelCallMessageService(
         compactor=compactor,
         context_messages=context_messages,
         attachment_collector=attachment_collector,
         skill_registry=skill_registry if skill_registry.has_skills() else None,
         invoked_skill_store=invoked_store if skill_registry.has_skills() else None,
+        system_prompt=system_prompt,
     )
 
     # 加载历史（保持 AgentMessage 格式，仅在 ModelRequestNode 执行前转换）

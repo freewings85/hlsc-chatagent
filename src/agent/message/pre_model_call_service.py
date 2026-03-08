@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
 
 from src.agent.compact.compactor import CompactResult, Compactor
 from src.agent.message.attachment_collector import AttachmentCollector
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from src.agent.skills.invoked_store import InvokedSkillStore
     from src.agent.skills.registry import SkillRegistry
 
+_SYSTEM_PROMPT_SOURCE = "system_prompt"
 _SKILL_LISTING_SOURCE = "skill_listing"
 _INVOKED_SKILLS_SOURCE = "invoked_skills"
 
@@ -86,12 +87,14 @@ class PreModelCallMessageService:
         attachment_collector: AttachmentCollector,
         skill_registry: SkillRegistry | None = None,
         invoked_skill_store: InvokedSkillStore | None = None,
+        system_prompt: str = "",
     ) -> None:
         self._compactor = compactor
         self._context_messages = context_messages
         self._attachment_collector = attachment_collector
         self._skill_registry = skill_registry
         self._invoked_skill_store = invoked_skill_store
+        self._system_prompt = system_prompt
 
     async def handle(self, messages: list[ModelMessage]) -> PreModelCallResult:
         """处理消息，返回 PreModelCallResult。
@@ -118,6 +121,14 @@ class PreModelCallMessageService:
 
         # 1. Context injection（agent.md + memory.md → prepend to [0]）
         inject_context(working, self._context_messages)
+
+        # 1.5 System prompt injection → 始终在 [0]，确保 system prompt 在所有消息之前
+        _remove_by_source(working, _SYSTEM_PROMPT_SOURCE)
+        if self._system_prompt:
+            working.insert(0, ModelRequest(
+                parts=[SystemPromptPart(content=self._system_prompt)],
+                metadata={"is_meta": True, "source": _SYSTEM_PROMPT_SOURCE},
+            ))
 
         # 2. Attachment injection（changed_files → append，compact 之前）
         self._attachment_collector.inject(working, CompactResult())
