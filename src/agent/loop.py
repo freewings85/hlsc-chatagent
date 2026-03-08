@@ -34,7 +34,7 @@ from src.utils.session_logger import (
     log_tool_start,
 )
 
-from src.agent.agent_message import from_model_messages, to_model_messages
+from src.agent.agent_message import from_model_messages, to_model_messages, validate_message_alternation
 from src.agent.compact.compactor import Compactor, SummarizeFn
 from src.agent.deps import AgentDeps
 from src.agent.message.attachment_collector import AttachmentCollector
@@ -110,12 +110,18 @@ async def _emit_model_stream(
     task: SessionRequestTask,
     messages_count: int = 0,
     messages: list[ModelMessage] | None = None,
+    user_prompt: str | None = None,
 ) -> None:
     """流式消费 ModelRequestNode，逐 token 发出 TEXT / TOOL_CALL 事件。
 
     stream 结束后 node._result 已设置，后续 run.next(node) 不会重复调 LLM。
     """
-    log_llm_start("ModelRequestNode", messages_count=messages_count, messages=messages)
+    log_llm_start(
+        "ModelRequestNode",
+        messages_count=messages_count,
+        messages=messages,
+        user_prompt=user_prompt,
+    )
 
     _text_parts: list[str] = []
     _tool_call_names: list[str] = []
@@ -165,7 +171,7 @@ async def _emit_model_stream(
     if _tool_call_names:
         log_llm_end("ModelRequestNode", tool_calls=_tool_call_names)
     else:
-        log_llm_end("ModelRequestNode", response_preview="".join(_text_parts))
+        log_llm_end("ModelRequestNode")
 
 
 async def _emit_tool_events(
@@ -281,6 +287,7 @@ async def run_agent_loop(
         # 首次 context injection 后的消息总数（context + history + user_prompt）
         # 用于计算 loop 结束后哪些消息是"新"的（offset = _base_len - 1）
         _base_len: int = 0
+        _first_llm_call: bool = True
 
         async with agent.iter(
             task.message,
@@ -317,12 +324,26 @@ async def run_agent_loop(
                     # 注入处理后的消息到 run 内部状态
                     run._graph_run.state.message_history[:] = pre_result.model_messages
 
+                    # 校验消息交替（user/assistant 必须交替，最后一条为 user）
+                    alt_errors = validate_message_alternation(
+                        pre_result.model_messages,
+                        user_prompt=task.message if _first_llm_call else None,
+                    )
+                    if alt_errors:
+                        log_error(
+                            f"[MSG_ALTERNATION] 消息交替校验失败 "
+                            f"(iteration={iteration}): {alt_errors}"
+                        )
+
                     # 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
+                    # 只在首次 LLM 调用传 user_prompt（后续调用的 request 是 ToolReturnPart）
                     await _emit_model_stream(
                         node, run.ctx, emitter, task,
                         messages_count=len(pre_result.model_messages),
                         messages=pre_result.model_messages,
+                        user_prompt=task.message if _first_llm_call else None,
                     )
+                    _first_llm_call = False
 
                 elif isinstance(node, CallToolsNode):
                     # 工具执行 → emitter.emit(tool_result 事件)
@@ -343,13 +364,13 @@ async def run_agent_loop(
         ))
 
         # 持久化新消息：ModelMessage → AgentMessage，写 messages.jsonl 和 transcript.jsonl
-        # offset = _base_len - 1：跳过 context + 已持久化历史，保留 user_prompt 起的新消息
+        # offset = _base_len：跳过 context + 已持久化历史（user prompt 在 _base_len 之后
+        # 由 _prepare_request 追加，不包含在 _base_len 中）
         final_response: str | None = None
         if run.result is not None:
             final_response = run.result.output
             new_messages: list[ModelMessage] = run.result.all_messages()
-            new_offset: int = max(_base_len - 1, 0)
-            appended = new_messages[new_offset:]
+            appended = new_messages[_base_len:]
             # 转换为 AgentMessage 后持久化
             new_agent_messages = from_model_messages(appended)
             await transcript_service.append(task.user_id, task.session_id, new_agent_messages)

@@ -208,6 +208,57 @@ def should_persist(msg: AgentMessage) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# 消息交替校验
+# --------------------------------------------------------------------------- #
+
+
+def validate_message_alternation(
+    messages: list[ModelMessage],
+    user_prompt: str | None = None,
+) -> list[str]:
+    """校验消息列表是否符合 user/assistant 交替规则。
+
+    规则（与 Claude Code 一致）：
+    - 连续的 ModelRequest 视为一个 user turn
+    - 连续的 ModelResponse 视为一个 assistant turn
+    - 交替顺序：user, assistant, user, assistant, ...
+    - 最后一条应为 user（因为即将调用 LLM）
+    - user_prompt 作为最后追加的 UserPromptPart（由 Pydantic AI 自动添加）
+
+    返回错误列表，空列表表示通过。
+    """
+    if not messages and not user_prompt:
+        return ["消息列表为空"]
+
+    errors: list[str] = []
+
+    # 提取 role 序列（合并连续相同 role）
+    roles: list[str] = []
+    for msg in messages:
+        role = "user" if isinstance(msg, ModelRequest) else "assistant"
+        if not roles or roles[-1] != role:
+            roles.append(role)
+
+    # user_prompt 相当于最后追加一个 user turn
+    if user_prompt:
+        if not roles or roles[-1] != "user":
+            roles.append("user")
+
+    # 校验交替
+    for i in range(1, len(roles)):
+        if roles[i] == roles[i - 1]:
+            errors.append(
+                f"消息交替违规: 位置 {i-1} 和 {i} 都是 {roles[i]}"
+            )
+
+    # 校验最后一条是 user
+    if roles and roles[-1] != "user":
+        errors.append(f"最后一条消息应为 user，实际为 {roles[-1]}")
+
+    return errors
+
+
+# --------------------------------------------------------------------------- #
 # 序列化
 # --------------------------------------------------------------------------- #
 
