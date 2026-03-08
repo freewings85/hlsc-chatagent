@@ -1,7 +1,7 @@
 export interface SkillInfo {
   name: string
   description: string
-  source: string // "bundled" | "project" | "user"
+  source: string // "bundled" | "project"
   when_to_use: string | null
   user_invocable: boolean
 }
@@ -40,6 +40,30 @@ export async function uninstallSkill(name: string): Promise<InstallResponse> {
   if (!res.ok) {
     const data = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(data.detail || `卸载失败: ${res.status}`)
+  }
+  return res.json()
+}
+
+// --------------------------------------------------------------------------- //
+// Agent.md API
+// --------------------------------------------------------------------------- //
+
+export async function getAgentMd(): Promise<string> {
+  const res = await fetch(`${BASE}/api/agent-md`)
+  if (!res.ok) throw new Error(`读取 agent.md 失败: ${res.status}`)
+  const data = await res.json()
+  return data.content
+}
+
+export async function updateAgentMd(content: string): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE}/api/agent-md`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(data.detail || `更新失败: ${res.status}`)
   }
   return res.json()
 }

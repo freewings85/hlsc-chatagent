@@ -4,27 +4,27 @@
   1. GitHub 目录 URL：https://github.com/{owner}/{repo}/tree/{branch}/skills/{name}
   2. GitHub 原始文件 URL：https://raw.githubusercontent.com/{owner}/{repo}/{branch}/skills/{name}/SKILL.md
   3. 任意 HTTPS URL（直接指向 SKILL.md 文件）
+
+安装/卸载通过 Agent 文件资源 backend（root=AGENT_FS_DIR）操作，
+与用户数据 backend（root=USER_FS_DIR）隔离，集群部署时所有节点共享。
 """
 
 from __future__ import annotations
 
 import logging
 import re
-import shutil
 from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from src.agent.skills.registry import SkillRegistry, get_default_skill_dirs, parse_skill_file
+from src.agent.skills.registry import SkillRegistry, get_default_skill_dirs, parse_skill_content
+from src.config.settings import get_agent_fs_backend
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 router: APIRouter = APIRouter(prefix="/api/skills", tags=["skills"])
-
-# 安装目标目录：项目级（.chatagent/skills/）
-_INSTALL_DIR: Path = Path(".chatagent") / "skills"
 
 # GitHub tree URL → raw URL 转换
 # https://github.com/{owner}/{repo}/tree/{branch}/{path}
@@ -58,7 +58,7 @@ class InstallRequest(BaseModel):
 class SkillInfo(BaseModel):
     name: str
     description: str
-    source: str  # "bundled" | "project" | "user"
+    source: str  # "bundled" | "project"
     when_to_use: str | None = None
     user_invocable: bool = True
 
@@ -107,22 +107,17 @@ def _resolve_skill_md_url(source: str) -> str:
 
 
 def _classify_source(skill_path: Path) -> str:
-    """判断 skill 来源：bundled / project / user。"""
+    """判断 skill 来源：bundled / project。"""
     try:
         rel = skill_path.resolve()
         bundled_dir = (Path(__file__).parent.parent / "agent" / "skills" / "bundled").resolve()
-        project_dir = _INSTALL_DIR.resolve()
-        user_dir = (Path.home() / ".chatagent" / "skills").resolve()
 
         if str(rel).startswith(str(bundled_dir)):
             return "bundled"
-        if str(rel).startswith(str(project_dir)):
-            return "project"
-        if str(rel).startswith(str(user_dir)):
-            return "user"
     except Exception:
         pass
-    return "unknown"
+    # 非 bundled 的都是 project 级
+    return "project"
 
 
 # --------------------------------------------------------------------------- #
@@ -135,7 +130,7 @@ async def list_skills() -> list[SkillInfo]:
     registry = SkillRegistry.load(get_default_skill_dirs())
     result: list[SkillInfo] = []
     for entry in sorted(registry._entries.values(), key=lambda e: e.name):
-        source = _classify_source(entry.source_path) if entry.source_path else "unknown"
+        source = _classify_source(entry.source_path) if entry.source_path else "project"
         result.append(SkillInfo(
             name=entry.name,
             description=entry.description,
@@ -150,7 +145,7 @@ async def list_skills() -> list[SkillInfo]:
 async def install_skill(req: InstallRequest) -> InstallResponse:
     """从 URL 安装 skill。
 
-    下载 SKILL.md → 解析验证 → 存入 .chatagent/skills/{name}/SKILL.md。
+    下载 SKILL.md → 解析验证 → 通过 skills backend 写入 {name}/SKILL.md。
     """
     # 1. 解析 URL
     try:
@@ -172,27 +167,32 @@ async def install_skill(req: InstallRequest) -> InstallResponse:
     except httpx.RequestError as e:
         raise HTTPException(status_code=400, detail=f"网络错误: {e}")
 
-    # 3. 写入临时文件 → 解析验证
-    _INSTALL_DIR.mkdir(parents=True, exist_ok=True)
-    tmp_file = _INSTALL_DIR / "_tmp_install_skill.md"
-    try:
-        tmp_file.write_text(content, encoding="utf-8")
-        entry = parse_skill_file(tmp_file)
-        if entry is None:
-            raise HTTPException(
-                status_code=400,
-                detail="SKILL.md 格式无效：缺少 name 或 description 字段，或无 YAML frontmatter",
-            )
-    finally:
-        tmp_file.unlink(missing_ok=True)
+    # 3. 直接解析内容验证（无需临时文件）
+    entry = parse_skill_content(content)
+    if entry is None:
+        raise HTTPException(
+            status_code=400,
+            detail="SKILL.md 格式无效：缺少 name 或 description 字段，或无 YAML frontmatter",
+        )
 
-    # 4. 安装到 .chatagent/skills/{name}/SKILL.md
-    skill_dir = _INSTALL_DIR / entry.name
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    skill_file = skill_dir / "SKILL.md"
-    skill_file.write_text(content, encoding="utf-8")
+    # 4. 通过 agent_fs backend 写入 skills/{name}/SKILL.md
+    backend = get_agent_fs_backend()
+    skill_path = f"/skills/{entry.name}/SKILL.md"
 
-    logger.info("Skill installed: %s → %s", entry.name, skill_file)
+    # 先删除旧版本（如果存在），再写入新内容
+    if await backend.aexists(f"/skills/{entry.name}"):
+        await backend.adelete(f"/skills/{entry.name}")
+
+    upload_results = await backend.aupload_files(
+        [(skill_path, content.encode("utf-8"))]
+    )
+    if upload_results[0].error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"写入 skill 文件失败: {upload_results[0].error}",
+        )
+
+    logger.info("Skill installed: %s → %s", entry.name, skill_path)
 
     return InstallResponse(
         success=True,
@@ -210,16 +210,20 @@ async def install_skill(req: InstallRequest) -> InstallResponse:
 @router.delete("/{name}")
 async def uninstall_skill(name: str) -> InstallResponse:
     """卸载 project 级 skill（不允许卸载 bundled）。"""
-    skill_dir = _INSTALL_DIR / name
-    if not skill_dir.is_dir():
+    backend = get_agent_fs_backend()
+    skill_dir = f"/skills/{name}"
+    skill_file = f"/skills/{name}/SKILL.md"
+
+    if not await backend.aexists(skill_dir):
         raise HTTPException(status_code=404, detail=f"Skill '{name}' 未安装（project 级）")
 
-    # 确认是 project 级
-    skill_file = skill_dir / "SKILL.md"
-    if not skill_file.exists():
+    if not await backend.aexists(skill_file):
         raise HTTPException(status_code=404, detail=f"Skill '{name}' 目录不含 SKILL.md")
 
-    shutil.rmtree(skill_dir)
+    deleted = await backend.adelete(skill_dir)
+    if not deleted:
+        raise HTTPException(status_code=500, detail=f"删除 skill '{name}' 失败")
+
     logger.info("Skill uninstalled: %s", name)
 
     return InstallResponse(

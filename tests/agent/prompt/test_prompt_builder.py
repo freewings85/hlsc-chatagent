@@ -7,12 +7,19 @@ from src.agent.prompt.prompt_builder import PromptBuilder
 from src.storage.local_backend import FilesystemBackend
 
 
+def _make_builder(user_fs_root, agent_fs_root):
+    """创建 PromptBuilder，使用两个独立的 backend。"""
+    return PromptBuilder(
+        user_fs_backend=FilesystemBackend(root_dir=user_fs_root, virtual_mode=True),
+        agent_fs_backend=FilesystemBackend(root_dir=agent_fs_root, virtual_mode=True),
+    )
+
+
 class TestPromptBuilder:
 
     def test_build_system_prompt(self, tmp_path) -> None:
         """系统提示词从模板加载"""
-        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
-        builder = PromptBuilder(backend)
+        builder = _make_builder(tmp_path / "user", tmp_path / "agent")
 
         prompt = builder.build_system_prompt()
         assert "助手" in prompt
@@ -20,8 +27,7 @@ class TestPromptBuilder:
 
     def test_build_system_prompt_cached(self, tmp_path) -> None:
         """系统提示词有缓存"""
-        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
-        builder = PromptBuilder(backend)
+        builder = _make_builder(tmp_path / "user", tmp_path / "agent")
 
         p1 = builder.build_system_prompt()
         p2 = builder.build_system_prompt()
@@ -30,22 +36,19 @@ class TestPromptBuilder:
     @pytest.mark.asyncio
     async def test_context_messages_empty_when_no_files(self, tmp_path) -> None:
         """没有 agent.md / memory.md 时返回空列表"""
-        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
-        builder = PromptBuilder(backend)
+        builder = _make_builder(tmp_path / "user", tmp_path / "agent")
 
         messages = await builder.build_context_messages(user_id="u1")
         assert messages == []
 
     @pytest.mark.asyncio
     async def test_context_messages_with_agent_md(self, tmp_path) -> None:
-        """有 agent.md 时返回带 is_meta 标记的消息"""
-        # 创建 data/{user_id}/agent.md
-        user_dir = tmp_path / "u1"
-        user_dir.mkdir()
-        (user_dir / "agent.md").write_text("# Project Rules\nAlways use pytest.", encoding="utf-8")
+        """有 agent.md（系统级）时返回带 is_meta 标记的消息"""
+        agent_fs_root = tmp_path / "agent"
+        agent_fs_root.mkdir()
+        (agent_fs_root / "agent.md").write_text("# Project Rules\nAlways use pytest.", encoding="utf-8")
 
-        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
-        builder = PromptBuilder(backend)
+        builder = _make_builder(tmp_path / "user", agent_fs_root)
 
         messages = await builder.build_context_messages(user_id="u1")
         assert len(messages) == 1
@@ -59,14 +62,19 @@ class TestPromptBuilder:
 
     @pytest.mark.asyncio
     async def test_context_messages_with_both(self, tmp_path) -> None:
-        """同时有 agent.md 和 memory.md"""
-        user_dir = tmp_path / "u1"
-        user_dir.mkdir()
-        (user_dir / "agent.md").write_text("project rules", encoding="utf-8")
+        """同时有 agent.md（系统级）和 memory.md（用户级）"""
+        # agent.md 在 agent_fs 根目录
+        agent_fs_root = tmp_path / "agent"
+        agent_fs_root.mkdir()
+        (agent_fs_root / "agent.md").write_text("project rules", encoding="utf-8")
+
+        # memory.md 在 user_fs 的 /{user_id}/ 下
+        user_fs_root = tmp_path / "user"
+        user_dir = user_fs_root / "u1"
+        user_dir.mkdir(parents=True)
         (user_dir / "memory.md").write_text("user prefers dark mode", encoding="utf-8")
 
-        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
-        builder = PromptBuilder(backend)
+        builder = _make_builder(user_fs_root, agent_fs_root)
 
         messages = await builder.build_context_messages(user_id="u1")
         assert len(messages) == 2
@@ -82,8 +90,7 @@ class TestPromptBuilderEdgeCases:
     @pytest.mark.asyncio
     async def test_agent_md_not_exists_returns_empty(self, tmp_path) -> None:
         """agent.md 不存在时返回空上下文"""
-        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
-        builder = PromptBuilder(backend)
+        builder = _make_builder(tmp_path / "user", tmp_path / "agent")
 
         messages = await builder.build_context_messages(user_id="nonexistent")
         assert messages == []
@@ -91,12 +98,11 @@ class TestPromptBuilderEdgeCases:
     @pytest.mark.asyncio
     async def test_agent_md_empty_content_returns_empty(self, tmp_path) -> None:
         """agent.md 为空内容时返回空上下文"""
-        user_dir = tmp_path / "u1"
-        user_dir.mkdir()
-        (user_dir / "agent.md").write_text("", encoding="utf-8")
+        agent_fs_root = tmp_path / "agent"
+        agent_fs_root.mkdir()
+        (agent_fs_root / "agent.md").write_text("", encoding="utf-8")
 
-        backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
-        builder = PromptBuilder(backend)
+        builder = _make_builder(tmp_path / "user", agent_fs_root)
 
         messages = await builder.build_context_messages(user_id="u1")
         # 空文件不应产生上下文消息

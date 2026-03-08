@@ -56,8 +56,7 @@ export default function SkillsPage() {
 
   const badgeClass = (source: string) => {
     if (source === 'bundled') return 'skill-badge badge-bundled'
-    if (source === 'project') return 'skill-badge badge-project'
-    return 'skill-badge badge-user'
+    return 'skill-badge badge-project'
   }
 
   return (

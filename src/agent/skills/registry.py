@@ -6,8 +6,7 @@
 
 加载优先级（后覆盖前，同名 skill 取最高优先级）：
   1. bundled（内置，src/agent/skills/bundled/）
-  2. project（.chatagent/skills/）
-  3. user（~/.chatagent/skills/）
+  2. project（SKILLS_DIR 环境变量配置，默认 .chatagent/skills/）
 """
 
 from __future__ import annotations
@@ -107,19 +106,13 @@ def _parse_frontmatter_line(line: str) -> tuple[str, str | bool] | None:
     return key, value
 
 
-def parse_skill_file(path: Path) -> SkillEntry | None:
-    """解析 SKILL.md 文件，返回 SkillEntry 或 None（格式错误时）。
+def parse_skill_content(text: str, source_path: Path | None = None) -> SkillEntry | None:
+    """解析 SKILL.md 文本内容，返回 SkillEntry 或 None（格式错误时）。
 
     兼容 Claude Code 和 OpenClaw 两种格式，未知字段直接忽略。
     """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
     m = _FRONTMATTER_RE.match(text)
     if not m:
-        # 无 frontmatter，尝试整个文件作为 content（兼容性降级）
         return None
 
     fm_text, body = m.group(1), m.group(2).strip()
@@ -151,8 +144,17 @@ def parse_skill_file(path: Path) -> SkillEntry | None:
         when_to_use=when_to_use.strip() if isinstance(when_to_use, str) else None,
         user_invocable=bool(user_invocable_raw),
         disable_model_invocation=bool(disable_model_raw),
-        source_path=path,
+        source_path=source_path,
     )
+
+
+def parse_skill_file(path: Path) -> SkillEntry | None:
+    """解析 SKILL.md 文件，返回 SkillEntry 或 None（格式错误时）。"""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return parse_skill_content(text, source_path=path)
 
 
 # --------------------------------------------------------------------------- #
@@ -240,9 +242,13 @@ class SkillRegistry:
 
 
 def get_default_skill_dirs() -> list[Path]:
-    """返回默认的 skill 目录列表（优先级从低到高）。"""
+    """返回默认的 skill 目录列表（优先级从低到高）。
+
+    两层：bundled（内置）→ project（AGENT_FS_DIR/skills）。
+    """
+    from src.config.settings import get_agent_fs_config
+
     return [
-        Path(__file__).parent / "bundled",          # 内置（最低优先级）
-        Path(".chatagent") / "skills",              # 项目级
-        Path.home() / ".chatagent" / "skills",      # 用户级（最高优先级）
+        Path(__file__).parent / "bundled",                          # 内置（最低优先级）
+        Path(get_agent_fs_config().agent_fs_dir) / "skills",        # 项目级（最高优先级）
     ]

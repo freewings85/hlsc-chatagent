@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.server.skill_api import _resolve_skill_md_url
+from src.storage.local_backend import FilesystemBackend
 
 
 # --------------------------------------------------------------------------- #
@@ -114,15 +115,15 @@ class TestSkillApiEndpoints:
         assert resp.status_code == 404
 
     def test_install_and_uninstall_flow(self, client: TestClient, tmp_path: Path) -> None:
-        """安装 → 验证 → 卸载 的完整流程（使用 mock HTTP）。"""
+        """安装 → 验证 → 卸载 的完整流程（使用 mock HTTP + 真实 backend）。"""
         skill_content = (
             "---\nname: test-install\ndescription: Test skill for install\n---\n"
             "# Test Install\nDo things.\n"
         )
 
-        install_dir = tmp_path / ".chatagent" / "skills"
+        skills_backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
 
-        with patch("src.server.skill_api._INSTALL_DIR", install_dir), \
+        with patch("src.server.skill_api.get_agent_fs_backend", return_value=skills_backend), \
              patch("src.server.skill_api.httpx.AsyncClient") as mock_client_cls:
             # Mock HTTP response
             mock_resp = AsyncMock()
@@ -145,21 +146,20 @@ class TestSkillApiEndpoints:
             assert data["success"] is True
             assert data["skill"]["name"] == "test-install"
 
-            # Verify file on disk
-            assert (install_dir / "test-install" / "SKILL.md").exists()
+            # Verify file on disk via backend
+            assert skills_backend.exists("/skills/test-install/SKILL.md")
 
             # Uninstall
-            with patch("src.server.skill_api._INSTALL_DIR", install_dir):
-                resp2 = client.delete("/api/skills/test-install")
-                assert resp2.status_code == 200
-                assert resp2.json()["success"] is True
-                assert not (install_dir / "test-install").exists()
+            resp2 = client.delete("/api/skills/test-install")
+            assert resp2.status_code == 200
+            assert resp2.json()["success"] is True
+            assert not skills_backend.exists("/skills/test-install")
 
     def test_install_invalid_skill_content(self, client: TestClient, tmp_path: Path) -> None:
         """下载到的内容不是有效 SKILL.md 时返回 400。"""
-        install_dir = tmp_path / ".chatagent" / "skills"
+        skills_backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
 
-        with patch("src.server.skill_api._INSTALL_DIR", install_dir), \
+        with patch("src.server.skill_api.get_agent_fs_backend", return_value=skills_backend), \
              patch("src.server.skill_api.httpx.AsyncClient") as mock_client_cls:
             mock_resp = AsyncMock()
             mock_resp.text = "# Not a skill\nNo frontmatter here."

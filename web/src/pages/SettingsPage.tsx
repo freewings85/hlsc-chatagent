@@ -11,6 +11,10 @@ export default function SettingsPage() {
             <span className="nav-icon">⚡</span>
             Skills
           </NavLink>
+          <NavLink to="/settings/agent-md" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <span className="nav-icon">📄</span>
+            Agent.md
+          </NavLink>
           <NavLink to="/settings/mcp" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <span className="nav-icon">🔌</span>
             MCP

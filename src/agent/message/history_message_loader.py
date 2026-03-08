@@ -23,6 +23,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
     ModelRequest,
+    SystemPromptPart,
 )
 
 if TYPE_CHECKING:
@@ -38,15 +39,25 @@ def _is_meta(msg: ModelMessage) -> bool:
     )
 
 
+def _has_system_prompt(msg: ModelMessage) -> bool:
+    """判断消息是否包含 SystemPromptPart（由 Pydantic AI 自动注入，不应持久化）。"""
+    if not isinstance(msg, ModelRequest):
+        return False
+    return any(isinstance(p, SystemPromptPart) for p in msg.parts)
+
+
 def _should_persist(msg: ModelMessage) -> bool:
     """判断消息是否需要写入持久化存储。
 
     规则（参考 Claude Code isSynthetic 逻辑）：
+    - 包含 SystemPromptPart 的消息不存（Pydantic AI 每次运行自动注入）
     - ModelResponse（模型回复）永远存
     - 非 is_meta 的 ModelRequest（含 compact_boundary）永远存
     - is_meta=True 的消息：只有 is_compact_summary=True 的摘要需要存
       （context injection、attachment 等临时消息不存）
     """
+    if _has_system_prompt(msg):
+        return False
     if not isinstance(msg, ModelRequest):
         return True
     meta = msg.metadata or {}

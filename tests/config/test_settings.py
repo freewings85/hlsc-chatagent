@@ -2,7 +2,7 @@
 
 from src.agent.compact.config import CompactConfig
 from src.config import settings
-from src.config.settings import LLMConfig, StorageConfig, ServerConfig
+from src.config.settings import LLMConfig, UserFsConfig, AgentFsConfig, ServerConfig
 
 
 class TestLLMConfig:
@@ -11,15 +11,21 @@ class TestLLMConfig:
         assert config.llm_type in ("azure", "openai", "")
 
 
-class TestStorageConfig:
+class TestUserFsConfig:
     def test_default(self) -> None:
-        config = StorageConfig()
+        config = UserFsConfig()
         assert "sessions" in config.sessions_dir
 
-    def test_data_dir(self) -> None:
-        config = StorageConfig(data_dir="/tmp/test-data")
-        assert config.data_dir == "/tmp/test-data"
+    def test_user_fs_dir(self) -> None:
+        config = UserFsConfig(user_fs_dir="/tmp/test-data")
+        assert config.user_fs_dir == "/tmp/test-data"
         assert config.sessions_dir == "/tmp/test-data/sessions"
+
+
+class TestAgentFsConfig:
+    def test_default(self) -> None:
+        config = AgentFsConfig()
+        assert config.agent_fs_dir == ".chatagent"
 
 
 class TestServerConfig:
@@ -30,11 +36,9 @@ class TestServerConfig:
 
 class TestSingletons:
     def test_get_llm_config(self) -> None:
-        # 重置单例
         settings._llm_config = None
         config = settings.get_llm_config()
         assert isinstance(config, LLMConfig)
-        # 二次调用返回同一实例
         assert settings.get_llm_config() is config
 
     def test_get_server_config(self) -> None:
@@ -63,19 +67,38 @@ class TestSingletonsEdgeCases:
         c2 = settings.get_compact_config()
         assert c1 is c2
 
-    def test_get_storage_config_singleton(self) -> None:
-        """get_storage_config() 多次调用返回同一实例"""
-        settings._storage_config = None
-        c1 = settings.get_storage_config()
-        c2 = settings.get_storage_config()
+    def test_get_user_fs_config_singleton(self) -> None:
+        """get_user_fs_config() 多次调用返回同一实例"""
+        settings._user_fs_config = None
+        c1 = settings.get_user_fs_config()
+        c2 = settings.get_user_fs_config()
         assert c1 is c2
 
-    def test_get_backend_singleton(self) -> None:
-        """get_backend() 多次调用返回同一实例"""
-        settings._backend = None
-        b1 = settings.get_backend()
-        b2 = settings.get_backend()
+    def test_get_user_fs_backend_singleton(self) -> None:
+        """get_user_fs_backend() 多次调用返回同一实例"""
+        settings._user_fs_backend = None
+        b1 = settings.get_user_fs_backend()
+        b2 = settings.get_user_fs_backend()
         assert b1 is b2
+
+    def test_get_agent_fs_config_singleton(self) -> None:
+        """get_agent_fs_config() 多次调用返回同一实例"""
+        settings._agent_fs_config = None
+        c1 = settings.get_agent_fs_config()
+        c2 = settings.get_agent_fs_config()
+        assert c1 is c2
+
+    def test_get_agent_fs_backend_singleton(self) -> None:
+        """get_agent_fs_backend() 多次调用返回同一实例"""
+        settings._agent_fs_backend = None
+        b1 = settings.get_agent_fs_backend()
+        b2 = settings.get_agent_fs_backend()
+        assert b1 is b2
+
+    def test_backward_compat_aliases(self) -> None:
+        """get_backend / get_storage_config 是向后兼容别名"""
+        assert settings.get_backend is settings.get_user_fs_backend
+        assert settings.get_storage_config is settings.get_user_fs_config
 
 
 class TestCompactConfig:

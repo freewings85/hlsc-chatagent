@@ -14,8 +14,10 @@ if TYPE_CHECKING:
 _TEMPLATES_DIR: Path = Path(__file__).parent / "templates"
 _SYSTEM_MAIN_PROMPT: Path = _TEMPLATES_DIR / "system-main-prompt.md"
 
-# FileSystemBackend 中的用户空间路径（virtual_mode，相对于 data_dir）
-_AGENT_MD_PATH = "/{user_id}/agent.md"
+# agent_fs backend 中的路径（系统级，全局共享）
+_AGENT_MD_PATH = "/agent.md"
+
+# user_fs backend 中的路径（按用户隔离）
 _MEMORY_MD_PATH = "/{user_id}/memory.md"
 
 
@@ -24,16 +26,30 @@ class PromptBuilder:
 
     - system_prompt: 从代码内模板加载，传给 agent 的 system_prompt 参数
     - context_messages: agent.md / memory.md 等，作为 is_meta 消息注入到 message_history 前面
+
+    使用两个 backend：
+    - agent_fs_backend: 读取 agent.md（系统级，全局共享）
+    - user_fs_backend: 读取 memory.md（按用户隔离）
     """
 
-    def __init__(self, backend: BackendProtocol) -> None:
-        self._backend: BackendProtocol = backend
+    def __init__(
+        self,
+        user_fs_backend: BackendProtocol,
+        agent_fs_backend: BackendProtocol,
+    ) -> None:
+        self._user_fs_backend: BackendProtocol = user_fs_backend
+        self._agent_fs_backend: BackendProtocol = agent_fs_backend
         self._system_prompt_cache: str | None = None
 
+    @staticmethod
+    def load_system_prompt() -> str:
+        """加载系统提示词（代码内模板，不依赖 backend）。"""
+        return _SYSTEM_MAIN_PROMPT.read_text(encoding="utf-8").strip()
+
     def build_system_prompt(self) -> str:
-        """加载系统提示词（代码内模板，可缓存）。"""
+        """加载系统提示词（带实例缓存）。"""
         if self._system_prompt_cache is None:
-            self._system_prompt_cache = _SYSTEM_MAIN_PROMPT.read_text(encoding="utf-8").strip()
+            self._system_prompt_cache = self.load_system_prompt()
         return self._system_prompt_cache
 
     async def build_context_messages(self, user_id: str) -> list[ModelRequest]:
@@ -43,9 +59,10 @@ class PromptBuilder:
         """
         messages: list[ModelRequest] = []
 
-        # agent.md（对应 Claude Code 的 CLAUDE.md）
-        agent_md_path: str = _AGENT_MD_PATH.format(user_id=user_id)
-        agent_md: str | None = await self._read_if_exists(agent_md_path)
+        # agent.md（系统级，从 agent_fs_backend 读取）
+        agent_md: str | None = await self._read_if_exists(
+            self._agent_fs_backend, _AGENT_MD_PATH,
+        )
         if agent_md:
             messages.append(
                 ModelRequest(
@@ -56,9 +73,11 @@ class PromptBuilder:
                 )
             )
 
-        # memory.md（对应 Claude Code 的 MEMORY.md）
+        # memory.md（用户级，从 user_fs_backend 读取）
         memory_md_path: str = _MEMORY_MD_PATH.format(user_id=user_id)
-        memory_md: str | None = await self._read_if_exists(memory_md_path)
+        memory_md: str | None = await self._read_if_exists(
+            self._user_fs_backend, memory_md_path,
+        )
         if memory_md:
             messages.append(
                 ModelRequest(
@@ -71,22 +90,19 @@ class PromptBuilder:
 
         return messages
 
-    async def _read_if_exists(self, path: str) -> str | None:
+    async def _read_if_exists(self, backend: BackendProtocol, path: str) -> str | None:
         """读取文件，不存在返回 None。"""
-        if not await self._backend.aexists(path):
+        if not await backend.aexists(path):
             return None
-        content: str = await self._backend.aread(path)
+        content: str = await backend.aread(path)
         if content.startswith("Error:"):  # pragma: no cover — backend 错误防御
             return None
         # aread 返回带行号的格式，这里需要原始内容
-        return await self._read_raw(path)
+        return await self._read_raw(backend, path)
 
-    async def _read_raw(self, path: str) -> str | None:
+    async def _read_raw(self, backend: BackendProtocol, path: str) -> str | None:
         """读取文件原始内容（不带行号格式）。"""
-        # BackendProtocol.read() 返回带行号的格式化内容
-        # 对于注入到消息的内容，我们需要原始文本
-        # 使用 download_files 获取原始 bytes
-        results = await self._backend.adownload_files([path])
+        results = await backend.adownload_files([path])
         if results and results[0].content is not None:
             try:
                 return results[0].content.decode("utf-8")

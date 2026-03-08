@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from src.server.request import ChatRequest
+from src.server.agent_md_api import router as agent_md_router
 from src.server.skill_api import router as skill_router
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -29,8 +30,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Skill 管理 API
+# 管理 API
 app.include_router(skill_router)
+app.include_router(agent_md_router)
 
 _WEB_DIR: Path = Path(__file__).parent.parent.parent / "web"
 
@@ -84,8 +86,11 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         sinker=sinker,
     )
 
+    from src.agent.prompt.prompt_builder import PromptBuilder
+
     model = create_model()
-    agent = create_agent(model)
+    system_prompt = PromptBuilder.load_system_prompt()
+    agent = create_agent(model, system_prompt=system_prompt)
     deps: AgentDeps = AgentDeps(
         session_id=request.session_id,
         user_id=request.user_id,

@@ -34,7 +34,7 @@ from src.agent.skills.registry import SkillRegistry, get_default_skill_dirs
 from src.agent.skills.tool import invoke_skill
 from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
-from src.config.settings import get_backend, get_compact_config
+from src.config.settings import get_agent_fs_backend, get_backend, get_compact_config
 from src.event.event_emitter import EventEmitter
 from src.event.event_model import EventModel
 from src.event.event_type import EventType
@@ -190,11 +190,15 @@ async def run_agent_loop(
     - stream 完成后 run.next(node) 不会重复执行（内部检查 _result/_next_node）
     """
     backend = get_backend()
+    agent_fs_backend = get_agent_fs_backend()
 
     # 服务初始化
     memory_service = MemoryMessageService(backend)
     transcript_service = TranscriptService(backend)
-    prompt_builder: PromptBuilder = PromptBuilder(backend)
+    prompt_builder: PromptBuilder = PromptBuilder(
+        user_fs_backend=backend,
+        agent_fs_backend=agent_fs_backend,
+    )
     context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
         user_id=task.user_id,
     )
