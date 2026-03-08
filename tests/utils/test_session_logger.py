@@ -92,10 +92,11 @@ class TestLogLlmStartEnd:
         from src.utils.session_logger import log_llm_end, log_llm_start
         set_request_context("s4", "r4")
         log_llm_start("ModelRequestNode", messages_count=5)
-        log_llm_end("ModelRequestNode")
+        log_llm_end("ModelRequestNode", response_preview="你好，有什么可以帮你的？")
         text = (log_dir / "s4" / "execution.log").read_text()
         assert "[LLM_START] ModelRequestNode (messages=5)" in text
         assert "[LLM_END] ModelRequestNode" in text
+        assert "你好" in text
 
     def test_llm_tool_calls(self, log_dir: Path) -> None:
         from src.utils.session_logger import log_llm_end, log_llm_start

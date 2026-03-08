@@ -337,6 +337,8 @@ def log_llm_end(
     else:
         if tool_calls:
             logger.info(f"{prefix}[LLM_END] {node_name} → tool_calls: {tool_calls}")
+        elif response_preview:
+            logger.info(f"{prefix}[LLM_END] {node_name} → text:\n    <<<{response_preview}>>>")
         else:
             logger.info(f"{prefix}[LLM_END] {node_name}")
 

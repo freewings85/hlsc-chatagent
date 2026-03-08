@@ -34,7 +34,13 @@ from src.utils.session_logger import (
     log_tool_start,
 )
 
-from src.agent.agent_message import from_model_messages, to_model_messages, validate_message_alternation
+from src.agent.agent_message import (
+    AgentMessage,
+    UserMessage,
+    from_model_messages,
+    to_model_messages,
+    validate_message_alternation,
+)
 from src.agent.compact.compactor import Compactor, SummarizeFn
 from src.agent.deps import AgentDeps
 from src.agent.message.attachment_collector import AttachmentCollector
@@ -171,7 +177,7 @@ async def _emit_model_stream(
     if _tool_call_names:
         log_llm_end("ModelRequestNode", tool_calls=_tool_call_names)
     else:
-        log_llm_end("ModelRequestNode")
+        log_llm_end("ModelRequestNode", response_preview="".join(_text_parts))
 
 
 async def _emit_tool_events(
@@ -277,22 +283,23 @@ async def run_agent_loop(
         invoked_skill_store=invoked_store if skill_registry.has_skills() else None,
     )
 
-    # 加载历史：AgentMessage → ModelMessage（Pydantic AI 需要）
+    # 加载历史（保持 AgentMessage 格式，仅在 ModelRequestNode 执行前转换）
+    agent_history: list[AgentMessage] = []
     if message_history is None:
         agent_history = await memory_service.load(task.user_id, task.session_id)
-        message_history = to_model_messages(agent_history)
+    else:
+        # 兼容外部传入 ModelMessage 的场景（如测试）
+        agent_history = from_model_messages(message_history)
 
     try:
         iteration: int = 0
-        # 首次 context injection 后的消息总数（context + history + user_prompt）
-        # 用于计算 loop 结束后哪些消息是"新"的（offset = _base_len - 1）
         _base_len: int = 0
         _first_llm_call: bool = True
 
         async with agent.iter(
             task.message,
             deps=deps,
-            message_history=message_history,
+            message_history=[],  # 空历史，由我们在 ModelRequestNode 前注入
         ) as run:
             node = run.next_node
 
@@ -301,6 +308,16 @@ async def run_agent_loop(
                     break
 
                 if isinstance(node, ModelRequestNode):
+                    if _first_llm_call:
+                        # 首次 LLM 调用：将 AgentMessage 历史转为 ModelMessage 注入
+                        # 追加当前用户消息，使 to_model_messages 能校验交替 + 最后为 user
+                        full_conversation = list(agent_history) + [
+                            UserMessage(content=task.message),
+                        ]
+                        model_messages = to_model_messages(full_conversation)
+                        # 去掉最后一个 ModelRequest（当前用户消息），Pydantic AI 会自动追加
+                        run._graph_run.state.message_history[:] = model_messages[:-1] if model_messages else []
+
                     history: list[ModelMessage] = run._graph_run.state.message_history
 
                     # 每轮 LLM 前：context injection + attachment + compact
@@ -315,16 +332,14 @@ async def run_agent_loop(
                         )
                         deps.file_state_tracker.clear()
 
-                    # 记录首次 context injection 后的消息数
-                    # model_messages = [context..., history..., user_prompt]
-                    # 新消息从 user_prompt 开始，所以 offset = _base_len - 1
                     if _base_len == 0:
                         _base_len = len(pre_result.model_messages)
 
                     # 注入处理后的消息到 run 内部状态
                     run._graph_run.state.message_history[:] = pre_result.model_messages
 
-                    # 校验消息交替（user/assistant 必须交替，最后一条为 user）
+                    # 校验消息交替（所有处理完成后、模型调用前）
+                    # user_prompt 由 Pydantic AI _prepare_request() 追加，此处传入做逻辑校验
                     alt_errors = validate_message_alternation(
                         pre_result.model_messages,
                         user_prompt=task.message if _first_llm_call else None,
@@ -336,7 +351,6 @@ async def run_agent_loop(
                         )
 
                     # 流式处理 LLM 响应 → emitter.emit(text / tool_call 事件)
-                    # 只在首次 LLM 调用传 user_prompt（后续调用的 request 是 ToolReturnPart）
                     await _emit_model_stream(
                         node, run.ctx, emitter, task,
                         messages_count=len(pre_result.model_messages),
@@ -355,17 +369,10 @@ async def run_agent_loop(
                 if iteration >= max_iterations:
                     break
 
-        # 发送结束事件
-        await emitter.emit(EventModel(
-            conversation_id=task.session_id,
-            request_id=task.request_id,
-            type=EventType.CHAT_REQUEST_END,
-            data={},
-        ))
-
         # 持久化新消息：ModelMessage → AgentMessage，写 messages.jsonl 和 transcript.jsonl
         # offset = _base_len：跳过 context + 已持久化历史（user prompt 在 _base_len 之后
         # 由 _prepare_request 追加，不包含在 _base_len 中）
+        # 注意：持久化在 CHAT_REQUEST_END 之前，确保客户端收到结束事件时数据已落盘
         final_response: str | None = None
         if run.result is not None:
             final_response = run.result.output
@@ -375,6 +382,14 @@ async def run_agent_loop(
             new_agent_messages = from_model_messages(appended)
             await transcript_service.append(task.user_id, task.session_id, new_agent_messages)
             await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
+
+        # 发送结束事件
+        await emitter.emit(EventModel(
+            conversation_id=task.session_id,
+            request_id=task.request_id,
+            type=EventType.CHAT_REQUEST_END,
+            data={},
+        ))
 
     except Exception as exc:
         log_error(f"Agent loop 异常: {exc}", exc=exc)

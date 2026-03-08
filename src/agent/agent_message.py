@@ -150,7 +150,7 @@ def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
 
 
 def to_model_messages(messages: list[AgentMessage]) -> list[ModelMessage]:
-    """AgentMessage 列表 → ModelMessage 列表。"""
+    """AgentMessage 列表 → ModelMessage 列表（纯转换，不做校验）。"""
     result: list[ModelMessage] = []
 
     for msg in messages:
@@ -208,7 +208,7 @@ def should_persist(msg: AgentMessage) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# 消息交替校验
+# 消息交替校验（模型调用前）
 # --------------------------------------------------------------------------- #
 
 
@@ -216,16 +216,15 @@ def validate_message_alternation(
     messages: list[ModelMessage],
     user_prompt: str | None = None,
 ) -> list[str]:
-    """校验消息列表是否符合 user/assistant 交替规则。
+    """校验最终发送给模型的 ModelMessage 列表是否符合 user/assistant 交替规则。
 
-    规则（与 Claude Code 一致）：
-    - 连续的 ModelRequest 视为一个 user turn
+    应在所有处理（context injection、compact 等）完成后、模型调用前调用。
+
+    规则：
+    - 连续的 ModelRequest 视为一个 user turn（Pydantic AI 会合并）
     - 连续的 ModelResponse 视为一个 assistant turn
-    - 交替顺序：user, assistant, user, assistant, ...
-    - 最后一条应为 user（因为即将调用 LLM）
-    - user_prompt 作为最后追加的 UserPromptPart（由 Pydantic AI 自动添加）
-
-    返回错误列表，空列表表示通过。
+    - 合并后的 role 序列必须严格交替：user, assistant, user, ...
+    - 最后一条必须是 user（加上即将追加的 user_prompt）
     """
     if not messages and not user_prompt:
         return ["消息列表为空"]
