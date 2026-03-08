@@ -7,9 +7,11 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from src.server.request import ChatRequest
+from src.server.skill_api import router as skill_router
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -18,6 +20,17 @@ app: FastAPI = FastAPI(
     description="通用对话 Agent",
     version="0.1.0",
 )
+
+# CORS（允许 Vite dev server 跨域请求）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Skill 管理 API
+app.include_router(skill_router)
 
 _WEB_DIR: Path = Path(__file__).parent.parent.parent / "web"
 
