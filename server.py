@@ -1,7 +1,10 @@
 """uvicorn 入口"""
 
-from dotenv import load_dotenv
-load_dotenv()
+# Nacos 必须最先 import：加载 .env → 连接 Nacos → 写入 os.environ
+# 后续所有 os.getenv() 调用才能读到 Nacos 远程配置
+from src.common.nacos import register_service, deregister_service  # noqa: F401, E402
+
+register_service()
 
 import uvicorn
 
@@ -46,12 +49,15 @@ def main() -> None:
     from src.server.app import app
 
     config = get_server_config()
-    uvicorn.run(
-        app,
-        host=config.host,
-        port=config.port,
-        log_level="info",
-    )
+    try:
+        uvicorn.run(
+            app,
+            host=config.host,
+            port=config.port,
+            log_level="info",
+        )
+    finally:
+        deregister_service()
 
 
 if __name__ == "__main__":

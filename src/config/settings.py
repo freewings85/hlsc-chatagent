@@ -1,4 +1,9 @@
-"""配置管理：从环境变量加载所有配置"""
+"""配置管理：从环境变量加载所有配置
+
+注意：本模块不调用 load_dotenv()。
+环境变量由 src.common.nacos 统一加载（.env + Nacos 远程配置），
+server.py 入口在 import 本模块前已完成 nacos 初始化。
+"""
 
 from __future__ import annotations
 
@@ -6,13 +11,9 @@ import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
-from dotenv import load_dotenv
-
 if TYPE_CHECKING:
     from src.agent.compact.config import CompactConfig
     from src.common.filesystem_backend import BackendProtocol
-
-load_dotenv()
 
 
 @dataclass
