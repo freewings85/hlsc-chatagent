@@ -18,14 +18,18 @@ def _setup_logfire() -> None:
 
     if config.endpoint:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
-        from src.config.otel import UnicodeDecodeSpanProcessor
+        from src.config.otel import patch_pydantic_ai_json_dumps
+
+        # 在 logfire.configure 之前 patch，让中文直接输出不转义
+        patch_pydantic_ai_json_dumps()
 
         logfire.configure(
             service_name="chatagent",
             send_to_logfire=False,
             additional_span_processors=[
-                UnicodeDecodeSpanProcessor(OTLPSpanExporter(endpoint=config.endpoint)),
+                SimpleSpanProcessor(OTLPSpanExporter(endpoint=config.endpoint)),
             ],
         )
     else:
