@@ -245,3 +245,66 @@
   border-radius: 4px;
   font-size: 12px;
 }
+
+/* Interrupt card */
+.interrupt-block {
+  background: #fffde7;
+  border: 1px solid #fbc02d;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 6px 0;
+}
+.interrupt-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.interrupt-icon { font-size: 16px; }
+.interrupt-type { color: #f57f17; }
+.interrupt-data {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.interrupt-field {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+.interrupt-label {
+  color: #666;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.interrupt-value {
+  color: #333;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+.interrupt-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-confirm, .btn-cancel {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  font-size: 13px;
+}
+.btn-confirm {
+  background: #4caf50;
+  color: white;
+  border-color: #4caf50;
+}
+.btn-confirm:hover:not(:disabled) { background: #388e3c; }
+.btn-cancel {
+  background: white;
+  color: #666;
+}
+.btn-cancel:hover:not(:disabled) { background: #f5f5f5; }
+.btn-confirm:disabled, .btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

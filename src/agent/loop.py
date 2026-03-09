@@ -406,14 +406,6 @@ async def run_agent_loop(
             await transcript_service.append(task.user_id, task.session_id, new_agent_messages)
             await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
 
-        # 发送结束事件
-        await emitter.emit(EventModel(
-            conversation_id=task.session_id,
-            request_id=task.request_id,
-            type=EventType.CHAT_REQUEST_END,
-            data={},
-        ))
-
     except Exception as exc:
         log_error(f"Agent loop 异常: {exc}", exc=exc)
         log_request_end(
@@ -439,4 +431,11 @@ async def run_agent_loop(
         )
     finally:
         clear_request_context()
+        # 发送 chat_request_end 事件，通知前端流结束
+        await emitter.emit(EventModel(
+            conversation_id=task.session_id,
+            request_id=task.request_id,
+            type=EventType.CHAT_REQUEST_END,
+            data={},
+        ))
         await emitter.close()

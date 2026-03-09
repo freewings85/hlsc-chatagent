@@ -15,10 +15,16 @@ interface ToolCall {
   status: 'pending' | 'done' | 'error'
 }
 
+interface InterruptCard {
+  type: string
+  data: Record<string, unknown>
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
   tools: ToolCall[]
+  interrupts: InterruptCard[]
 }
 
 // --------------------------------------------------------------------------
@@ -84,8 +90,8 @@ export default function ChatPage() {
     setStreaming(true)
 
     // Add user message + empty assistant placeholder
-    const userMsg: ChatMessage = { role: 'user', text, tools: [] }
-    const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [] }
+    const userMsg: ChatMessage = { role: 'user', text, tools: [], interrupts: [] }
+    const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [] }
     setMessages(prev => [...prev, userMsg, asstMsg])
 
     let buffer = ''
@@ -101,7 +107,8 @@ export default function ChatPage() {
       const reader = resp.body!.getReader()
       const decoder = new TextDecoder()
 
-      while (true) {
+      let streamEnded = false
+      while (!streamEnded) {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
@@ -111,6 +118,10 @@ export default function ChatPage() {
         buffer = buffer.slice(idx + 2)
 
         for (const { type, data } of parseSseChunk(toProcess)) {
+          if (type === 'chat_request_end') {
+            streamEnded = true
+            break
+          }
           handleEvent(type, data)
         }
       }
@@ -164,6 +175,13 @@ export default function ChatPage() {
           copy[copy.length - 1] = { ...last, tools }
           break
         }
+        case 'interrupt': {
+          const cardType = (d.type as string) ?? 'unknown'
+          const card: InterruptCard = { type: cardType, data: d }
+          const interrupts = [...last.interrupts, card]
+          copy[copy.length - 1] = { ...last, interrupts }
+          break
+        }
         case 'error': {
           const msg = (d.error as string) ?? 'Unknown error'
           copy[copy.length - 1] = { ...last, text: last.text + `\n[Error: ${msg}]` }
@@ -172,6 +190,16 @@ export default function ChatPage() {
       }
       return copy
     })
+  }
+
+  const replyToInterrupt = (reply: string) => {
+    if (streaming) return
+    setInput(reply)
+    // Use setTimeout to trigger send after state update
+    setTimeout(() => {
+      const btn = document.querySelector('.btn-send') as HTMLButtonElement | null
+      if (btn && !btn.disabled) btn.click()
+    }, 50)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -211,6 +239,9 @@ export default function ChatPage() {
                   {msg.tools.map((tool, j) => (
                     <ToolBlock key={tool.id || j} tool={tool} />
                   ))}
+                  {msg.interrupts.map((card, j) => (
+                    <InterruptBlock key={`int-${j}`} card={card} onReply={replyToInterrupt} disabled={streaming} />
+                  ))}
                   {msg.text ? (
                     <div className="text-segment">{msg.text}</div>
                   ) : (
@@ -227,6 +258,7 @@ export default function ChatPage() {
 
       <div className="chat-footer">
         <textarea
+          id="input-box"
           ref={inputRef}
           className="chat-input"
           value={input}
@@ -236,9 +268,48 @@ export default function ChatPage() {
           rows={1}
           disabled={streaming}
         />
-        <button className="btn-send" onClick={sendMessage} disabled={streaming || !input.trim()}>
+        <button id="send-btn" className="btn-send" onClick={sendMessage} disabled={streaming || !input.trim()}>
           发送 ↑
         </button>
+      </div>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// InterruptBlock sub-component
+// --------------------------------------------------------------------------
+
+function InterruptBlock({ card, onReply, disabled }: {
+  card: InterruptCard
+  onReply: (reply: string) => void
+  disabled: boolean
+}) {
+  const renderData = () => {
+    const entries = Object.entries(card.data).filter(([k]) => k !== 'type')
+    if (entries.length === 0) return null
+    return (
+      <div className="interrupt-data">
+        {entries.map(([k, v]) => (
+          <div key={k} className="interrupt-field">
+            <span className="interrupt-label">{k}:</span>
+            <span className="interrupt-value">{typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="interrupt-block" data-interrupt-type={card.type}>
+      <div className="interrupt-header">
+        <span className="interrupt-icon">📋</span>
+        <span className="interrupt-type">{card.type}</span>
+      </div>
+      {renderData()}
+      <div className="interrupt-actions">
+        <button className="btn-confirm" onClick={() => onReply('确认')} disabled={disabled}>确认</button>
+        <button className="btn-cancel" onClick={() => onReply('取消')} disabled={disabled}>取消</button>
       </div>
     </div>
   )

@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.server.request import ChatRequest
 from src.server.agent_md_api import router as agent_md_router
@@ -35,6 +36,7 @@ app.include_router(skill_router)
 app.include_router(agent_md_router)
 
 _WEB_DIR: Path = Path(__file__).parent.parent.parent / "web"
+_DIST_DIR: Path = _WEB_DIR / "dist"
 
 
 @app.get("/health")
@@ -45,11 +47,19 @@ async def health() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
-    """测试 UI 主页"""
-    html_file = _WEB_DIR / "index.html"
-    if html_file.exists():
-        return HTMLResponse(content=html_file.read_text(encoding="utf-8"))
+    """测试 UI 主页（优先使用 dist 构建产物）"""
+    dist_html = _DIST_DIR / "index.html"
+    if dist_html.exists():
+        return HTMLResponse(content=dist_html.read_text(encoding="utf-8"))
+    dev_html = _WEB_DIR / "index.html"
+    if dev_html.exists():
+        return HTMLResponse(content=dev_html.read_text(encoding="utf-8"))
     return HTMLResponse(content="<h1>web/index.html 不存在</h1>", status_code=404)
+
+
+# 静态资源（JS/CSS）从 dist/assets/ 提供
+if _DIST_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(_DIST_DIR / "assets")), name="static-assets")
 
 
 @app.post("/chat/stream")

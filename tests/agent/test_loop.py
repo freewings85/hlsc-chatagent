@@ -151,11 +151,14 @@ class TestAgentLoop:
         with pytest.raises(RuntimeError, match="test error"):
             await run_agent_loop(emitter, task, agent, deps, message_history=[])
 
-        # 异常时先发 ERROR 事件，再关闭 emitter（sentinel=None）
+        # 异常时先发 ERROR 事件，再发 CHAT_REQUEST_END，最后关闭 emitter（sentinel=None）
         error_event = await event_queue.get()
         assert error_event is not None
         assert error_event.type == EventType.ERROR
         assert "test error" in error_event.data["message"]
+        end_event = await event_queue.get()
+        assert end_event is not None
+        assert end_event.type == EventType.CHAT_REQUEST_END
         sentinel = await event_queue.get()
         assert sentinel is None
 
@@ -215,10 +218,13 @@ class TestAgentLoopEdgeCases:
         with pytest.raises(UnexpectedModelBehavior):
             await run_agent_loop(emitter, task, agent, deps, message_history=[])
 
-        # 异常时先发 ERROR 事件，再关闭 emitter（sentinel=None）
+        # 异常时先发 ERROR 事件，再发 CHAT_REQUEST_END，最后关闭 emitter（sentinel=None）
         error_event = await event_queue.get()
         assert error_event is not None
         assert error_event.type == EventType.ERROR
+        end_event = await event_queue.get()
+        assert end_event is not None
+        assert end_event.type == EventType.CHAT_REQUEST_END
         sentinel = await event_queue.get()
         assert sentinel is None
 
