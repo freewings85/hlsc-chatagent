@@ -6,15 +6,20 @@
 输入：prepare_bidding.py 输出的 task_data JSON（经用户确认后的版本）。
 
 输出：JSON 格式，包含 inquiry_id 或 error。
+
+环境变量：
+    INQUIRY_SUBMIT_URL — 提交询价的 API 地址
 """
 
-import asyncio
 import json
+import os
 import sys
 from typing import Any
 
+import httpx
 
-async def main() -> None:
+
+def main() -> None:
     if len(sys.argv) < 2:
         print(json.dumps({"error": "缺少参数，用法: python submit_bidding.py '<task_data_json>'"}))
         sys.exit(1)
@@ -25,24 +30,20 @@ async def main() -> None:
         print(json.dumps({"error": f"JSON 解析失败: {e}"}))
         sys.exit(1)
 
-    try:
-        from src.services.restful.submit_inquiry_service import submit_inquiry_service
+    url = os.getenv("INQUIRY_SUBMIT_URL", "")
+    if not url:
+        print(json.dumps({"error": "环境变量 INQUIRY_SUBMIT_URL 未设置"}))
+        sys.exit(1)
 
-        inquiry_id: str = await submit_inquiry_service.submit(
-            inquiry_task_id=task_data.get("inquiry_task_id", ""),
-            projects=task_data.get("projects", []),
-            filters=task_data.get("filters"),
-            car_model_id=task_data.get("car_model_id", ""),
-            car_model_name=task_data.get("car_model_name", ""),
-            description=task_data.get("description", ""),
-            preferred_time=task_data.get("preferred_time", ""),
-            conversation_id=task_data.get("conversation_id", ""),
-            longitude=task_data.get("longitude"),
-            latitude=task_data.get("latitude"),
-        )
+    try:
+        transport = httpx.HTTPTransport(proxy=None)
+        with httpx.Client(transport=transport, timeout=30) as client:
+            resp = client.post(url, json=task_data)
+            resp.raise_for_status()
+            result_data = resp.json()
 
         result: dict[str, Any] = {
-            "inquiry_id": inquiry_id,
+            "inquiry_id": result_data.get("inquiry_id", ""),
             "inquiry_task_id": task_data.get("inquiry_task_id", ""),
             "status": "submitted",
         }
@@ -54,4 +55,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

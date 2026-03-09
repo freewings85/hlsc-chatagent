@@ -8,6 +8,7 @@
 """
 
 import asyncio
+import os
 
 from pydantic_ai import RunContext
 
@@ -37,7 +38,15 @@ async def bash(
     cwd: str | None = None
     backend = ctx.deps.backend
     if backend is not None and hasattr(backend, "cwd"):
-        cwd = str(backend.cwd)
+        from pathlib import Path
+        cwd_path = Path(backend.cwd)
+        cwd_path.mkdir(parents=True, exist_ok=True)
+        cwd = str(cwd_path)
+
+    # 合并 skill 环境变量（invoke_skill 从 config.env 加载）
+    env: dict[str, str] | None = None
+    if ctx.deps.skill_env:
+        env = {**os.environ, **ctx.deps.skill_env}
 
     try:
         proc = await asyncio.create_subprocess_shell(
@@ -45,6 +54,7 @@ async def bash(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
+            env=env,
         )
     except OSError as e:
         return f"命令启动失败：{e}"

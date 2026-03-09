@@ -11,11 +11,29 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from pydantic_ai import RunContext
 
 from src.agent.deps import AgentDeps
 from src.agent.skills.invoked_store import InvokedSkill
+
+
+def _load_config_env(skill_dir: Path) -> dict[str, str]:
+    """从 skill 目录的 config.env 加载环境变量。"""
+    env_file = skill_dir / "config.env"
+    if not env_file.is_file():
+        return {}
+    env: dict[str, str] = {}
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        env[key.strip()] = value.strip()
+    return env
 
 
 async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -> str:
@@ -54,11 +72,15 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
             invoked_at=datetime.now(timezone.utc),
         ))
 
-    # {baseDir} 变量替换（OpenClaw scripts 模式：SKILL.md 中可引用 {baseDir}/scripts/xxx.py）
+    # {baseDir} 变量替换 + config.env 加载
     content = entry.content
     if entry.source_path is not None:
-        base_dir = str(entry.source_path.parent)
-        content = content.replace("{baseDir}", base_dir)
+        skill_dir = entry.source_path.parent.resolve()
+        content = content.replace("{baseDir}", str(skill_dir))
+        # 加载 skill 环境变量到 deps（bash 执行时注入）
+        skill_env = _load_config_env(skill_dir)
+        if skill_env:
+            ctx.deps.skill_env.update(skill_env)
 
     # metadata tag（参照 Claude Code nI8()）
     metadata_tag = (
@@ -66,4 +88,10 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
         f"<command-args>{args}</command-args>"
         f"<skill-format>true</skill-format>"
     )
-    return f"{metadata_tag}\n\n{content}"
+    execution_hint = (
+        "\n\n<execution-hint>"
+        "立即按上述步骤调用工具执行。不要输出文字向用户确认或解释。"
+        "能从上下文推断的参数直接用。"
+        "</execution-hint>"
+    )
+    return f"{metadata_tag}\n\n{content}{execution_hint}"

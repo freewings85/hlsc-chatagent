@@ -33,6 +33,20 @@ export async function installSkill(source: string): Promise<InstallResponse> {
   return res.json()
 }
 
+export async function uploadSkill(file: File): Promise<InstallResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${BASE}/api/skills/upload`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(data.detail || `上传失败: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function uninstallSkill(name: string): Promise<InstallResponse> {
   const res = await fetch(`${BASE}/api/skills/${encodeURIComponent(name)}`, {
     method: 'DELETE',

@@ -13,12 +13,17 @@
     preferred_time: str | None  - 期望时间
 
 输出：JSON 格式的 task_data，包含完整的项目参数 schema 和筛选条件。
+
+环境变量：
+    GET_PROJECT_PARAM_SCHEMA_URL — 查询项目参数 schema 的 API 地址
 """
 
-import asyncio
 import json
+import os
 import sys
 from typing import Any
+
+import httpx
 
 
 # 筛选条件定义
@@ -73,29 +78,41 @@ def build_filters_schema(filters: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
-async def build_projects_with_params(
+def build_projects_with_params(
     project_ids: list[int],
     context_params: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """查询项目参数 schema 并填充已知值。"""
-    try:
-        from src.services.restful.get_project_param_schema_service import (
-            get_project_param_schema_service,
-        )
-        schemas = await get_project_param_schema_service.get_schemas(project_ids)
-    except Exception:
-        # 服务不可用时退化为基本结构
-        schemas = {}
+    url = os.getenv("GET_PROJECT_PARAM_SCHEMA_URL", "")
+    schemas: dict[str, Any] = {}
+
+    if url:
+        try:
+            transport = httpx.HTTPTransport(proxy=None)
+            with httpx.Client(transport=transport, timeout=10) as client:
+                resp = client.post(url, json={"projectIds": project_ids})
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("status") == 0:
+                    schemas = data.get("result", {})
+        except Exception:
+            pass
 
     projects: list[dict[str, Any]] = []
     for pid in project_ids:
-        schema = schemas.get(str(pid))
-        project_name: str = schema.project_name if schema else f"项目{pid}"
-        param_defs = schema.params if schema else []
+        schema = schemas.get(str(pid), {})
+        project_name: str = schema.get("projectName", f"项目{pid}")
+        param_defs = schema.get("params", [])
 
         params: list[dict[str, Any]] = []
         for p_def in param_defs:
-            param = {**p_def.to_dict(), "value": context_params.get(p_def.name)}
+            param = {
+                "name": p_def.get("name", ""),
+                "label": p_def.get("label", ""),
+                "inputType": p_def.get("inputType", "string"),
+                "required": p_def.get("required", False),
+                "value": context_params.get(p_def.get("name", "")),
+            }
             params.append(param)
 
         projects.append({
@@ -106,7 +123,7 @@ async def build_projects_with_params(
     return projects
 
 
-async def main() -> None:
+def main() -> None:
     if len(sys.argv) < 2:
         print(json.dumps({"error": "缺少参数，用法: python prepare_bidding.py '<json>'"}))
         sys.exit(1)
@@ -137,7 +154,7 @@ async def main() -> None:
     context_params.setdefault("car_model_name", car_model_name)
 
     # 构建数据
-    projects_with_params = await build_projects_with_params(project_ids, context_params)
+    projects_with_params = build_projects_with_params(project_ids, context_params)
     filters_schema = build_filters_schema(filters)
 
     task_data: dict[str, Any] = {
@@ -154,4 +171,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
