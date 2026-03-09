@@ -9,7 +9,7 @@
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {
-        "NO_PROXY": "logfire-us.pydantic.dev,logfire.pydantic.dev"
+        "NO_PROXY": "localhost,127.*,10.*,192.168.*,logfire-us.pydantic.dev,logfire.pydantic.dev"
       }
     }
   ]

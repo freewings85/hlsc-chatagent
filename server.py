@@ -1,16 +1,20 @@
 """uvicorn 入口"""
 
+import os
+
 from dotenv import load_dotenv
 load_dotenv()
 
-import logfire
 import uvicorn
 
 from src.config.settings import get_server_config
 
 # Logfire：trace agent 轨迹（LLM 调用、工具调用、HTTP 请求）
-logfire.configure(service_name="chatagent")
-logfire.instrument_pydantic_ai()
+# 通过 LOGFIRE_ENABLED=true 开启，默认关闭
+if os.getenv("LOGFIRE_ENABLED", "false").lower() == "true":
+    import logfire
+    logfire.configure(service_name="chatagent")
+    logfire.instrument_pydantic_ai()
 
 
 def main() -> None:
