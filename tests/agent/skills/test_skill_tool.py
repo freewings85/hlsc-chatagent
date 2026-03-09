@@ -15,12 +15,17 @@ from src.agent.skills.registry import SkillEntry, SkillRegistry
 from src.agent.skills.tool import invoke_skill
 
 
-def make_entry(name: str = "commit", content: str = "# Commit\nStep 1.") -> SkillEntry:
+def make_entry(
+    name: str = "commit",
+    content: str = "# Commit\nStep 1.",
+    source_path: Path | None = None,
+) -> SkillEntry:
     return SkillEntry(
         name=name,
         description=f"{name} description",
         content=content,
         when_to_use=f"Use when doing {name}.",
+        source_path=source_path,
     )
 
 
@@ -147,3 +152,30 @@ class TestInvokeSkillPersistence:
 
         recorded: InvokedSkill = store.record.call_args[0][0]
         assert recorded.name == "review"
+
+
+class TestInvokeSkillBaseDir:
+    async def test_basedir_substitution(self) -> None:
+        """{baseDir} 被替换为 SKILL.md 所在目录"""
+        entry = make_entry(
+            "bidding",
+            'Run: bash("python {baseDir}/scripts/prepare.py")',
+            source_path=Path("/skills/publish-bidding/SKILL.md"),
+        )
+        registry = make_registry(entry)
+        ctx = make_ctx(registry=registry)
+        result = await invoke_skill(ctx, "bidding")
+        assert "/skills/publish-bidding/scripts/prepare.py" in result
+        assert "{baseDir}" not in result
+
+    async def test_no_basedir_when_no_source_path(self) -> None:
+        """{baseDir} 不替换（source_path 为 None 时保持原样）"""
+        entry = make_entry(
+            "test",
+            "path: {baseDir}/scripts/run.py",
+            source_path=None,
+        )
+        registry = make_registry(entry)
+        ctx = make_ctx(registry=registry)
+        result = await invoke_skill(ctx, "test")
+        assert "{baseDir}" in result

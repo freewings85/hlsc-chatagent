@@ -450,4 +450,5 @@ class TestCreateDefaultToolMap:
         assert "grep" in tool_map
         assert "bash" in tool_map
         assert "task" in tool_map
-        assert len(tool_map) == 7
+        assert "interrupt" in tool_map
+        assert len(tool_map) == 8

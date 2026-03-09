@@ -250,6 +250,7 @@ async def run_agent_loop(
     _user_fs_cfg = get_user_fs_config()
     _session_root = f"{_user_fs_cfg.user_fs_dir}/{task.user_id}/sessions/{task.session_id}"
     deps.backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
+    deps.emitter = emitter
 
     # 服务初始化
     memory_service = MemoryMessageService(backend)

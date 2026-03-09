@@ -54,10 +54,16 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
             invoked_at=datetime.now(timezone.utc),
         ))
 
+    # {baseDir} 变量替换（OpenClaw scripts 模式：SKILL.md 中可引用 {baseDir}/scripts/xxx.py）
+    content = entry.content
+    if entry.source_path is not None:
+        base_dir = str(entry.source_path.parent)
+        content = content.replace("{baseDir}", base_dir)
+
     # metadata tag（参照 Claude Code nI8()）
     metadata_tag = (
         f"<command-name>{skill}</command-name>"
         f"<command-args>{args}</command-args>"
         f"<skill-format>true</skill-format>"
     )
-    return f"{metadata_tag}\n\n{entry.content}"
+    return f"{metadata_tag}\n\n{content}"

@@ -11,6 +11,7 @@ from src.common.filesystem_backend import BackendProtocol
 if TYPE_CHECKING:
     from src.agent.skills.invoked_store import InvokedSkillStore
     from src.agent.skills.registry import SkillRegistry
+    from src.event.event_emitter import EventEmitter
 
 # tool 函数类型：async def fn(ctx: RunContext[AgentDeps], ...) -> str
 ToolFunc = Callable[..., Coroutine[Any, Any, str]]
@@ -36,3 +37,5 @@ class AgentDeps:
     # Skill 系统（None 时 Skill 工具不可用）
     skill_registry: SkillRegistry | None = None
     invoked_skill_store: InvokedSkillStore | None = None
+    # 事件发射器（interrupt 等工具需要直接发出 SSE 事件）
+    emitter: EventEmitter | None = None

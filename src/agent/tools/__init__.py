@@ -12,6 +12,7 @@
 from src.agent.tools.bash import bash
 from src.agent.file_state import ChangedFile, FileEntry, FileStateTracker
 from src.agent.tools.fs import edit, glob, grep, read, write
+from src.agent.tools.interrupt import interrupt
 from src.agent.tools.task import task
 
 __all__ = [
@@ -27,12 +28,13 @@ __all__ = [
     "grep",
     "bash",
     "task",
+    "interrupt",
     # 便捷工厂
     "ALL_FS_TOOLS",
     "create_default_tool_map",
 ]
 
-ALL_FS_TOOLS: list[str] = ["read", "edit", "write", "glob", "grep", "bash", "task"]
+ALL_FS_TOOLS: list[str] = ["read", "edit", "write", "glob", "grep", "bash", "task", "interrupt"]
 
 
 def create_default_tool_map() -> dict:
@@ -45,4 +47,5 @@ def create_default_tool_map() -> dict:
         "grep": grep,
         "bash": bash,
         "task": task,
+        "interrupt": interrupt,
     }
