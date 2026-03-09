@@ -10,9 +10,16 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 if TYPE_CHECKING:
     from src.common.filesystem_backend import BackendProtocol
 
-# 代码内模板路径
+# 代码内模板路径（按拼接顺序排列，见 templates/README.md）
 _TEMPLATES_DIR: Path = Path(__file__).parent / "templates"
-_SYSTEM_MAIN_PROMPT: Path = _TEMPLATES_DIR / "system-main-prompt.md"
+_SYSTEM_PROMPT_PARTS: list[Path] = [
+    _TEMPLATES_DIR / "identity.md",
+    _TEMPLATES_DIR / "behavior.md",
+    _TEMPLATES_DIR / "tool-policy.md",
+    _TEMPLATES_DIR / "task-management.md",
+    _TEMPLATES_DIR / "skill.md",
+    _TEMPLATES_DIR / "card.md",
+]
 
 # agent_fs backend 中的路径（系统级，全局共享）
 _AGENT_MD_PATH = "/agent.md"
@@ -43,8 +50,14 @@ class PromptBuilder:
 
     @staticmethod
     def load_system_prompt() -> str:
-        """加载系统提示词（代码内模板，不依赖 backend）。"""
-        return _SYSTEM_MAIN_PROMPT.read_text(encoding="utf-8").strip()
+        """加载系统提示词（多文件拼接，顺序见 templates/README.md）。"""
+        parts: list[str] = []
+        for path in _SYSTEM_PROMPT_PARTS:
+            if path.exists():
+                content = path.read_text(encoding="utf-8").strip()
+                if content:
+                    parts.append(content)
+        return "\n\n".join(parts)
 
     def build_system_prompt(self) -> str:
         """加载系统提示词（带实例缓存）。"""
