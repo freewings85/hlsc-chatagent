@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const BASE_URL = process.env.VITE_URL ?? 'http://127.0.0.1:5173'
+const BASE_URL = process.env.BASE_URL ?? 'http://127.0.0.1:8100'
 
 // OpenClaw github skill (public, stable)
 const GITHUB_SKILL_URL =
@@ -82,12 +82,12 @@ test.describe('Skill Manager', () => {
     await expect(page.locator('.install-input')).toBeVisible({ timeout: 10000 })
   })
 
-  test('MCP 页面占位', async ({ page }) => {
-    // 等侧栏加载
+  test('MCP 页面 - 显示添加表单', async ({ page }) => {
     await expect(page.locator('.nav-item', { hasText: 'MCP' })).toBeVisible({ timeout: 5000 })
     await page.locator('.nav-item', { hasText: 'MCP' }).click()
-    await expect(page.locator('.mcp-placeholder')).toBeVisible({ timeout: 10000 })
-    await expect(page.locator('.mcp-placeholder h2')).toContainText('MCP')
+    await expect(page.locator('h2', { hasText: '添加 MCP 服务器' })).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('#mcp-name')).toBeVisible()
+    await expect(page.locator('#mcp-url')).toBeVisible()
   })
 })
 

@@ -59,9 +59,23 @@ function parseSseChunk(raw: string): SseEvent[] {
 // Component
 // --------------------------------------------------------------------------
 
+const STORAGE_KEY_SID = 'chat_session_id'
+const STORAGE_KEY_MSG = 'chat_messages'
+
+function loadSessionId(): string {
+  return sessionStorage.getItem(STORAGE_KEY_SID) || 'sess-' + Math.random().toString(36).slice(2, 10)
+}
+
+function loadMessages(): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY_MSG)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
 export default function ChatPage() {
-  const [sessionId, setSessionId] = useState(() => 'sess-' + Math.random().toString(36).slice(2, 10))
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [sessionId, setSessionId] = useState(loadSessionId)
+  const [messages, setMessages] = useState<ChatMessage[]>(loadMessages)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const chatAreaRef = useRef<HTMLDivElement>(null)
@@ -76,6 +90,10 @@ export default function ChatPage() {
   }, [])
 
   useEffect(scrollToBottom, [messages, scrollToBottom])
+
+  // 持久化 sessionId 和 messages 到 sessionStorage
+  useEffect(() => { sessionStorage.setItem(STORAGE_KEY_SID, sessionId) }, [sessionId])
+  useEffect(() => { sessionStorage.setItem(STORAGE_KEY_MSG, JSON.stringify(messages)) }, [messages])
 
   const newSession = () => {
     if (streaming) return
@@ -170,7 +188,8 @@ export default function ChatPage() {
         }
         case 'tool_result': {
           const id = (d.tool_call_id as string) ?? ''
-          const result = (d.result as string) ?? ''
+          const rawResult = d.result
+          const result = typeof rawResult === 'object' ? JSON.stringify(rawResult, null, 2) : String(rawResult ?? '')
           const tools = last.tools.map(t => t.id === id ? { ...t, result, status: 'done' as const } : t)
           copy[copy.length - 1] = { ...last, tools }
           break

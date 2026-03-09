@@ -5,7 +5,7 @@ description = "通用对话 Agent，基于 Pydantic AI"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pydantic-ai-slim[openai]>=1.66.0",
+    "pydantic-ai-slim[openai,fastmcp]>=1.66.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     "python-dotenv>=1.0.0",

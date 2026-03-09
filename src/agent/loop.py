@@ -52,6 +52,7 @@ from src.agent.prompt.prompt_builder import PromptBuilder
 from src.agent.skills.invoked_store import InvokedSkillStore
 from src.agent.skills.registry import SkillRegistry, get_default_skill_dirs
 from src.agent.skills.tool import invoke_skill
+from src.agent.mcp.loader import load_mcp_toolsets
 from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
 from src.config.settings import get_agent_fs_backend, get_backend, get_compact_config
@@ -292,6 +293,9 @@ async def run_agent_loop(
         system_prompt=system_prompt,
     )
 
+    # MCP toolsets 动态加载（每次对话获取最新配置）
+    mcp_toolsets = await load_mcp_toolsets(agent_fs_backend)
+
     # 加载历史（保持 AgentMessage 格式，仅在 ModelRequestNode 执行前转换）
     agent_history: list[AgentMessage] = []
     if message_history is None:
@@ -309,6 +313,7 @@ async def run_agent_loop(
             task.message,
             deps=deps,
             message_history=[],  # 空历史，由我们在 ModelRequestNode 前注入
+            toolsets=mcp_toolsets if mcp_toolsets else None,
         ) as run:
             node = run.next_node
 

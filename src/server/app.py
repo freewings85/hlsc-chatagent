@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.server.request import ChatRequest
 from src.server.agent_md_api import router as agent_md_router
+from src.server.mcp_api import router as mcp_router
 from src.server.skill_api import router as skill_router
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ app.add_middleware(
 # 管理 API
 app.include_router(skill_router)
 app.include_router(agent_md_router)
+app.include_router(mcp_router)
 
 _WEB_DIR: Path = Path(__file__).parent.parent.parent / "web"
 _DIST_DIR: Path = _WEB_DIR / "dist"
@@ -60,6 +62,18 @@ async def index() -> HTMLResponse:
 # 静态资源（JS/CSS）从 dist/assets/ 提供
 if _DIST_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_DIST_DIR / "assets")), name="static-assets")
+
+
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def spa_fallback(full_path: str) -> HTMLResponse:
+    """SPA 路由回退：非 API 路径返回 index.html，由前端路由处理。"""
+    dist_html = _DIST_DIR / "index.html"
+    if dist_html.exists():
+        return HTMLResponse(content=dist_html.read_text(encoding="utf-8"))
+    dev_html = _WEB_DIR / "index.html"
+    if dev_html.exists():
+        return HTMLResponse(content=dev_html.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>web/index.html 不存在</h1>", status_code=404)
 
 
 @app.post("/chat/stream")

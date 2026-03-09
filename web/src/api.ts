@@ -81,3 +81,77 @@ export async function updateAgentMd(content: string): Promise<{ success: boolean
   }
   return res.json()
 }
+
+// --------------------------------------------------------------------------- //
+// MCP API
+// --------------------------------------------------------------------------- //
+
+export interface McpServerInfo {
+  name: string
+  url: string
+  headers: Record<string, string>
+}
+
+export interface McpToolInfo {
+  name: string
+  description: string | null
+}
+
+export interface ProbeResponse {
+  success: boolean
+  tools: McpToolInfo[]
+  error: string
+}
+
+export interface McpResponse {
+  success: boolean
+  message: string
+}
+
+export async function listMcpServers(): Promise<McpServerInfo[]> {
+  const res = await fetch(`${BASE}/api/mcp/servers`)
+  if (!res.ok) throw new Error(`加载 MCP 服务器列表失败: ${res.status}`)
+  return res.json()
+}
+
+export async function addMcpServer(name: string, url: string, headers: Record<string, string> = {}): Promise<McpResponse> {
+  const res = await fetch(`${BASE}/api/mcp/servers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url, headers }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(data.detail || `添加失败: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function removeMcpServer(name: string): Promise<McpResponse> {
+  const res = await fetch(`${BASE}/api/mcp/servers/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(data.detail || `移除失败: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function probeMcpServer(name: string): Promise<ProbeResponse> {
+  const res = await fetch(`${BASE}/api/mcp/servers/${encodeURIComponent(name)}/probe`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`探测失败: ${res.status}`)
+  return res.json()
+}
+
+export async function probeMcpUrl(url: string): Promise<ProbeResponse> {
+  const res = await fetch(`${BASE}/api/mcp/probe-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: '', url }),
+  })
+  if (!res.ok) throw new Error(`探测失败: ${res.status}`)
+  return res.json()
+}
