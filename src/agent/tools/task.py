@@ -6,17 +6,19 @@
 - 子 agent 完成任务后返回结果文本给主 agent
 - 子 agent 不推送 SSE 事件（结果只回给主 agent）
 
+工具继承策略（参考 Claude Code）：
+- subagent 继承父 agent 的所有工具，**排除** task（防递归）和 Skill（高层意图）
+- MCP 工具等动态注册的工具也会被继承
+- Skills 只在主 agent 层面触发和执行
+
 支持的子 agent 类型：
 - plan: 只读，探索代码库并设计实现方案
-- explore: 只读，快速搜索和分析代码
 - general: 全能力，可读写文件（默认）
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Literal
-
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 
@@ -26,107 +28,56 @@ from src.agent.model import create_model
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
-# 子 agent 类型定义
+# 子 agent 工具排除列表
 # --------------------------------------------------------------------------- #
 
-# 只读工具列表（plan / explore 使用）
-_READ_ONLY_TOOLS: list[str] = ["read", "glob", "grep", "bash"]
+# 子 agent 不能使用的工具（防递归 + 高层意图隔离）
+_EXCLUDED_TOOLS: set[str] = {"task", "Skill"}
 
-# 子 agent 可用工具集（按类型）
-_SUBAGENT_TOOLS: dict[str, list[str]] = {
-    "plan": _READ_ONLY_TOOLS,
-    "explore": _READ_ONLY_TOOLS,
-    "general": ["read", "edit", "write", "glob", "grep", "bash"],
-}
+# plan 模式额外排除的写操作工具
+_PLAN_EXCLUDED_TOOLS: set[str] = {"edit", "write"}
 
 # --------------------------------------------------------------------------- #
 # 子 agent System Prompt
 # --------------------------------------------------------------------------- #
 
 _PLAN_SYSTEM_PROMPT = """\
-你是一个软件架构师和规划专家。你的角色是探索代码库并设计实现方案。
+你是一个只读分析规划 agent。根据分配的任务进行信息收集和分析，不多做也不少做。
 
-=== 关键：只读模式 — 禁止修改文件 ===
-这是一个只读规划任务。你被严格禁止：
-- 创建新文件（不能使用 write、touch 或任何文件创建操作）
-- 修改现有文件（不能使用 edit 操作）
-- 删除文件
-- 使用重定向操作符写入文件
-
-你的角色仅限于探索代码库和设计实现方案。
+=== 只读模式 — 禁止修改文件 ===
+你只能使用 read、glob、grep、bash（仅只读命令）。禁止创建、修改或删除任何文件。
 
 ## 工作流程
 
-1. **理解需求**：聚焦提供的需求
-2. **充分探索**：
-   - 使用 glob、grep、read 查找现有模式和约定
-   - 理解当前架构
-   - 找到相似功能作为参考
-   - 追踪相关代码路径
-   - bash 仅用于只读操作（ls, git status, git log, git diff）
-3. **设计方案**：
-   - 基于探索结果创建实现方案
-   - 考虑权衡和架构决策
-   - 遵循现有模式
-4. **详述计划**：
-   - 提供分步实现策略
-   - 标识依赖和执行顺序
-   - 预判潜在挑战
+1. **理解需求**：聚焦分配的任务目标
+2. **信息收集**：
+   - 使用 glob、grep、read 查找相关信息和数据
+   - bash 仅用于只读操作（ls, curl 等）
+3. **分析整理**：
+   - 基于收集的信息进行分析
+   - 识别关键点和潜在风险
+   - 提出可行方案
+4. **输出报告**：
+   - 提供结构化的分析结果
+   - 标明信息来源和依据
 
-## 输出要求
-
-在响应末尾包含：
-
-### 关键文件
-列出实现此方案最关键的 3-5 个文件：
-- path/to/file1 - [原因]
-- path/to/file2 - [原因]
-
-记住：你只能探索和规划。不能写入、编辑或修改任何文件。
-"""
-
-_EXPLORE_SYSTEM_PROMPT = """\
-你是一个代码搜索专家。你擅长快速导航和探索代码库。
-
-=== 关键：只读模式 — 禁止修改文件 ===
-这是一个只读搜索任务。你被严格禁止创建、修改或删除文件。
-
-你的优势：
-- 使用 glob 模式快速查找文件
-- 使用正则表达式搜索代码内容
-- 阅读和分析文件内容
-
-工作准则：
-- 用 glob 做广泛文件模式匹配
-- 用 grep 搜索文件内容
-- 用 read 读取已知路径的文件
-- bash 仅用于只读操作（ls, git status, git log, git diff）
-- 尽可能并行调用多个工具以提高效率
-- 返回文件路径时使用绝对路径
-
-高效完成搜索请求并清晰报告发现。
+注意事项：
+- bash 每次调用是独立进程，工作目录会重置，请始终使用绝对路径。
+- 返回结果中引用文件时必须使用绝对路径。
 """
 
 _GENERAL_SYSTEM_PROMPT = """\
 你是一个子 agent，被主 agent 分配了一个具体任务。\
-根据分配的任务使用可用工具完成工作。完成后提供详细的结果报告。
+使用可用工具完成分配的任务，不多做也不少做。完成后提供详细的结果报告。
 
-你的优势：
-- 搜索代码、配置和模式
-- 分析多个文件以理解系统架构
-- 执行多步研究任务
-- 读写文件完成实现任务
-
-工作准则：
-- 优先编辑现有文件而非创建新文件
-- 不主动创建文档文件
-- 结果中包含相关文件路径（使用绝对路径）
-- 完成任务后提供详细的完成报告
+注意事项：
+- bash 每次调用是独立进程，工作目录会重置，请始终使用绝对路径。
+- 返回结果中引用文件时必须使用绝对路径。
+- 优先编辑现有文件而非创建新文件。
 """
 
 _SUBAGENT_PROMPTS: dict[str, str] = {
     "plan": _PLAN_SYSTEM_PROMPT,
-    "explore": _EXPLORE_SYSTEM_PROMPT,
     "general": _GENERAL_SYSTEM_PROMPT,
 }
 
@@ -134,6 +85,21 @@ _SUBAGENT_PROMPTS: dict[str, str] = {
 # --------------------------------------------------------------------------- #
 # 子 agent 工具集构建
 # --------------------------------------------------------------------------- #
+
+def _resolve_subagent_tools(
+    parent_deps: AgentDeps,
+    subagent_type: str,
+) -> list[str]:
+    """从父 agent 的 tool_map 动态解析子 agent 可用工具列表。
+
+    策略：继承父 agent 所有工具，排除 task/Skill；plan 额外排除写操作工具。
+    """
+    excluded = _EXCLUDED_TOOLS.copy()
+    if subagent_type == "plan":
+        excluded |= _PLAN_EXCLUDED_TOOLS
+
+    return [name for name in parent_deps.tool_map if name not in excluded]
+
 
 def _build_subagent_get_tools(tool_names: list[str], parent_deps: AgentDeps):
     """构建子 agent 的 get_tools 函数，从父 deps 的 tool_map 中筛选工具。"""
@@ -204,21 +170,21 @@ async def task(
     ctx: RunContext[AgentDeps],
     description: str,
     prompt: str,
-    subagent_type: str = "plan",
+    subagent_type: str = "general",
 ) -> str:
-    """Launch a read-only sub-agent for research or planning.
+    """Launch a sub-agent to handle complex, multi-step tasks autonomously.
 
-    The sub-agent runs in an independent context window. It can search and
-    analyze files but CANNOT create or modify files. All file writes must
-    be done by you directly (using write, edit, bash), not delegated here.
+    The sub-agent runs in an independent context window with its own tool set.
+    It inherits all parent tools except task (no recursion) and Skill (main
+    agent only). Plan mode additionally excludes write/edit tools.
 
     Args:
         description: A short (3-5 word) summary of the task for logging.
         prompt: Detailed task description for the sub-agent. Must contain ALL
             necessary context since the sub-agent cannot see the main conversation.
         subagent_type: Type of sub-agent to launch.
-            "plan" — analyze requirements and design a step-by-step plan.
-            "explore" — search and analyze existing files.
+            "plan" — read-only; analyze requirements and design a step-by-step plan.
+            "general" — full capability; can read, write, and execute commands.
 
     Returns:
         The sub-agent's result text. The result is NOT visible to the user —
@@ -235,7 +201,7 @@ async def task(
     try:
         # 构建子 agent（独立实例，独立上下文）
         system_prompt = _SUBAGENT_PROMPTS[subagent_type]
-        tool_names = _SUBAGENT_TOOLS[subagent_type]
+        tool_names = _resolve_subagent_tools(ctx.deps, subagent_type)
         sub_get_tools = _build_subagent_get_tools(tool_names, ctx.deps)
 
         model = create_model()
