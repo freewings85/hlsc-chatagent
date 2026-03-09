@@ -11,3 +11,7 @@ build/
 .pytest_cache/
 doc/
 iterations/
+
+# 运行时配置（sample 版本入库作为示例）
+.chatagent/skills/
+.chatagent/mcp.json
