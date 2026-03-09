@@ -61,6 +61,14 @@ class AgentFsConfig:
 
 
 @dataclass
+class LogfireConfig:
+    """可观测性配置（Logfire / OpenTelemetry）"""
+
+    enabled: bool = field(default_factory=lambda: os.getenv("LOGFIRE_ENABLED", "false").lower() == "true")
+    endpoint: str = field(default_factory=lambda: os.getenv("LOGFIRE_ENDPOINT", ""))
+
+
+@dataclass
 class ServerConfig:
     """服务器配置"""
 

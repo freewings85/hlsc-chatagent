@@ -1,20 +1,40 @@
 """uvicorn 入口"""
 
-import os
-
 from dotenv import load_dotenv
 load_dotenv()
 
 import uvicorn
 
-from src.config.settings import get_server_config
+from src.config.settings import LogfireConfig, get_server_config
 
-# Logfire：trace agent 轨迹（LLM 调用、工具调用、HTTP 请求）
-# 通过 LOGFIRE_ENABLED=true 开启，默认关闭
-if os.getenv("LOGFIRE_ENABLED", "false").lower() == "true":
+
+def _setup_logfire() -> None:
+    """根据配置初始化 Logfire / OTel tracing。"""
+    config = LogfireConfig()
+    if not config.enabled:
+        return
+
     import logfire
-    logfire.configure(service_name="chatagent")
+
+    if config.endpoint:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+        from src.config.otel import UnicodeDecodeSpanProcessor
+
+        logfire.configure(
+            service_name="chatagent",
+            send_to_logfire=False,
+            additional_span_processors=[
+                UnicodeDecodeSpanProcessor(OTLPSpanExporter(endpoint=config.endpoint)),
+            ],
+        )
+    else:
+        logfire.configure(service_name="chatagent")
+
     logfire.instrument_pydantic_ai()
+
+
+_setup_logfire()
 
 
 def main() -> None:
