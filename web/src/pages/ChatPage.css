@@ -246,6 +246,46 @@
   font-size: 12px;
 }
 
+/* Card block */
+.card-block {
+  background: var(--surface-hover, #f0f7ff);
+  border: 1px solid var(--accent-dim, #64b5f6);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.card-icon { font-size: 16px; }
+.card-type { color: var(--accent, #42a5f5); text-transform: capitalize; }
+.card-body {
+  font-size: 13px;
+}
+.card-field {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+}
+.card-field:last-child { border-bottom: none; }
+.card-label {
+  color: var(--muted, #888);
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 80px;
+}
+.card-value {
+  color: var(--text, #333);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
 /* Interrupt card */
 .interrupt-block {
   background: #fffde7;

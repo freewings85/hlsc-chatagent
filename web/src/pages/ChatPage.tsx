@@ -20,11 +20,18 @@ interface InterruptCard {
   data: Record<string, unknown>
 }
 
+interface CardData {
+  tool_call_id: string
+  detail_type: string
+  data: { success: boolean; data: Record<string, unknown> }
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
   tools: ToolCall[]
   interrupts: InterruptCard[]
+  cards: Record<string, CardData>
 }
 
 // --------------------------------------------------------------------------
@@ -108,8 +115,8 @@ export default function ChatPage() {
     setStreaming(true)
 
     // Add user message + empty assistant placeholder
-    const userMsg: ChatMessage = { role: 'user', text, tools: [], interrupts: [] }
-    const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [] }
+    const userMsg: ChatMessage = { role: 'user', text, tools: [], interrupts: [], cards: {} }
+    const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [], cards: {} }
     setMessages(prev => [...prev, userMsg, asstMsg])
 
     let buffer = ''
@@ -194,6 +201,19 @@ export default function ChatPage() {
           copy[copy.length - 1] = { ...last, tools }
           break
         }
+        case 'tool_result_detail': {
+          const toolCallId = (d.tool_call_id as string) ?? ''
+          if (toolCallId) {
+            const cardData: CardData = {
+              tool_call_id: toolCallId,
+              detail_type: (d.detail_type as string) ?? 'unknown',
+              data: (d.data as CardData['data']) ?? { success: false, data: {} },
+            }
+            const cards = { ...last.cards, [toolCallId]: cardData }
+            copy[copy.length - 1] = { ...last, cards }
+          }
+          break
+        }
         case 'interrupt': {
           const cardType = (d.type as string) ?? 'unknown'
           const card: InterruptCard = { type: cardType, data: d }
@@ -262,7 +282,9 @@ export default function ChatPage() {
                     <InterruptBlock key={`int-${j}`} card={card} onReply={replyToInterrupt} disabled={streaming} />
                   ))}
                   {msg.text ? (
-                    <div className="text-segment">{msg.text}</div>
+                    <div className="text-segment">
+                      <RichText text={msg.text} cards={msg.cards} />
+                    </div>
                   ) : (
                     streaming && i === messages.length - 1 && msg.tools.length === 0 && (
                       <div className="typing"><span /><span /><span /></div>
@@ -290,6 +312,66 @@ export default function ChatPage() {
         <button id="send-btn" className="btn-send" onClick={sendMessage} disabled={streaming || !input.trim()}>
           发送 ↑
         </button>
+      </div>
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// RichText: splits text on {{card:xxx}} and renders card components inline
+// --------------------------------------------------------------------------
+
+function RichText({ text, cards }: { text: string; cards: Record<string, CardData> }) {
+  // Split by {{card:toolCallId}} pattern
+  const parts = text.split(/\{\{card:([^}]+)\}\}/)
+  // parts: [text, toolCallId, text, toolCallId, ...]
+
+  if (parts.length === 1) return <>{text}</>
+
+  // 按 tool_call_id 精确查找，找不到时按 detail_type fallback
+  const findCard = (ref: string): CardData | undefined => {
+    if (cards[ref]) return cards[ref]
+    return Object.values(cards).find(c => c.detail_type === ref)
+  }
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (i % 2 === 0) {
+          // Text segment
+          return part ? <span key={i}>{part}</span> : null
+        }
+        // Card reference — part is toolCallId or detail_type
+        const card = findCard(part)
+        if (!card) return <span key={i}>{`{{card:${part}}}`}</span>
+        return <CardComponent key={i} card={card} />
+      })}
+    </>
+  )
+}
+
+// --------------------------------------------------------------------------
+// CardComponent: renders a card block based on detail_type
+// --------------------------------------------------------------------------
+
+function CardComponent({ card }: { card: CardData }) {
+  const data = card.data?.data ?? {}
+
+  return (
+    <div className="card-block" data-card-type={card.detail_type}>
+      <div className="card-header">
+        <span className="card-icon">📊</span>
+        <span className="card-type">{card.detail_type}</span>
+      </div>
+      <div className="card-body">
+        {Object.entries(data).map(([k, v]) => (
+          <div key={k} className="card-field">
+            <span className="card-label">{k}:</span>
+            <span className="card-value">
+              {typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   )

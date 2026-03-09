@@ -20,13 +20,25 @@ def get_weather(city: str) -> str:
     Args:
         city: 城市名称，如"北京"、"上海"
     """
+    import json
+
     # 模拟天气数据
     conditions = ["晴", "多云", "阴", "小雨", "大雨", "雪"]
     temp = random.randint(-5, 38)
     humidity = random.randint(20, 95)
     condition = random.choice(conditions)
 
-    return f"{city}当前天气：{condition}，温度 {temp}°C，湿度 {humidity}%"
+    # 返回卡片格式数据
+    card_data = {
+        "city": city,
+        "condition": condition,
+        "temperature": temp,
+        "humidity": humidity,
+        "unit": "°C",
+    }
+    summary = f"{city}当前天气：{condition}，温度 {temp}°C，湿度 {humidity}%"
+
+    return f"<!--card:weather-->\n{json.dumps(card_data, ensure_ascii=False)}\n<!--/card-->\n{summary}"
 
 
 @mcp.tool()

@@ -57,6 +57,7 @@ from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
 from src.config.settings import get_agent_fs_backend, get_backend, get_compact_config
 from src.event.event_emitter import EventEmitter
+from src.agent.card_parser import make_card_reminder, parse_card
 from src.event.event_model import EventModel
 from src.event.event_type import EventType
 
@@ -200,14 +201,47 @@ async def _emit_tool_events(
             elif isinstance(event, FunctionToolResultEvent):
                 content = event.result.content if hasattr(event.result, "content") else str(event.result)
                 result_tool_name = event.result.tool_name
+                tool_call_id = getattr(event.result, "tool_call_id", "")
                 log_tool_end(result_tool_name, output_data=content)
+
+                # 卡片解析：从 tool result 中提取 <!--card:type--> 块
+                # MCP tool 返回的 content 可能是 dict {"result": "..."}, 需提取字符串
+                card_text = content
+                if isinstance(content, dict) and "result" in content:
+                    card_text = str(content["result"])
+                elif not isinstance(content, str):
+                    card_text = str(content)
+                card = parse_card(card_text)
+                if card and tool_call_id:
+                    await emitter.emit(EventModel(
+                        conversation_id=task.session_id,
+                        request_id=task.request_id,
+                        type=EventType.TOOL_RESULT_DETAIL,
+                        data={
+                            "tool_call_id": tool_call_id,
+                            "detail_type": card.card_type,
+                            "data": {"success": True, "data": card.data},
+                        },
+                    ))
+                    # 追加 system-reminder 提示 LLM 可以引用卡片
+                    reminder = make_card_reminder(tool_call_id)
+                    if isinstance(content, dict) and "result" in content:
+                        content = {**content, "result": str(content["result"]) + reminder}
+                    elif isinstance(content, str):
+                        content = content + reminder
+                    else:
+                        content = str(content) + reminder
+                    # 修改 tool result content 以便 LLM 看到 reminder
+                    if hasattr(event.result, "content"):
+                        event.result.content = content
+
                 await emitter.emit(EventModel(
                     conversation_id=task.session_id,
                     request_id=task.request_id,
                     type=EventType.TOOL_RESULT,
                     data={
                         "tool_name": result_tool_name,
-                        "tool_call_id": getattr(event.result, "tool_call_id", ""),
+                        "tool_call_id": tool_call_id,
                         "result": content,
                     },
                 ))
