@@ -75,7 +75,7 @@ class TaskWorker:
                 await handler.handle(event)
 
         from src.agent.deps import AgentDeps
-        from src.agent.loop import create_agent, run_agent_loop
+        from src.agent.loop import create_agent, run_main_agent
         from src.agent.model import create_model
         from src.agent.tools import ALL_FS_TOOLS, create_default_tool_map
         from src.event.event_model import EventModel
@@ -92,7 +92,7 @@ class TaskWorker:
 
         try:
             await asyncio.gather(
-                run_agent_loop(emitter, task, agent, deps),
+                run_main_agent(emitter, task, agent, deps),
                 _consume_events(),
             )
         except Exception:

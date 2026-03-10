@@ -6,7 +6,7 @@ import pytest
 from pydantic_ai.models.function import FunctionModel
 
 from src.agent.deps import AgentDeps
-from src.agent.loop import create_agent, run_agent_loop
+from src.agent.loop import create_agent, run_main_agent
 from src.event.event_emitter import EventEmitter
 from src.event.event_model import EventModel
 from src.event.event_type import EventType
@@ -41,7 +41,7 @@ class TestAgentLoop:
         task, _ = make_task("你好")
         event_queue, emitter = make_emitter()
 
-        await run_agent_loop(emitter, task, agent, deps, message_history=[])
+        await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         events = await _collect_events(event_queue)
         # 应该有 TEXT 事件 + CHAT_REQUEST_END
@@ -69,7 +69,7 @@ class TestAgentLoop:
         event_queue, emitter = make_emitter()
 
         # 传入空历史，避免残留数据干扰 mock 函数的分支判断
-        await run_agent_loop(emitter, task, agent, deps, message_history=[])
+        await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         events = await _collect_events(event_queue)
         event_types = [e.type for e in events]
@@ -96,7 +96,7 @@ class TestAgentLoop:
 
         event_queue, emitter = make_emitter()
 
-        await run_agent_loop(emitter, task, agent, deps, message_history=[])
+        await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         # 只有结束事件和 sentinel
         events = await _collect_events(event_queue)
@@ -113,7 +113,7 @@ class TestAgentLoop:
         task, _ = make_task("你好")
         event_queue, emitter = make_emitter()
 
-        await run_agent_loop(emitter, task, agent, deps, message_history=[])
+        await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         # queue 中应该有事件（TEXT + END）+ sentinel(None)
         assert not event_queue.empty()
@@ -128,7 +128,7 @@ class TestAgentLoop:
         event_queue, emitter = make_emitter()
 
         # max_iterations=1 会在第一个迭代后退出
-        await run_agent_loop(emitter, task, agent, deps, message_history=[], max_iterations=1)
+        await run_main_agent(emitter, task, agent, deps, message_history=[], max_iterations=1)
 
         events = await _collect_events(event_queue)
         end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
@@ -149,7 +149,7 @@ class TestAgentLoop:
         event_queue, emitter = make_emitter()
 
         with pytest.raises(RuntimeError, match="test error"):
-            await run_agent_loop(emitter, task, agent, deps, message_history=[])
+            await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         # 异常时先发 ERROR 事件，再发 CHAT_REQUEST_END，最后关闭 emitter（sentinel=None）
         error_event = await event_queue.get()
@@ -172,7 +172,7 @@ class TestAgentLoop:
         event_queue, emitter = make_emitter()
 
         # 不传 message_history，让 loop 从后端加载（空的）
-        await run_agent_loop(emitter, task, agent, deps, message_history=None)
+        await run_main_agent(emitter, task, agent, deps, message_history=None)
 
         events = await _collect_events(event_queue)
         assert any(e.type == EventType.TEXT for e in events)
@@ -186,7 +186,7 @@ class TestAgentLoop:
         task, _ = make_task("你好", session_id="sid-123")
         event_queue, emitter = make_emitter()
 
-        await run_agent_loop(emitter, task, agent, deps, message_history=[])
+        await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         events = await _collect_events(event_queue)
         for event in events:
@@ -216,7 +216,7 @@ class TestAgentLoopEdgeCases:
 
         from pydantic_ai.exceptions import UnexpectedModelBehavior
         with pytest.raises(UnexpectedModelBehavior):
-            await run_agent_loop(emitter, task, agent, deps, message_history=[])
+            await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         # 异常时先发 ERROR 事件，再发 CHAT_REQUEST_END，最后关闭 emitter（sentinel=None）
         error_event = await event_queue.get()
@@ -257,7 +257,7 @@ class TestAgentLoopEdgeCases:
 
         # 工具异常被 pydantic-ai 内部捕获，不会向上抛出
         # 但 emitter 最终应关闭
-        await run_agent_loop(emitter, task, agent, deps, message_history=[], max_iterations=2)
+        await run_main_agent(emitter, task, agent, deps, message_history=[], max_iterations=2)
 
         # emitter 应该已关闭（sentinel 在 queue 中）
         events = await _collect_events(event_queue)
@@ -273,7 +273,7 @@ class TestAgentLoopEdgeCases:
         task, _ = make_task("你好")
         event_queue, emitter = make_emitter()
 
-        await run_agent_loop(emitter, task, agent, deps, message_history=[], max_iterations=0)
+        await run_main_agent(emitter, task, agent, deps, message_history=[], max_iterations=0)
 
         events = await _collect_events(event_queue)
         # 不应有 TEXT 事件
@@ -370,7 +370,7 @@ class TestCompactBlockIntegration:
         deps = AgentDeps()
 
         with patch("src.agent.loop.get_compact_config", return_value=small_config):
-            await run_agent_loop(emitter, task, agent, deps, message_history=message_history)
+            await run_main_agent(emitter, task, agent, deps, message_history=message_history)
 
         events = await _collect_events(event_queue)
         # compact 后 loop 仍然正常完成

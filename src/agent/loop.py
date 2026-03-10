@@ -1,7 +1,14 @@
-"""Agent Loop：手动 iter/next 驱动的核心循环，通过 EventEmitter 发出事件"""
+"""Agent Loop：手动 iter/next 驱动的核心循环，通过 EventEmitter 发出事件
+
+三层架构：
+- run_main_agent()  — 主 agent 入口，构建完整 services 后调用 run_agent_loop
+- run_agent_loop()  — 核心引擎（纯循环），不做任何初始化决策
+- run_sub_agent()   — 子 agent 入口（Phase 2 实现）
+"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic_ai import Agent
@@ -20,6 +27,7 @@ from pydantic_ai.messages import (
     ToolCallPartDelta,
 )
 from pydantic_ai.models import Model
+from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
@@ -62,6 +70,46 @@ from src.event.event_model import EventModel
 from src.event.event_type import EventType
 
 
+# ── LoopContext ────────────────────────────────────────────────────────────
+
+
+@dataclass
+class LoopContext:
+    """run_agent_loop 所需的全部依赖，由 run_main_agent / run_sub_agent 构建。"""
+
+    # 核心
+    agent: Agent[AgentDeps, str]
+    deps: AgentDeps
+    emitter: EventEmitter
+    task: SessionRequestTask
+
+    # 消息服务
+    pre_call_service: PreModelCallMessageService
+    memory_service: MemoryMessageService
+    transcript_service: TranscriptService
+
+    # 历史
+    agent_history: list[AgentMessage] = field(default_factory=list)
+
+    # MCP
+    mcp_toolsets: list[AbstractToolset[Any]] | None = None
+
+    # 运行限制
+    max_iterations: int = 25
+
+    # 子 agent 标识（用于事件的 agent_name 字段）
+    agent_name: str = "main"
+
+    # 子 agent 模式：不管理 request_context，不发 CHAT_REQUEST_END，不关闭 emitter
+    is_sub_agent: bool = False
+
+    # transcript 存储路径的 session_id（子 agent 隔离用）。None → 用 task.session_id
+    transcript_session_id: str | None = None
+
+
+# ── Agent 工厂 ─────────────────────────────────────────────────────────────
+
+
 def create_agent(
     model: Model,
     history_processors: list[Any] | None = None,
@@ -73,6 +121,9 @@ def create_agent(
         toolsets=[DynamicToolset(get_tools, per_run_step=True)],
         history_processors=history_processors or [],
     )
+
+
+# ── 辅助函数 ───────────────────────────────────────────────────────────────
 
 
 def _make_summarize_fn(agent: Agent[AgentDeps, str]) -> SummarizeFn:
@@ -110,6 +161,9 @@ def _format_messages_for_summary(messages: list[ModelMessage]) -> str:
     return "\n".join(lines)
 
 
+# ── 流式事件发射 ───────────────────────────────────────────────────────────
+
+
 async def _emit_model_stream(
     node: ModelRequestNode[AgentDeps, str],
     ctx: Any,
@@ -118,6 +172,7 @@ async def _emit_model_stream(
     messages_count: int = 0,
     messages: list[ModelMessage] | None = None,
     user_prompt: str | None = None,
+    agent_name: str = "main",
 ) -> None:
     """流式消费 ModelRequestNode，逐 token 发出 TEXT / TOOL_CALL 事件。
 
@@ -144,6 +199,7 @@ async def _emit_model_stream(
                         request_id=task.request_id,
                         type=EventType.TEXT,
                         data={"content": part.content},
+                        agent_name=agent_name,
                     ))
                 elif isinstance(part, ToolCallPart):
                     _tool_call_names.append(part.tool_name)
@@ -155,6 +211,7 @@ async def _emit_model_stream(
                             "tool_name": part.tool_name,
                             "tool_call_id": part.tool_call_id or "",
                         },
+                        agent_name=agent_name,
                     ))
             elif isinstance(event, PartDeltaEvent):
                 delta = event.delta
@@ -165,6 +222,7 @@ async def _emit_model_stream(
                         request_id=task.request_id,
                         type=EventType.TEXT,
                         data={"content": delta.content_delta},
+                        agent_name=agent_name,
                     ))
                 elif isinstance(delta, ToolCallPartDelta):  # pragma: no cover — 真实 LLM 流式 tool call 才触发
                     await emitter.emit(EventModel(
@@ -172,6 +230,7 @@ async def _emit_model_stream(
                         request_id=task.request_id,
                         type=EventType.TOOL_CALL_ARGS,
                         data={"args_chunk": delta.args_delta},
+                        agent_name=agent_name,
                     ))
 
     # LLM 响应完成后记录日志
@@ -186,6 +245,7 @@ async def _emit_tool_events(
     ctx: Any,
     emitter: EventEmitter,
     task: SessionRequestTask,
+    agent_name: str = "main",
 ) -> None:
     """流式消费 CallToolsNode，发出 TOOL_CALL_START / TOOL_RESULT 事件。
 
@@ -222,6 +282,7 @@ async def _emit_tool_events(
                             "detail_type": card.card_type,
                             "data": {"success": True, "data": card.data},
                         },
+                        agent_name=agent_name,
                     ))
                     # 追加 system-reminder 提示 LLM 可以引用卡片
                     reminder = make_card_reminder(tool_call_id)
@@ -244,99 +305,42 @@ async def _emit_tool_events(
                         "tool_call_id": tool_call_id,
                         "result": content,
                     },
+                    agent_name=agent_name,
                 ))
 
 
-async def run_agent_loop(
-    emitter: EventEmitter,
-    task: SessionRequestTask,
-    agent: Agent[AgentDeps, str],
-    deps: AgentDeps,
-    message_history: list[ModelMessage] | None = None,
-    max_iterations: int = 25,
-) -> None:
-    """手动驱动 agent loop，通过 emitter 发出事件。
+# ── 核心引擎 ───────────────────────────────────────────────────────────────
 
-    三层消息架构（参考设计文档 doc/agentloop主设计.md）：
-    - MemoryMessageService  — 会话消息工作集（缓存 + messages.jsonl）
-    - PreModelCallMessageService — 每轮 LLM 前：context + attachment + compact
-    - TranscriptService     — append-only 审计日志（transcript.jsonl）
 
-    流式事件：
-    - ModelRequestNode: 通过 node.stream(ctx) 逐 token 发出 TEXT / TOOL_CALL 事件
-    - CallToolsNode: 通过 node.stream(ctx) 发出 TOOL_RESULT 事件
-    - stream 完成后 run.next(node) 不会重复执行（内部检查 _result/_next_node）
+async def run_agent_loop(ctx: LoopContext) -> str | None:
+    """核心引擎：iter/next 循环 + 流式事件 + compact + 持久化。
+
+    不做任何初始化决策，只消费 LoopContext 中构建好的 services。
+    返回 final_response 文本（或 None）。
     """
-    # 设置请求上下文（供 tool/service 层自动获取 session_id/request_id）
-    set_request_context(task.session_id, task.request_id)
+    agent = ctx.agent
+    deps = ctx.deps
+    emitter = ctx.emitter
+    task = ctx.task
+    pre_call_service = ctx.pre_call_service
+    memory_service = ctx.memory_service
+    transcript_service = ctx.transcript_service
+    agent_history = ctx.agent_history
+    mcp_toolsets = ctx.mcp_toolsets
+    max_iterations = ctx.max_iterations
+    agent_name = ctx.agent_name
+    is_sub_agent = ctx.is_sub_agent
+    _transcript_sid = ctx.transcript_session_id or task.session_id
+
+    # 请求上下文：子 agent 不管理（父 agent 已设置）
+    if not is_sub_agent:
+        set_request_context(task.session_id, task.request_id)
     log_request_start(
         session_id=task.session_id,
         user_query=task.message,
         user_id=task.user_id,
         request_id=task.request_id,
     )
-
-    backend = get_backend()
-    agent_fs_backend = get_agent_fs_backend()
-
-    # 工具的工作目录 = session 目录（write("plan.md") → data/{user_id}/sessions/{session_id}/plan.md）
-    from src.storage.local_backend import FilesystemBackend
-    from src.config.settings import get_user_fs_config
-    _user_fs_cfg = get_user_fs_config()
-    _session_root = f"{_user_fs_cfg.user_fs_dir}/{task.user_id}/sessions/{task.session_id}"
-    deps.backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
-    deps.emitter = emitter
-
-    # 服务初始化
-    memory_service = MemoryMessageService(backend)
-    transcript_service = TranscriptService(backend)
-    prompt_builder: PromptBuilder = PromptBuilder(
-        user_fs_backend=backend,
-        agent_fs_backend=agent_fs_backend,
-    )
-    context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
-        user_id=task.user_id,
-    )
-    attachment_collector = AttachmentCollector(deps.file_state_tracker)
-    compactor = Compactor(
-        config=get_compact_config(),
-        user_id=task.user_id,
-        session_id=task.session_id,
-        summarize_fn=_make_summarize_fn(agent),
-    )
-
-    # Skill 系统初始化
-    skill_registry = SkillRegistry.load(get_default_skill_dirs())
-    invoked_store = InvokedSkillStore(backend, task.user_id, task.session_id)
-    await invoked_store.load()
-
-    # 若有可用 skill，注册 Skill 工具到 deps
-    if skill_registry.has_skills():
-        deps.skill_registry = skill_registry
-        deps.invoked_skill_store = invoked_store
-        deps.available_tools = [t for t in deps.available_tools if t != "Skill"] + ["Skill"]
-        deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
-
-    system_prompt = PromptBuilder.load_system_prompt()
-    pre_call_service = PreModelCallMessageService(
-        compactor=compactor,
-        context_messages=context_messages,
-        attachment_collector=attachment_collector,
-        skill_registry=skill_registry if skill_registry.has_skills() else None,
-        invoked_skill_store=invoked_store if skill_registry.has_skills() else None,
-        system_prompt=system_prompt,
-    )
-
-    # MCP toolsets 动态加载（每次对话获取最新配置）
-    mcp_toolsets = await load_mcp_toolsets(agent_fs_backend)
-
-    # 加载历史（保持 AgentMessage 格式，仅在 ModelRequestNode 执行前转换）
-    agent_history: list[AgentMessage] = []
-    if message_history is None:
-        agent_history = await memory_service.load(task.user_id, task.session_id)
-    else:
-        # 兼容外部传入 ModelMessage 的场景（如测试）
-        agent_history = from_model_messages(message_history)
 
     try:
         iteration: int = 0
@@ -412,6 +416,7 @@ async def run_agent_loop(
                         messages_count=len(pre_result.model_messages),
                         messages=pre_result.model_messages,
                         user_prompt=task.message if _first_llm_call else None,
+                        agent_name=agent_name,
                     )
                     _first_llm_call = False
                     # stream 已完成，next() 只做状态转移（不会重复调 LLM）
@@ -419,7 +424,7 @@ async def run_agent_loop(
 
                 elif isinstance(node, CallToolsNode):
                     # 工具执行（node.stream 内部完成工具调用并缓存结果）
-                    await _emit_tool_events(node, run.ctx, emitter, task)
+                    await _emit_tool_events(node, run.ctx, emitter, task, agent_name=agent_name)
                     # stream 已完成，next() 只做状态转移（不会重复执行工具）
                     node = await run.next(node)
 
@@ -442,11 +447,13 @@ async def run_agent_loop(
             appended = new_messages[_base_len:]
             # 转换为 AgentMessage 后持久化
             new_agent_messages = from_model_messages(appended)
-            await transcript_service.append(task.user_id, task.session_id, new_agent_messages)
-            await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
+            await transcript_service.append(task.user_id, _transcript_sid, new_agent_messages)
+            if not is_sub_agent:
+                # 子 agent 不写 messages.jsonl（fresh context，无需工作集持久化）
+                await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
 
     except Exception as exc:
-        log_error(f"Agent loop 异常: {exc}", exc=exc)
+        log_error(f"Agent loop 异常 (agent={agent_name}): {exc}", exc=exc)
         log_request_end(
             session_id=task.session_id,
             success=False,
@@ -459,6 +466,7 @@ async def run_agent_loop(
             request_id=task.request_id,
             type=EventType.ERROR,
             data={"message": str(exc)},
+            agent_name=agent_name,
         ))
         raise
     else:
@@ -469,12 +477,123 @@ async def run_agent_loop(
             response=final_response,
         )
     finally:
-        clear_request_context()
-        # 发送 chat_request_end 事件，通知前端流结束
-        await emitter.emit(EventModel(
-            session_id=task.session_id,
-            request_id=task.request_id,
-            type=EventType.CHAT_REQUEST_END,
-            data={},
-        ))
-        await emitter.close()
+        if not is_sub_agent:
+            clear_request_context()
+            # 发送 chat_request_end 事件，通知前端流结束
+            await emitter.emit(EventModel(
+                session_id=task.session_id,
+                request_id=task.request_id,
+                type=EventType.CHAT_REQUEST_END,
+                data={},
+                agent_name=agent_name,
+            ))
+            await emitter.close()
+
+    return final_response
+
+
+# ── 主 Agent 入口 ──────────────────────────────────────────────────────────
+
+
+async def run_main_agent(
+    emitter: EventEmitter,
+    task: SessionRequestTask,
+    agent: Agent[AgentDeps, str],
+    deps: AgentDeps,
+    message_history: list[ModelMessage] | None = None,
+    max_iterations: int = 25,
+) -> None:
+    """主 Agent 入口。保持现有 API 签名不变（app.py / task_worker.py 不用改）。
+
+    负责：
+    1. 设置 backend + request_context
+    2. 构建 PromptBuilder → context_messages
+    3. 构建 Skill 系统 → 注入 deps
+    4. 构建 PreModelCallMessageService
+    5. 加载 MCP toolsets
+    6. 加载历史（MemoryMessageService）
+    7. 组装 LoopContext
+    8. 调用 run_agent_loop(ctx)
+    """
+    # 确保 deps 与 task 的 session/user 信息一致
+    deps.session_id = task.session_id
+    deps.user_id = task.user_id
+
+    backend = get_backend()
+    agent_fs_backend = get_agent_fs_backend()
+
+    # 工具的工作目录 = session 目录（write("plan.md") → data/{user_id}/sessions/{session_id}/plan.md）
+    from src.storage.local_backend import FilesystemBackend
+    from src.config.settings import get_user_fs_config
+    _user_fs_cfg = get_user_fs_config()
+    _session_root = f"{_user_fs_cfg.user_fs_dir}/{task.user_id}/sessions/{task.session_id}"
+    deps.backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
+    deps.emitter = emitter
+
+    # 服务初始化
+    memory_service = MemoryMessageService(backend)
+    transcript_service = TranscriptService(backend)
+    prompt_builder: PromptBuilder = PromptBuilder(
+        user_fs_backend=backend,
+        agent_fs_backend=agent_fs_backend,
+    )
+    context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
+        user_id=task.user_id,
+    )
+    attachment_collector = AttachmentCollector(deps.file_state_tracker)
+    compactor = Compactor(
+        config=get_compact_config(),
+        user_id=task.user_id,
+        session_id=task.session_id,
+        summarize_fn=_make_summarize_fn(agent),
+    )
+
+    # Skill 系统初始化
+    skill_registry = SkillRegistry.load(get_default_skill_dirs())
+    invoked_store = InvokedSkillStore(backend, task.user_id, task.session_id)
+    await invoked_store.load()
+
+    # 若有可用 skill，注册 Skill 工具到 deps
+    if skill_registry.has_skills():
+        deps.skill_registry = skill_registry
+        deps.invoked_skill_store = invoked_store
+        deps.available_tools = [t for t in deps.available_tools if t != "Skill"] + ["Skill"]
+        deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
+
+    system_prompt = PromptBuilder.load_system_prompt()
+    pre_call_service = PreModelCallMessageService(
+        compactor=compactor,
+        context_messages=context_messages,
+        attachment_collector=attachment_collector,
+        skill_registry=skill_registry if skill_registry.has_skills() else None,
+        invoked_skill_store=invoked_store if skill_registry.has_skills() else None,
+        system_prompt=system_prompt,
+    )
+
+    # MCP toolsets 动态加载（每次对话获取最新配置）
+    mcp_toolsets = await load_mcp_toolsets(agent_fs_backend)
+
+    # 加载历史（保持 AgentMessage 格式，仅在 ModelRequestNode 执行前转换）
+    agent_history: list[AgentMessage] = []
+    if message_history is None:
+        agent_history = await memory_service.load(task.user_id, task.session_id)
+    else:
+        # 兼容外部传入 ModelMessage 的场景（如测试）
+        agent_history = from_model_messages(message_history)
+
+    # 组装 LoopContext 并调用核心引擎
+    ctx = LoopContext(
+        agent=agent,
+        deps=deps,
+        emitter=emitter,
+        task=task,
+        pre_call_service=pre_call_service,
+        memory_service=memory_service,
+        transcript_service=transcript_service,
+        agent_history=agent_history,
+        mcp_toolsets=mcp_toolsets if mcp_toolsets else None,
+        max_iterations=max_iterations,
+        agent_name="main",
+    )
+
+    await run_agent_loop(ctx)

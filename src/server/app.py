@@ -92,7 +92,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
               interrupt / error / chat_request_end
     """
     from src.agent.deps import AgentDeps
-    from src.agent.loop import create_agent, run_agent_loop
+    from src.agent.loop import create_agent, run_main_agent
     from src.agent.model import create_model
     from src.agent.tools import ALL_FS_TOOLS, create_default_tool_map
     from src.common.session_request_task import SessionRequestTask
@@ -125,7 +125,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
     # 后台运行 Agent Loop，前台 SSE generator 消费事件
     loop_task: asyncio.Task[None] = asyncio.create_task(
-        run_agent_loop(emitter, task, agent, deps),
+        run_main_agent(emitter, task, agent, deps),
         name=f"agent-loop-{task.task_id}",
     )
     _running_tasks[task.task_id] = (task, loop_task)
@@ -195,7 +195,7 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
     需要 KAFKA_ENABLED=true 才可用。
     """
     from src.agent.deps import AgentDeps
-    from src.agent.loop import create_agent, run_agent_loop
+    from src.agent.loop import create_agent, run_main_agent
     from src.agent.model import create_model
     from src.agent.tools import ALL_FS_TOOLS, create_default_tool_map
     from src.common.session_request_task import SessionRequestTask
@@ -234,7 +234,7 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
     )
 
     loop_task = asyncio.create_task(
-        run_agent_loop(emitter, task, agent, deps),
+        run_main_agent(emitter, task, agent, deps),
         name=f"agent-loop-async-{task.task_id}",
     )
     _running_tasks[task.task_id] = (task, loop_task)

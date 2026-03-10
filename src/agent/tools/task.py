@@ -3,8 +3,8 @@
 参考 Claude Code 的 Agent/Task tool 设计：
 - 主 agent 调用 Task 工具，指定 prompt 和 subagent_type
 - Task 工具内部创建新的 Agent 实例（独立上下文）
-- 子 agent 完成任务后返回结果文本给主 agent
-- 子 agent 不推送 SSE 事件（结果只回给主 agent）
+- 子 agent 通过 run_agent_loop 引擎运行（与主 agent 共享同一套核心循环）
+- 子 agent 的事件通过父 agent 的 emitter 推送（agent_name 区分）
 
 工具继承策略（参考 Claude Code）：
 - subagent 继承父 agent 的所有工具，**排除** task（防递归）和 Skill（高层意图）
@@ -19,6 +19,8 @@
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
+
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 
@@ -81,6 +83,11 @@ _SUBAGENT_PROMPTS: dict[str, str] = {
     "general": _GENERAL_SYSTEM_PROMPT,
 }
 
+_SUBAGENT_MAX_TURNS: dict[str, int] = {
+    "plan": 20,
+    "general": 25,
+}
+
 
 # --------------------------------------------------------------------------- #
 # 子 agent 工具集构建
@@ -118,51 +125,6 @@ def _build_subagent_get_tools(tool_names: list[str], parent_deps: AgentDeps):
 
 
 # --------------------------------------------------------------------------- #
-# 子 agent 日志
-# --------------------------------------------------------------------------- #
-
-def _log_subagent_trace(
-    messages: list,
-    subagent_type: str,
-    description: str,
-) -> None:
-    """记录子 agent 的完整对话轨迹到 session execution.log。"""
-    from pydantic_ai.messages import (
-        ModelRequest,
-        ModelResponse,
-        SystemPromptPart,
-        TextPart,
-        ToolCallPart,
-        ToolReturnPart,
-        UserPromptPart,
-    )
-    from src.utils.session_logger import log_info
-
-    lines: list[str] = [f"[SUBAGENT_TRACE] type={subagent_type}, desc={description}"]
-
-    for i, msg in enumerate(messages):
-        if isinstance(msg, ModelRequest):
-            for part in msg.parts:
-                if isinstance(part, SystemPromptPart):
-                    lines.append(f"  [{i}] system ({len(part.content)} chars)")
-                elif isinstance(part, UserPromptPart):
-                    content = part.content if isinstance(part.content, str) else str(part.content)
-                    lines.append(f"  [{i}] user: {content[:200]}")
-                elif isinstance(part, ToolReturnPart):
-                    content = part.content if isinstance(part.content, str) else str(part.content)
-                    lines.append(f"  [{i}] tool_return({part.tool_name}): {content[:200]}")
-        elif isinstance(msg, ModelResponse):
-            for part in msg.parts:
-                if isinstance(part, TextPart):
-                    lines.append(f"  [{i}] assistant: {part.content[:200]}")
-                elif isinstance(part, ToolCallPart):
-                    args = part.args if isinstance(part.args, str) else str(part.args)
-                    lines.append(f"  [{i}] tool_call: {part.tool_name}({args[:150]})")
-
-    log_info("\n".join(lines))
-
-
-# --------------------------------------------------------------------------- #
 # Task 工具实现
 # --------------------------------------------------------------------------- #
 
@@ -174,7 +136,8 @@ async def task(
 ) -> str:
     """Launch a sub-agent to handle complex, multi-step tasks autonomously.
 
-    The sub-agent runs in an independent context window with its own tool set.
+    The sub-agent runs in an independent context window with its own tool set,
+    using the same core engine as the main agent (streaming, compact, transcript).
     It inherits all parent tools except task (no recursion) and Skill (main
     agent only). Plan mode additionally excludes write/edit tools.
 
@@ -199,43 +162,148 @@ async def task(
     log_info(f"[TASK_START] type={subagent_type}, description={description}")
 
     try:
-        # 构建子 agent（独立实例，独立上下文）
-        system_prompt = _SUBAGENT_PROMPTS[subagent_type]
-        tool_names = _resolve_subagent_tools(ctx.deps, subagent_type)
-        sub_get_tools = _build_subagent_get_tools(tool_names, ctx.deps)
-
-        model = create_model()
-        sub_agent: Agent[AgentDeps, str] = Agent(
-            model,
-            deps_type=AgentDeps,
-            system_prompt=system_prompt,
-            toolsets=[DynamicToolset(sub_get_tools, per_run_step=True)],
-        )
-
-        # 子 agent 使用独立的 deps（共享 backend 和 file_state_tracker）
-        sub_deps = AgentDeps(
-            session_id=ctx.deps.session_id,
-            user_id=ctx.deps.user_id,
-            available_tools=tool_names,
-            tool_map=ctx.deps.tool_map,
-            backend=ctx.deps.backend,
-            file_state_tracker=ctx.deps.file_state_tracker,
-        )
-
-        # 运行子 agent（Pydantic AI 自动处理工具调用循环）
-        result = await sub_agent.run(prompt, deps=sub_deps)
-
-        # 记录子 agent 的完整对话轨迹（用于调试）
-        _log_subagent_trace(result.all_messages(), subagent_type, description)
-
+        result = await _run_sub_agent(ctx, description, prompt, subagent_type)
         log_info(
             f"[TASK_END] type={subagent_type}, description={description}, "
-            f"output_length={len(result.output)}"
+            f"output_length={len(result)}"
         )
-        return result.output
+        return result
 
     except Exception as exc:
         error_msg = f"子 agent 执行失败 (type={subagent_type}): {exc}"
         logger.error(error_msg, exc_info=True)
         log_info(f"[TASK_ERROR] type={subagent_type}, description={description}, error={exc}")
         return error_msg
+
+
+async def _run_sub_agent(
+    ctx: RunContext[AgentDeps],
+    description: str,
+    prompt: str,
+    subagent_type: str,
+) -> str:
+    """构建子 agent 的 LoopContext 并通过 run_agent_loop 引擎运行。"""
+    from src.agent.compact.compactor import Compactor
+    from src.agent.file_state import FileStateTracker
+    from src.agent.loop import LoopContext, _make_summarize_fn, run_agent_loop
+    from src.agent.message.attachment_collector import AttachmentCollector
+    from src.agent.message.memory_message_service import MemoryMessageService
+    from src.agent.message.pre_model_call_service import PreModelCallMessageService
+    from src.agent.message.transcript_service import TranscriptService
+    from src.common.session_request_task import SessionRequestTask
+    from src.config.settings import get_backend, get_compact_config
+    from src.event.event_emitter import EventEmitter
+
+    parent_deps = ctx.deps
+
+    # ── 1. 子 agent 唯一标识 ──
+    agent_id = f"{subagent_type}-{_uuid.uuid4().hex[:8]}"
+    # transcript 路径：subagents/{agent_id}/ 下，复用 session_id 机制
+    sub_session_id = f"{parent_deps.session_id}/subagents/{agent_id}"
+
+    # ── 2. 构建子 agent 实例 ──
+    system_prompt = _SUBAGENT_PROMPTS[subagent_type]
+    tool_names = _resolve_subagent_tools(parent_deps, subagent_type)
+    sub_get_tools = _build_subagent_get_tools(tool_names, parent_deps)
+
+    model = create_model()
+    sub_agent: Agent[AgentDeps, str] = Agent(
+        model,
+        deps_type=AgentDeps,
+        system_prompt=system_prompt,
+        toolsets=[DynamicToolset(sub_get_tools, per_run_step=True)],
+    )
+
+    # ── 3. 子 agent deps（共享 backend 和 file_state_tracker）──
+    sub_deps = AgentDeps(
+        session_id=parent_deps.session_id,
+        user_id=parent_deps.user_id,
+        available_tools=tool_names,
+        tool_map=parent_deps.tool_map,
+        backend=parent_deps.backend,
+        file_state_tracker=parent_deps.file_state_tracker,
+        emitter=parent_deps.emitter,  # 共享父 emitter（事件推送）
+    )
+
+    # ── 4. 子 agent 的 SessionRequestTask ──
+    # 共享父 session_id（事件路由），但有自己的 task_id/request_id
+    from src.common.event_sinker import EventSinker
+
+    class _NoOpSinker:
+        """子 agent 不需要 sinker（事件通过 emitter 推送）。"""
+        async def send(self, event: object) -> None:
+            pass
+        async def close(self) -> None:
+            pass
+
+    sub_task = SessionRequestTask(
+        session_id=parent_deps.session_id,  # 同一 session，前端用 agent_name 区分
+        message=prompt,
+        user_id=parent_deps.user_id,
+        sinker=_NoOpSinker(),  # type: ignore[arg-type]
+    )
+
+    # ── 5. 构建精简 services ──
+    backend = get_backend()
+
+    # MemoryMessageService — fresh（不加载历史）
+    memory_service = MemoryMessageService(backend)
+
+    # TranscriptService — 路径为 subagents/{agent_id}/
+    transcript_service = TranscriptService(backend)
+
+    # AttachmentCollector — 共享 file_state_tracker
+    attachment_collector = AttachmentCollector(parent_deps.file_state_tracker)
+
+    # Compactor — 复用配置，但子 agent 短生命周期基本不会触发
+    compactor = Compactor(
+        config=get_compact_config(),
+        user_id=parent_deps.user_id,
+        session_id=sub_session_id,
+        summarize_fn=_make_summarize_fn(sub_agent),
+    )
+
+    # PreModelCallMessageService — 精简版（无 skill listing，有 compact + attachment）
+    pre_call_service = PreModelCallMessageService(
+        compactor=compactor,
+        context_messages=[],  # 子 agent 无 context injection（agent.md/memory.md）
+        attachment_collector=attachment_collector,
+        skill_registry=None,  # 子 agent 不注入 skill listing
+        invoked_skill_store=None,
+        system_prompt=system_prompt,
+    )
+
+    # ── 6. Emitter：共享父 emitter ──
+    # 子 agent 事件通过同一个 emitter 推送，agent_name 字段区分
+    # 若父 emitter 不可用，创建一个丢弃事件的 dummy emitter
+    import asyncio
+    if parent_deps.emitter is not None:
+        emitter = parent_deps.emitter
+    else:
+        # Fallback: dummy emitter（事件丢弃）
+        dummy_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+        emitter = EventEmitter(dummy_queue)
+
+    # ── 7. 组装 LoopContext ──
+    max_turns = _SUBAGENT_MAX_TURNS.get(subagent_type, 25)
+
+    loop_ctx = LoopContext(
+        agent=sub_agent,
+        deps=sub_deps,
+        emitter=emitter,
+        task=sub_task,
+        pre_call_service=pre_call_service,
+        memory_service=memory_service,
+        transcript_service=transcript_service,
+        agent_history=[],  # fresh context
+        mcp_toolsets=None,  # 子 agent 暂不加载 MCP
+        max_iterations=max_turns,
+        agent_name=subagent_type,
+        is_sub_agent=True,
+        transcript_session_id=sub_session_id,  # transcript 路径隔离
+    )
+
+    # ── 8. 运行子 agent ──
+    from src.event.event_model import EventModel
+    final_response = await run_agent_loop(loop_ctx)
+    return final_response or ""
