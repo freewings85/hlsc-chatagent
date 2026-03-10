@@ -25,7 +25,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # 复制项目代码
 COPY src ./src
 COPY server.py ./
-COPY .env.example ./.env
+# 复制所有环境配置文件（nacos 根据 ACTIVE 加载对应 .env.{ACTIVE}）
+COPY .env* ./
 
 # 创建数据目录
 RUN mkdir -p .chatagent logs
