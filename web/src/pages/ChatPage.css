@@ -232,6 +232,18 @@
 .btn-send:hover { background: var(--accent); }
 .btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.btn-stop {
+  height: 42px;
+  padding: 0 18px;
+  font-size: 14px;
+  border-radius: 8px;
+  background: #c0392b;
+  color: white;
+  border: 1px solid #e74c3c;
+  cursor: pointer;
+}
+.btn-stop:hover { background: #e74c3c; }
+
 .empty-hint {
   color: var(--muted);
   text-align: center;

@@ -8,15 +8,18 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.server.request import ChatRequest
+from src.server.request import ChatRequest, StopRequest
 from src.server.agent_md_api import router as agent_md_router
 from src.server.mcp_api import router as mcp_router
 from src.server.skill_api import router as skill_router
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+# 运行中的任务注册表：task_id → (SessionRequestTask, asyncio.Task)
+_running_tasks: dict[str, tuple[object, asyncio.Task[None]]] = {}
 
 app: FastAPI = FastAPI(
     title="ChatAgent API",
@@ -96,6 +99,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     from src.event.event_emitter import EventEmitter
     from src.event.event_model import EventModel
     from src.event.event_sinker_sse import SseSinker
+    from src.event.event_type import EventType
 
     # Emitter 和 SSE generator 共享同一个 queue：
     # run_agent_loop → emitter.emit() → queue → SSE generator
@@ -124,9 +128,24 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         run_agent_loop(emitter, task, agent, deps),
         name=f"agent-loop-{task.task_id}",
     )
+    _running_tasks[task.task_id] = (task, loop_task)
+
+    # loop_task 完成（正常或被取消）后确保 queue 有 sentinel，
+    # 否则 SSE generator 会永远阻塞在 queue.get()
+    def _ensure_sentinel(fut: asyncio.Task[None]) -> None:
+        queue.put_nowait(None)
+
+    loop_task.add_done_callback(_ensure_sentinel)
 
     async def generate() -> object:
         try:
+            start_event = EventModel(
+                conversation_id=task.session_id,
+                request_id=task.request_id,
+                type=EventType.CHAT_REQUEST_START,
+                data={"task_id": task.task_id},
+            )
+            yield f"event: {start_event.type.value}\ndata: {start_event.to_json()}\n\n"
             while True:
                 event: EventModel | None = await queue.get()
                 if event is None:
@@ -135,6 +154,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         except (GeneratorExit, asyncio.CancelledError):
             task.cancelled = True
         finally:
+            _running_tasks.pop(task.task_id, None)
             if not loop_task.done():
                 loop_task.cancel()
                 try:
@@ -151,3 +171,18 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/chat/stop")
+async def chat_stop(request: StopRequest) -> JSONResponse:
+    """停止正在运行的对话任务。"""
+    entry = _running_tasks.get(request.task_id)
+    if entry is None:
+        return JSONResponse(status_code=404, content={"error": "任务不存在或已结束"})
+
+    task_obj, loop_task = entry
+    task_obj.cancelled = True  # type: ignore[union-attr]
+    if not loop_task.done():
+        loop_task.cancel()
+
+    return JSONResponse({"status": "cancelled", "task_id": request.task_id})

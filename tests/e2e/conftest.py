@@ -12,6 +12,10 @@ import httpx
 import pytest
 from playwright.sync_api import Page
 
+# 清除代理环境变量（WSL 下 HTTP_PROXY 会让 httpx 将 localhost 请求路由到代理）
+for _proxy_var in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+    os.environ.pop(_proxy_var, None)
+
 # 测试用服务器端口（避免与开发服务器 8100 冲突）
 PLAYWRIGHT_PORT: int = int(os.getenv("PLAYWRIGHT_PORT", "8199"))
 
@@ -31,10 +35,14 @@ def base_url() -> str:  # type: ignore[return]
     """启动服务器并返回 base URL，session 结束时停止服务器。"""
     TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    # 清除代理（WSL 下 HTTP_PROXY 会干扰 localhost 请求）
+    clean_env = {k: v for k, v in os.environ.items()
+                 if k.lower() not in ("http_proxy", "https_proxy")}
     env = {
-        **os.environ,
+        **clean_env,
         "SERVER_PORT": str(PLAYWRIGHT_PORT),
         "DATA_DIR": str(TEST_DATA_DIR),
+        "USE_NACOS": "FALSE",
         # E2E 使用 20k compact 阈值（接近真实使用场景）
         # effective_window = 20000 - 2000 = 18000
         # microcompact_threshold = 18000 - 2000 = 16000 tokens

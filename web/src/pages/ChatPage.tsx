@@ -85,6 +85,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(loadMessages)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const taskIdRef = useRef<string | null>(null)
   const chatAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   // Refs for streaming updates (avoid stale closures)
@@ -174,6 +175,10 @@ export default function ChatPage() {
       if (!last || last.role !== 'assistant') return copy
 
       switch (type) {
+        case 'chat_request_start': {
+          taskIdRef.current = (d.task_id as string) ?? null
+          return copy
+        }
         case 'text': {
           const content = (d.content as string) ?? ''
           if (content) copy[copy.length - 1] = { ...last, text: last.text + content }
@@ -229,6 +234,18 @@ export default function ChatPage() {
       }
       return copy
     })
+  }
+
+  const stopTask = async () => {
+    const taskId = taskIdRef.current
+    if (!taskId) return
+    try {
+      await fetch(`${BASE}/chat/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: taskId }),
+      })
+    } catch { /* ignore */ }
   }
 
   const replyToInterrupt = (reply: string) => {
@@ -309,9 +326,13 @@ export default function ChatPage() {
           rows={1}
           disabled={streaming}
         />
-        <button id="send-btn" className="btn-send" onClick={sendMessage} disabled={streaming || !input.trim()}>
-          发送 ↑
-        </button>
+        {streaming ? (
+          <button className="btn-stop" onClick={stopTask}>停止 ■</button>
+        ) : (
+          <button id="send-btn" className="btn-send" onClick={sendMessage} disabled={!input.trim()}>
+            发送 ↑
+          </button>
+        )}
       </div>
     </div>
   )

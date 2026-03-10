@@ -9,3 +9,9 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     user_id: str = "anonymous"
+
+
+class StopRequest(BaseModel):
+    """停止任务请求"""
+
+    task_id: str

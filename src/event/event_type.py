@@ -6,6 +6,7 @@ import enum
 class EventType(str, enum.Enum):
     """Agent 输出的事件类型。"""
 
+    CHAT_REQUEST_START = "chat_request_start"
     TEXT = "text"
     TOOL_CALL_START = "tool_call_start"
     TOOL_CALL_ARGS = "tool_call_args"
