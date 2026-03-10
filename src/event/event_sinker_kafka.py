@@ -20,7 +20,11 @@ class KafkaSinker:
 
     async def send(self, event: EventModel) -> None:
         """发布事件到 Kafka。"""
-        await self._producer.send(self._topic, event.to_json().encode("utf-8"))
+        await self._producer.send(
+            self._topic,
+            key=event.session_id.encode("utf-8"),
+            value=event.to_json().encode("utf-8"),
+        )
 
     async def close(self) -> None:
         """刷新 producer 缓冲（不关闭 producer，由全局管理）。"""

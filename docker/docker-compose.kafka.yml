@@ -15,7 +15,4 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
     volumes:
-      - kafka-data:/tmp/kraft-combined-logs
-
-volumes:
-  kafka-data:
+      - ./kafka-data:/tmp/kraft-combined-logs

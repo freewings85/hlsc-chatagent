@@ -80,6 +80,6 @@ async def load_mcp_toolsets(
             toolsets.append(_PreconnectedToolset(toolset))
             logger.info("MCP toolset connected: %s → %s", name, entry.url)
         except Exception as e:
-            logger.warning("MCP toolset '%s' 连接失败，跳过: %s", name, e)
+            logger.error("MCP toolset '%s' 连接失败，跳过: %s", name, e)
 
     return toolsets
