@@ -102,7 +102,7 @@ class TaskWorker:
             )
             # 发送错误事件通知客户端
             error_event: EventModel = EventModel(
-                conversation_id=task.session_id,
+                session_id=task.session_id,
                 request_id=task.request_id,
                 type=EventType.ERROR,
                 data={"error": "Agent 执行异常"},

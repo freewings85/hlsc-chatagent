@@ -37,7 +37,7 @@ def _load_config_env(skill_dir: Path) -> dict[str, str]:
 
 
 async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -> str:
-    """Execute a skill within the main conversation.
+    """Execute a skill within the main session.
 
     When users ask you to perform tasks, check if any of the available skills
     match. Skills provide specialized capabilities and domain knowledge.
@@ -48,7 +48,7 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
     IMPORTANT: When a skill matches the user's request, this is a BLOCKING
     REQUIREMENT — invoke this tool BEFORE generating any other response.
 
-    Available skills are listed in system-reminder messages in the conversation.
+    Available skills are listed in system-reminder messages in the session.
 
     Args:
         skill: The skill name to invoke (e.g., "commit", "review-pr").

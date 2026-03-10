@@ -190,7 +190,7 @@ class TestAgentLoop:
 
         events = await _collect_events(event_queue)
         for event in events:
-            assert event.conversation_id == "sid-123"
+            assert event.session_id == "sid-123"
             assert event.request_id == task.request_id
 
 

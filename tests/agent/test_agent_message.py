@@ -131,7 +131,7 @@ class TestFromModelMessages:
         assert um.metadata["is_meta"] is True
         assert um.metadata["source"] == "agent_md"
 
-    def test_full_conversation(self) -> None:
+    def test_full_session(self) -> None:
         """完整对话：user → assistant(tool_call) → user(tool_result) → assistant"""
         msgs = [
             ModelRequest(parts=[UserPromptPart(content="读取 /foo.py")]),
@@ -254,7 +254,7 @@ class TestRoundTrip:
         assert recovered[0].content == "你好"
         assert recovered[1].content == "你好！"
 
-    def test_roundtrip_tool_conversation(self) -> None:
+    def test_roundtrip_tool_session(self) -> None:
         original: list[AgentMessage] = [
             UserMessage(content="读文件"),
             AssistantMessage(

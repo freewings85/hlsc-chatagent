@@ -14,7 +14,7 @@ from src.event.event_type import EventType
 class EventModel:
     """Agent 输出的统一事件结构。"""
 
-    conversation_id: str
+    session_id: str
     request_id: str
     type: EventType
     data: dict[str, Any]
@@ -25,7 +25,7 @@ class EventModel:
     def to_dict(self) -> dict[str, Any]:
         """转为可 JSON 序列化的 dict。"""
         return {
-            "conversation_id": self.conversation_id,
+            "session_id": self.session_id,
             "request_id": self.request_id,
             "type": self.type.value,
             "data": self.data,

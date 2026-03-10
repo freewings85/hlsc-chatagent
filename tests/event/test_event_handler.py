@@ -18,7 +18,7 @@ class TestEventHandler:
         sinker = MockSinker()
         handler = EventHandler(sinker)
         event = EventModel(
-            conversation_id="c1", request_id="r1",
+            session_id="c1", request_id="r1",
             type=EventType.TEXT, data={"content": "hi"},
         )
         await handler.handle(event)
@@ -40,7 +40,7 @@ class TestSseSinker:
         queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
         sinker = SseSinker(queue)
         event = EventModel(
-            conversation_id="c1", request_id="r1",
+            session_id="c1", request_id="r1",
             type=EventType.TEXT, data={"content": "hello"},
         )
         await sinker.send(event)
@@ -67,7 +67,7 @@ class TestEventEmitterEdgeCases:
         await emitter.close()
         # close 后 emit 不应抛异常
         event = EventModel(
-            conversation_id="c1", request_id="r1",
+            session_id="c1", request_id="r1",
             type=EventType.TEXT, data={"content": "after close"},
         )
         await emitter.emit(event)  # 应该静默丢弃
@@ -109,7 +109,7 @@ class TestEventHandlerMultipleSinkers:
 
         handler = EventHandler(sinkers=[bad_sinker, good_sinker])
         event = EventModel(
-            conversation_id="c1", request_id="r1",
+            session_id="c1", request_id="r1",
             type=EventType.TEXT, data={"content": "hi"},
         )
 
@@ -126,24 +126,24 @@ class TestEventModel:
 
     def test_to_dict(self) -> None:
         event = EventModel(
-            conversation_id="c1", request_id="r1",
+            session_id="c1", request_id="r1",
             type=EventType.TEXT, data={"content": "hi"},
             timestamp=1000, finish_reason="stop",
         )
         d = event.to_dict()
-        assert d["conversation_id"] == "c1"
+        assert d["session_id"] == "c1"
         assert d["type"] == "text"
         assert d["finish_reason"] == "stop"
         assert d["agent_name"] == "main"
 
     def test_to_json(self) -> None:
         event = EventModel(
-            conversation_id="c1", request_id="r1",
+            session_id="c1", request_id="r1",
             type=EventType.TEXT, data={"content": "hi"},
             timestamp=1000,
         )
         json_str = event.to_json()
-        assert '"conversation_id": "c1"' in json_str
+        assert '"session_id": "c1"' in json_str
         assert '"type": "text"' in json_str
 
     def test_all_event_types_serializable(self) -> None:
@@ -151,7 +151,7 @@ class TestEventModel:
         import json
         for event_type in EventType:
             event = EventModel(
-                conversation_id="c1", request_id="r1",
+                session_id="c1", request_id="r1",
                 type=event_type, data={"key": "value"},
                 timestamp=1000,
             )

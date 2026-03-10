@@ -15,3 +15,11 @@ class StopRequest(BaseModel):
     """停止任务请求"""
 
     task_id: str
+
+
+class AsyncChatRequest(BaseModel):
+    """异步对话请求（结果通过 Kafka 推送）"""
+
+    session_id: str
+    message: str
+    user_id: str = "anonymous"

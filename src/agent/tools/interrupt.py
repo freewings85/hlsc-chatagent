@@ -45,7 +45,7 @@ async def interrupt(
         parsed_data = {"raw": data}
 
     await emitter.emit(EventModel(
-        conversation_id=ctx.deps.session_id,
+        session_id=ctx.deps.session_id,
         request_id="",
         type=EventType.INTERRUPT,
         data={

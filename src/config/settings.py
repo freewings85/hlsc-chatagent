@@ -82,11 +82,21 @@ class ServerConfig:
     port: int = field(default_factory=lambda: int(os.getenv("SERVER_PORT", "8100")))
 
 
+@dataclass
+class KafkaConfig:
+    """Kafka 配置"""
+
+    enabled: bool = field(default_factory=lambda: os.getenv("KAFKA_ENABLED", "false").lower() == "true")
+    bootstrap_servers: str = field(default_factory=lambda: os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
+    topic: str = field(default_factory=lambda: os.getenv("KAFKA_TOPIC", "chat-events"))
+
+
 # 延迟初始化单例
 _llm_config: Optional[LLMConfig] = None
 _user_fs_config: Optional[UserFsConfig] = None
 _agent_fs_config: Optional[AgentFsConfig] = None
 _server_config: Optional[ServerConfig] = None
+_kafka_config: Optional[KafkaConfig] = None
 _compact_config: Optional["CompactConfig"] = None
 _user_fs_backend: Optional["BackendProtocol"] = None
 _agent_fs_backend: Optional["BackendProtocol"] = None
@@ -122,6 +132,14 @@ def get_server_config() -> ServerConfig:
     if _server_config is None:
         _server_config = ServerConfig()
     return _server_config
+
+
+def get_kafka_config() -> KafkaConfig:
+    """获取 Kafka 配置"""
+    global _kafka_config
+    if _kafka_config is None:
+        _kafka_config = KafkaConfig()
+    return _kafka_config
 
 
 def get_compact_config() -> "CompactConfig":

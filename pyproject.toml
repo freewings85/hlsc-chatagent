@@ -14,6 +14,7 @@ dependencies = [
     "anthropic>=0.84.0",
     "python-multipart>=0.0.22",
     "nacos-sdk-python==0.1.16",
+    "aiokafka>=0.10.0",
 ]
 
 [tool.pytest.ini_options]

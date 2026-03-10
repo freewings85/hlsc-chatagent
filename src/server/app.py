@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.server.request import ChatRequest, StopRequest
+from src.server.request import AsyncChatRequest, ChatRequest, StopRequest
 from src.server.agent_md_api import router as agent_md_router
 from src.server.mcp_api import router as mcp_router
 from src.server.skill_api import router as skill_router
@@ -140,7 +140,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     async def generate() -> object:
         try:
             start_event = EventModel(
-                conversation_id=task.session_id,
+                session_id=task.session_id,
                 request_id=task.request_id,
                 type=EventType.CHAT_REQUEST_START,
                 data={"task_id": task.task_id},
@@ -186,3 +186,81 @@ async def chat_stop(request: StopRequest) -> JSONResponse:
         loop_task.cancel()
 
     return JSONResponse({"status": "cancelled", "task_id": request.task_id})
+
+
+@app.post("/chat/async")
+async def chat_async(request: AsyncChatRequest) -> JSONResponse:
+    """异步对话接口：立即返回 task_id，事件通过 Kafka 推送。
+
+    需要 KAFKA_ENABLED=true 才可用。
+    """
+    from src.agent.deps import AgentDeps
+    from src.agent.loop import create_agent, run_agent_loop
+    from src.agent.model import create_model
+    from src.agent.tools import ALL_FS_TOOLS, create_default_tool_map
+    from src.common.session_request_task import SessionRequestTask
+    from src.config.settings import get_kafka_config
+    from src.event.event_emitter import EventEmitter
+    from src.event.event_model import EventModel
+    from src.event.event_sinker_kafka import KafkaSinker, get_kafka_producer
+
+    kafka_config = get_kafka_config()
+    if not kafka_config.enabled:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Kafka 未启用，请设置 KAFKA_ENABLED=true"},
+        )
+
+    producer = await get_kafka_producer()
+    sinker = KafkaSinker(producer, kafka_config.topic)
+
+    queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+    emitter = EventEmitter(queue)
+
+    task = SessionRequestTask(
+        session_id=request.session_id,
+        message=request.message,
+        user_id=request.user_id,
+        sinker=sinker,
+    )
+
+    model = create_model()
+    agent = create_agent(model)
+    deps = AgentDeps(
+        session_id=request.session_id,
+        user_id=request.user_id,
+        available_tools=list(ALL_FS_TOOLS),
+        tool_map=create_default_tool_map(),
+    )
+
+    loop_task = asyncio.create_task(
+        run_agent_loop(emitter, task, agent, deps),
+        name=f"agent-loop-async-{task.task_id}",
+    )
+    _running_tasks[task.task_id] = (task, loop_task)
+
+    # 后台转发：从 emitter queue 读事件，通过 KafkaSinker 发到 Kafka
+    async def _forward_to_kafka() -> None:
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                await sinker.send(event)
+        except Exception:
+            logger.exception("Kafka 转发异常")
+        finally:
+            _running_tasks.pop(task.task_id, None)
+
+    asyncio.create_task(
+        _forward_to_kafka(),
+        name=f"kafka-forward-{task.task_id}",
+    )
+
+    # loop_task 完成后确保 queue 有 sentinel
+    def _ensure_sentinel(fut: asyncio.Task[None]) -> None:
+        queue.put_nowait(None)
+
+    loop_task.add_done_callback(_ensure_sentinel)
+
+    return JSONResponse({"status": "accepted", "task_id": task.task_id})

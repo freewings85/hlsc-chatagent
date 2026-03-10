@@ -140,7 +140,7 @@ async def _emit_model_stream(
                 if isinstance(part, TextPart) and part.content:
                     _text_parts.append(part.content)
                     await emitter.emit(EventModel(
-                        conversation_id=task.session_id,
+                        session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TEXT,
                         data={"content": part.content},
@@ -148,7 +148,7 @@ async def _emit_model_stream(
                 elif isinstance(part, ToolCallPart):
                     _tool_call_names.append(part.tool_name)
                     await emitter.emit(EventModel(
-                        conversation_id=task.session_id,
+                        session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TOOL_CALL_START,
                         data={
@@ -161,14 +161,14 @@ async def _emit_model_stream(
                 if isinstance(delta, TextPartDelta):
                     _text_parts.append(delta.content_delta)
                     await emitter.emit(EventModel(
-                        conversation_id=task.session_id,
+                        session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TEXT,
                         data={"content": delta.content_delta},
                     ))
                 elif isinstance(delta, ToolCallPartDelta):  # pragma: no cover — 真实 LLM 流式 tool call 才触发
                     await emitter.emit(EventModel(
-                        conversation_id=task.session_id,
+                        session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TOOL_CALL_ARGS,
                         data={"args_chunk": delta.args_delta},
@@ -214,7 +214,7 @@ async def _emit_tool_events(
                 card = parse_card(card_text)
                 if card and tool_call_id:
                     await emitter.emit(EventModel(
-                        conversation_id=task.session_id,
+                        session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TOOL_RESULT_DETAIL,
                         data={
@@ -236,7 +236,7 @@ async def _emit_tool_events(
                         event.result.content = content
 
                 await emitter.emit(EventModel(
-                    conversation_id=task.session_id,
+                    session_id=task.session_id,
                     request_id=task.request_id,
                     type=EventType.TOOL_RESULT,
                     data={
@@ -359,10 +359,10 @@ async def run_agent_loop(
                     if _first_llm_call:
                         # 首次 LLM 调用：将 AgentMessage 历史转为 ModelMessage 注入
                         # 追加当前用户消息，使 to_model_messages 能校验交替 + 最后为 user
-                        full_conversation = list(agent_history) + [
+                        full_session = list(agent_history) + [
                             UserMessage(content=task.message),
                         ]
-                        model_messages = to_model_messages(full_conversation)
+                        model_messages = to_model_messages(full_session)
                         # 去掉最后一个 ModelRequest（当前用户消息），Pydantic AI 会自动追加
                         run._graph_run.state.message_history[:] = model_messages[:-1] if model_messages else []
 
@@ -455,7 +455,7 @@ async def run_agent_loop(
         )
         # 发送错误事件通知客户端
         await emitter.emit(EventModel(
-            conversation_id=task.session_id,
+            session_id=task.session_id,
             request_id=task.request_id,
             type=EventType.ERROR,
             data={"message": str(exc)},
@@ -472,7 +472,7 @@ async def run_agent_loop(
         clear_request_context()
         # 发送 chat_request_end 事件，通知前端流结束
         await emitter.emit(EventModel(
-            conversation_id=task.session_id,
+            session_id=task.session_id,
             request_id=task.request_id,
             type=EventType.CHAT_REQUEST_END,
             data={},

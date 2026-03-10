@@ -181,7 +181,7 @@ async def task(
     Args:
         description: A short (3-5 word) summary of the task for logging.
         prompt: Detailed task description for the sub-agent. Must contain ALL
-            necessary context since the sub-agent cannot see the main conversation.
+            necessary context since the sub-agent cannot see the main session.
         subagent_type: Type of sub-agent to launch.
             "plan" — read-only; analyze requirements and design a step-by-step plan.
             "general" — full capability; can read, write, and execute commands.
