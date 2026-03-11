@@ -59,18 +59,31 @@ export async function uninstallSkill(name: string): Promise<InstallResponse> {
 }
 
 // --------------------------------------------------------------------------- //
-// Agent.md API
+// Prompts API
 // --------------------------------------------------------------------------- //
 
-export async function getAgentMd(): Promise<string> {
-  const res = await fetch(`${BASE}/api/agent-md`)
-  if (!res.ok) throw new Error(`读取 agent.md 失败: ${res.status}`)
+export interface PromptFileInfo {
+  name: string
+  path: string
+  size: number
+}
+
+export async function listPrompts(): Promise<PromptFileInfo[]> {
+  const res = await fetch(`${BASE}/api/prompts`)
+  if (!res.ok) throw new Error(`加载提示词列表失败: ${res.status}`)
+  const data = await res.json()
+  return data.files
+}
+
+export async function getPrompt(path: string): Promise<string> {
+  const res = await fetch(`${BASE}/api/prompts/${encodeURIComponent(path)}`)
+  if (!res.ok) throw new Error(`读取失败: ${res.status}`)
   const data = await res.json()
   return data.content
 }
 
-export async function updateAgentMd(content: string): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${BASE}/api/agent-md`, {
+export async function updatePrompt(path: string, content: string): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE}/api/prompts/${encodeURIComponent(path)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),

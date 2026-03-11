@@ -1,9 +1,4 @@
-"""Prompt 管理 API：列出、查看、编辑所有提示词文件。
-
-覆盖范围：
-- prompts/templates/*.md — 系统提示词模板
-- prompts/agent.md — 项目级业务配置
-"""
+"""Prompt 管理 API：列出、查看、编辑 prompts/templates/ 下的提示词文件。"""
 
 from __future__ import annotations
 
@@ -50,9 +45,9 @@ class PromptUpdateResponse(BaseModel):
 
 def _resolve_and_validate(file_path: str) -> Path:
     """解析路径并校验安全性（防止路径穿越）。"""
-    resolved = (_pb._PROMPTS_DIR / file_path).resolve()
-    prompts_resolved = _pb._PROMPTS_DIR.resolve()
-    if not str(resolved).startswith(str(prompts_resolved)):
+    resolved = (_pb._TEMPLATES_DIR / file_path).resolve()
+    templates_resolved = _pb._TEMPLATES_DIR.resolve()
+    if not str(resolved).startswith(str(templates_resolved)):
         raise HTTPException(status_code=400, detail="路径不合法")
     if resolved.suffix not in _ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: {resolved.suffix}")
@@ -63,15 +58,15 @@ def _resolve_and_validate(file_path: str) -> Path:
 async def list_prompts() -> PromptListResponse:
     """列出所有提示词文件。"""
     files: list[PromptFileInfo] = []
-    prompts_resolved = _pb._PROMPTS_DIR.resolve()
+    templates_resolved = _pb._TEMPLATES_DIR.resolve()
 
-    if not _pb._PROMPTS_DIR.exists():
+    if not _pb._TEMPLATES_DIR.exists():
         return PromptListResponse(files=[])
 
-    for p in sorted(_pb._PROMPTS_DIR.rglob("*")):
+    for p in sorted(_pb._TEMPLATES_DIR.rglob("*")):
         if not p.is_file() or p.suffix not in _ALLOWED_EXTENSIONS:
             continue
-        rel = str(p.resolve().relative_to(prompts_resolved))
+        rel = str(p.resolve().relative_to(templates_resolved))
         files.append(PromptFileInfo(
             name=p.name,
             path=rel,
