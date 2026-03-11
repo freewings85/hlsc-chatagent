@@ -10,7 +10,9 @@
 - interrupt() 在 agent loop 协程中 await，协程挂起但不阻塞事件循环
 - callback 用于发送 interrupt 事件给前端（带 interrupt_id）
 - Temporal Workflow 保证 interrupt 状态持久化（进程重启后 workflow 仍在）
-- 但 agent loop 协程在内存中，进程重启后丢失，resume 会返回报错
+- 但 agent loop 协程在内存中，进程重启后丢失
+- _active_interrupt_keys 跟踪当前进程中活跃的 interrupt，重启后为空
+- resume() 检查 _active_interrupt_keys，key 不在则拒绝（前端感知到错误）
 """
 
 from __future__ import annotations
@@ -24,6 +26,14 @@ from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
 # callback 签名：async def fn(data: dict, interrupt_id: str) -> None
 InterruptCallback = Callable[[dict[str, Any], str], Coroutine[Any, Any, None]]
+
+# 当前进程中活跃的 interrupt key 集合（内存态，重启后为空）
+_active_interrupt_keys: set[str] = set()
+
+
+def is_interrupt_active(key: str) -> bool:
+    """检查 interrupt key 是否在当前进程中活跃。"""
+    return key in _active_interrupt_keys
 
 
 @workflow.defn
@@ -82,46 +92,50 @@ async def interrupt(
     if client is None:
         raise RuntimeError("interrupt 不可用：Temporal 未配置，请设置 TEMPORAL_ENABLED=true")
 
-    handle = None
-
-    # 尝试获取已存在的 Workflow（重连场景）
+    _active_interrupt_keys.add(key)
     try:
-        handle = client.get_workflow_handle(key)
-        desc = await handle.describe()
-
-        if desc.status == WorkflowExecutionStatus.RUNNING:
-            status = await handle.query(InterruptWorkflow.status)
-            interrupt_id = desc.run_id
-
-            if status == "waiting":
-                return await handle.result()
-
-            if status == "pending":
-                await callback(data, interrupt_id)
-                await handle.signal(InterruptWorkflow.on_callback_done)
-                return await handle.result()
-
-        if desc.status == WorkflowExecutionStatus.COMPLETED:
-            return await handle.result()
-
-        handle = None
-    except Exception:
         handle = None
 
-    # 首次调用
-    handle = await client.start_workflow(
-        InterruptWorkflow.run,
-        data,
-        id=key,
-        task_queue=task_queue,
-        task_timeout=task_timeout,
-    )
+        # 尝试获取已存在的 Workflow（重连场景）
+        try:
+            handle = client.get_workflow_handle(key)
+            desc = await handle.describe()
 
-    interrupt_id = handle.result_run_id
-    await callback(data, interrupt_id)
-    await handle.signal(InterruptWorkflow.on_callback_done)
+            if desc.status == WorkflowExecutionStatus.RUNNING:
+                status = await handle.query(InterruptWorkflow.status)
+                interrupt_id = desc.run_id
 
-    return await handle.result()
+                if status == "waiting":
+                    return await handle.result()
+
+                if status == "pending":
+                    await callback(data, interrupt_id)
+                    await handle.signal(InterruptWorkflow.on_callback_done)
+                    return await handle.result()
+
+            if desc.status == WorkflowExecutionStatus.COMPLETED:
+                return await handle.result()
+
+            handle = None
+        except Exception:
+            handle = None
+
+        # 首次调用
+        handle = await client.start_workflow(
+            InterruptWorkflow.run,
+            data,
+            id=key,
+            task_queue=task_queue,
+            task_timeout=task_timeout,
+        )
+
+        interrupt_id = handle.result_run_id
+        await callback(data, interrupt_id)
+        await handle.signal(InterruptWorkflow.on_callback_done)
+
+        return await handle.result()
+    finally:
+        _active_interrupt_keys.discard(key)
 
 
 async def resume(client: Client, key: str, data: dict[str, Any]) -> None:

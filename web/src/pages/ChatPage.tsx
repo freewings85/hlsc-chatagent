@@ -276,9 +276,15 @@ export default function ChatPage() {
       })
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
+        // 410 Gone = 服务重启，对话已失效，重置状态让用户重新输入
+        if (resp.status === 410) {
+          setStreaming(false)
+        }
         alert(`回复失败: ${err.error ?? resp.statusText}`)
       }
     } catch (err) {
+      // 网络错误（如服务不可达）也重置状态
+      setStreaming(false)
       alert(`回复失败: ${(err as Error).message}`)
     }
   }

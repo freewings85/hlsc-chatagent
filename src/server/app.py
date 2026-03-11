@@ -254,10 +254,27 @@ async def interrupt_reply(request: InterruptReplyRequest) -> JSONResponse:
             content={"error": "Temporal 未启用，无法处理 interrupt reply"},
         )
 
-    from src.agent.interrupt import resume
+    from src.agent.interrupt import is_interrupt_active, resume
+
+    reply_data = request.reply if isinstance(request.reply, dict) else {"reply": request.reply}
+
+    # 检查 interrupt 是否在当前进程中活跃
+    # 不活跃 = server 重启过，agent loop 已丢失
+    if not is_interrupt_active(request.interrupt_key):
+        # 仍然尝试完成 Temporal workflow（清理资源），但告知前端已失效
+        try:
+            await resume(_temporal_client, request.interrupt_key, reply_data)
+        except Exception:
+            pass  # workflow 可能已不存在，忽略
+        return JSONResponse(
+            status_code=410,
+            content={
+                "error": "该对话已失效（服务重启），请重新发送消息",
+                "interrupt_key": request.interrupt_key,
+            },
+        )
 
     try:
-        reply_data = request.reply if isinstance(request.reply, dict) else {"reply": request.reply}
         await resume(_temporal_client, request.interrupt_key, reply_data)
         return JSONResponse({"status": "ok", "interrupt_key": request.interrupt_key})
     except Exception as exc:
