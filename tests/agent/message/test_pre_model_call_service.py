@@ -186,13 +186,16 @@ class TestHandleWithCompact:
         assert result.compacted is True
 
     async def test_full_compact_clears_and_calls_summarize_fn(self) -> None:
-        """full compact 触发时调用 summarize_fn，消息被替换为 [boundary, summary]"""
+        """full compact 触发时调用 summarize_fn，旧消息被摘要 + 近期消息保留"""
         config = CompactConfig(
             context_window=100,  # 极小窗口
             output_reserve=10,
             auto_compact_enabled=True,
             microcompact_enabled=False,
             min_savings_threshold=999999,  # 禁用 microcompact
+            keep_recent_min_tokens=10,
+            keep_recent_max_tokens=100,
+            keep_recent_min_messages=1,
         )
 
         mock_summarize = AsyncMock(return_value="This is the summary")
@@ -206,13 +209,15 @@ class TestHandleWithCompact:
             attachment_collector=collector,
         )
 
-        # 制造超过阈值的消息
-        big_msg = make_user_msg("x" * 1000)
-        result = await service.handle([big_msg])
+        # 构造多条消息：旧的大消息 + 近期小消息
+        old_msg = make_user_msg("x" * 800)
+        old_resp = ModelResponse(parts=[TextPart(content="y" * 200)])
+        recent_msg = make_user_msg("最近的问题")
+        result = await service.handle([old_msg, old_resp, recent_msg])
 
         assert result.compacted is True
         mock_summarize.assert_called_once()
-        # 消息应该包含 boundary + summary
+        # 消息应该包含 boundary + summary + kept recent
         contents = [
             str(m.parts[0].content)  # type: ignore[union-attr]
             for m in result.working_messages

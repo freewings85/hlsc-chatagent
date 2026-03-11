@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
@@ -51,18 +52,24 @@ class ToolResult(BaseModel):
     content: str
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 class UserMessage(BaseModel):
     """用户消息（含工具结果返回）。
 
     content: 用户文本（可为空，如纯 tool_results 返回时）
     tool_results: 工具执行结果列表
     metadata: 元信息（is_meta, source, is_compact_boundary, is_compact_summary 等）
+    timestamp: ISO 格式时间戳
     """
 
     role: Literal["user"] = "user"
     content: str = ""
     tool_results: list[ToolResult] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    timestamp: str = Field(default_factory=_now_iso)
 
 
 class AssistantMessage(BaseModel):
@@ -71,6 +78,7 @@ class AssistantMessage(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
+    timestamp: str = Field(default_factory=_now_iso)
 
 
 AgentMessage = UserMessage | AssistantMessage

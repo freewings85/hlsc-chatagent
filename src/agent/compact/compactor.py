@@ -5,6 +5,7 @@ Layer 2 — Full Compact：调 LLM 生成摘要 + 保留近期消息（参考 Cl
 
 在每次 ModelRequestNode 前调用 check()，按需执行压缩。
 压缩直接修改 message_history（工作副本），不影响 transcript。
+compact 后同时将 boundary + summary 追加到 transcript（审计日志）。
 check() 返回 CompactResult，包含压缩结果和需要恢复的附件。
 """
 
@@ -34,6 +35,7 @@ from src.agent.compact.token_counter import (
 
 if TYPE_CHECKING:
     from src.agent.message.history_message_loader import HistoryMessageLoader
+    from src.agent.message.transcript_service import TranscriptService
 
 SummarizeFn = Callable[[list[ModelMessage]], Awaitable[str]]
 
@@ -71,12 +73,14 @@ class Compactor:
         self,
         config: CompactConfig | None = None,
         history_loader: HistoryMessageLoader | None = None,
+        transcript_service: TranscriptService | None = None,
         user_id: str = "",
         session_id: str = "",
         summarize_fn: SummarizeFn | None = None,
     ) -> None:
         self._config = config or CompactConfig()
         self._history_loader = history_loader
+        self._transcript_service = transcript_service
         self._user_id = user_id
         self._session_id = session_id
         self._summarize_fn = summarize_fn
@@ -129,10 +133,21 @@ class Compactor:
                     summary_text = ""
 
                 # 3. 组装压缩后的消息列表
-                # compact_boundary 标记（is_meta=False，需写入 transcript）
+                post_tokens = estimate_messages_tokens(to_keep)
+
+                # compact_boundary 标记（is_meta=False，写入 messages + transcript）
                 boundary = ModelRequest(
                     parts=[UserPromptPart(content="[对话已压缩，以下为摘要]")],
-                    metadata={"is_compact_boundary": True},
+                    metadata={
+                        "is_compact_boundary": True,
+                        "compact_info": {
+                            "trigger": "auto",
+                            "pre_tokens": total_tokens,
+                            "tokens_saved": total_tokens - post_tokens,
+                            "messages_summarized": len(to_summarize),
+                            "messages_kept": len(to_keep),
+                        },
+                    },
                 )
                 # LLM 生成的摘要（is_meta=True + is_compact_summary=True）
                 summary_msg = ModelRequest(
@@ -140,7 +155,6 @@ class Compactor:
                     metadata={"is_meta": True, "is_compact_summary": True},
                 )
 
-                post_tokens = estimate_messages_tokens(to_keep)
                 messages.clear()
                 messages.extend([boundary, summary_msg, *to_keep])
 
@@ -153,6 +167,14 @@ class Compactor:
                 if self._history_loader:
                     await self._history_loader.save(
                         self._user_id, self._session_id, messages,
+                    )
+
+                # 追加 boundary + summary 到 transcript（审计日志）
+                if self._transcript_service:
+                    from src.agent.agent_message import UserMessage, from_model_messages
+                    transcript_msgs = from_model_messages([boundary, summary_msg])
+                    await self._transcript_service.append(
+                        self._user_id, self._session_id, transcript_msgs,
                     )
 
                 return CompactResult(
