@@ -1,7 +1,7 @@
 """Compactor：两层递进压缩。
 
 Layer 1 — Microcompact：替换旧 tool result 为占位符，不调 API。
-Layer 2 — Full Compact：调 LLM 生成摘要，替换全部消息。
+Layer 2 — Full Compact：调 LLM 生成摘要 + 保留近期消息（参考 Claude Code）。
 
 在每次 ModelRequestNode 前调用 check()，按需执行压缩。
 压缩直接修改 message_history（工作副本），不影响 transcript。
@@ -18,12 +18,16 @@ from typing import TYPE_CHECKING
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
 )
 
 from src.agent.compact.config import CompactConfig
 from src.agent.compact.token_counter import (
+    estimate_message_tokens,
     estimate_messages_tokens,
     estimate_part_tokens,
 )
@@ -113,25 +117,36 @@ class Compactor:
         # Layer 2: Full Compact（需要 summarize_fn 才执行）
         if total_tokens >= self._config.full_compact_threshold:
             if self._summarize_fn is not None:
-                summary_text = await self._summarize_fn(messages)
+                # 1. 确定保留近期消息的切分点
+                cut_idx = self._find_keep_cutpoint(messages)
+                to_summarize = messages[:cut_idx]
+                to_keep = messages[cut_idx:]
 
+                # 2. 只对旧消息生成摘要（如果没有旧消息则无需摘要）
+                if to_summarize:
+                    summary_text = await self._summarize_fn(to_summarize)
+                else:
+                    summary_text = ""
+
+                # 3. 组装压缩后的消息列表
                 # compact_boundary 标记（is_meta=False，需写入 transcript）
                 boundary = ModelRequest(
                     parts=[UserPromptPart(content="[对话已压缩，以下为摘要]")],
                     metadata={"is_compact_boundary": True},
                 )
-                # LLM 生成的摘要（is_meta=True + is_compact_summary=True，需写入 transcript）
+                # LLM 生成的摘要（is_meta=True + is_compact_summary=True）
                 summary_msg = ModelRequest(
                     parts=[UserPromptPart(content=summary_text)],
                     metadata={"is_meta": True, "is_compact_summary": True},
                 )
 
+                post_tokens = estimate_messages_tokens(to_keep)
                 messages.clear()
-                messages.extend([boundary, summary_msg])
+                messages.extend([boundary, summary_msg, *to_keep])
 
                 logger.info(
-                    "Full compact: 压缩 %d tokens → boundary + summary",
-                    total_tokens,
+                    "Full compact: 压缩 %d tokens → boundary + summary + %d 条近期消息 (%d tokens)",
+                    total_tokens, len(to_keep), post_tokens,
                 )
 
                 # 持久化压缩后的工作副本
@@ -143,7 +158,7 @@ class Compactor:
                 return CompactResult(
                     compacted=True,
                     layer="full",
-                    tokens_saved=total_tokens,
+                    tokens_saved=total_tokens - post_tokens,
                     pre_tokens=total_tokens,
                 )
             else:
@@ -153,6 +168,99 @@ class Compactor:
                 )
 
         return CompactResult(pre_tokens=total_tokens)
+
+    def _find_keep_cutpoint(self, messages: list[ModelMessage]) -> int:
+        """确定 full compact 保留近期消息的切分点（参考 Claude Code f5Y/Gk8）。
+
+        从后往前扫描，累加 token 数，直到满足：
+        - token 数 >= keep_recent_min_tokens 且含文本消息数 >= keep_recent_min_messages
+        - 或 token 数 >= keep_recent_max_tokens（硬上限）
+
+        然后向前调整切分点，确保 tool_call/tool_result 配对不被拆开。
+
+        返回切分索引：messages[:idx] 被摘要，messages[idx:] 被保留。
+        """
+        if not messages:
+            return 0
+
+        cfg = self._config
+        token_sum = 0
+        text_msg_count = 0
+        cut_idx = len(messages)
+
+        # 从后往前扫描
+        for i in range(len(messages) - 1, -1, -1):
+            msg = messages[i]
+            token_sum += estimate_message_tokens(msg)
+            if self._has_text(msg):
+                text_msg_count += 1
+
+            cut_idx = i
+
+            # 硬上限
+            if token_sum >= cfg.keep_recent_max_tokens:
+                break
+            # 软条件
+            if token_sum >= cfg.keep_recent_min_tokens and text_msg_count >= cfg.keep_recent_min_messages:
+                break
+
+        # 向前调整：确保 tool_call/tool_result 配对完整
+        cut_idx = self._adjust_for_tool_pairs(messages, cut_idx)
+
+        return cut_idx
+
+    @staticmethod
+    def _adjust_for_tool_pairs(messages: list[ModelMessage], cut_idx: int) -> int:
+        """向前调整切分点，确保 keep 区域内的 tool_result 都有对应的 tool_call。
+
+        如果 keep 区域（messages[cut_idx:]）里有 ToolReturnPart 引用了
+        cut_idx 之前的 ToolCallPart，就把切分点向前移到包含那个 tool_call 的消息。
+        """
+        # 收集 keep 区域的 tool_result ids
+        keep_result_ids: set[str] = set()
+        for msg in messages[cut_idx:]:
+            if isinstance(msg, ModelRequest):
+                for part in msg.parts:
+                    if isinstance(part, ToolReturnPart) and part.tool_call_id:
+                        keep_result_ids.add(part.tool_call_id)
+
+        if not keep_result_ids:
+            return cut_idx
+
+        # 收集 keep 区域的 tool_call ids
+        keep_call_ids: set[str] = set()
+        for msg in messages[cut_idx:]:
+            if isinstance(msg, ModelResponse):
+                for part in msg.parts:
+                    if isinstance(part, ToolCallPart) and part.tool_call_id:
+                        keep_call_ids.add(part.tool_call_id)
+
+        # 找出 keep 区域里有 result 但没有 call 的 ids
+        missing_call_ids = keep_result_ids - keep_call_ids
+        if not missing_call_ids:
+            return cut_idx
+
+        # 向前搜索，把包含这些 tool_call 的消息也拉进 keep 区域
+        for i in range(cut_idx - 1, -1, -1):
+            msg = messages[i]
+            if isinstance(msg, ModelResponse):
+                for part in msg.parts:
+                    if isinstance(part, ToolCallPart) and part.tool_call_id in missing_call_ids:
+                        missing_call_ids.discard(part.tool_call_id)
+                        cut_idx = i
+            if not missing_call_ids:
+                break
+
+        return cut_idx
+
+    @staticmethod
+    def _has_text(msg: ModelMessage) -> bool:
+        """判断消息是否包含文本内容（用于计数含文本消息）。"""
+        if isinstance(msg, ModelRequest):
+            return any(isinstance(p, (UserPromptPart, TextPart)) for p in msg.parts)
+        if isinstance(msg, ModelResponse):
+            return any(isinstance(p, TextPart) for p in msg.parts)
+        return False
 
     def _microcompact(self, messages: list[ModelMessage]) -> int:
         """Layer 1: 替换旧 tool result 为占位符。

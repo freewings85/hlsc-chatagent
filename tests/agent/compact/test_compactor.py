@@ -349,10 +349,10 @@ class TestFullCompact:
         assert len(messages) == 1  # 消息未被替换
 
     @pytest.mark.asyncio
-    async def test_full_compact_with_summarize_fn_replaces_messages(self) -> None:
-        """full compact 触发时调用 summarize_fn，消息被替换为 [boundary, summary]"""
+    async def test_full_compact_with_summarize_fn_keeps_recent(self) -> None:
+        """full compact 触发时：旧消息摘要 + 近期消息保留（参考 Claude Code）"""
         from unittest.mock import AsyncMock
-        from pydantic_ai.messages import UserPromptPart
+        from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
 
         config = CompactConfig(
             context_window=100,
@@ -360,29 +360,43 @@ class TestFullCompact:
             auto_compact_enabled=True,
             microcompact_enabled=False,
             min_savings_threshold=999999,
+            # 设置较小的 keep 阈值，便于测试
+            keep_recent_min_tokens=10,
+            keep_recent_max_tokens=100,
+            keep_recent_min_messages=1,
         )
         mock_summarize = AsyncMock(return_value="对话摘要内容")
         compactor = Compactor(config=config, summarize_fn=mock_summarize)
 
-        big_msg = ModelRequest(parts=[UserPromptPart(content="x" * 1000)])
-        messages: list[ModelMessage] = [big_msg]
+        # 构造多条消息：旧的大消息 + 近期小消息
+        old_msg = ModelRequest(parts=[UserPromptPart(content="x" * 800)])
+        old_resp = ModelResponse(parts=[TextPart(content="y" * 200)])
+        recent_msg = ModelRequest(parts=[UserPromptPart(content="最近的问题")])
+        recent_resp = ModelResponse(parts=[TextPart(content="最近的回答")])
+        messages: list[ModelMessage] = [old_msg, old_resp, recent_msg, recent_resp]
         result = await compactor.check(messages)
 
         assert result.compacted is True
         assert result.layer == "full"
         mock_summarize.assert_called_once()
 
-        # 消息被替换为 [boundary, summary_msg]
-        assert len(messages) == 2
+        # 消息 = [boundary, summary, ...kept_recent]
+        assert len(messages) >= 3  # boundary + summary + 至少 1 条保留
         contents = [str(m.parts[0].content) for m in messages if isinstance(m, ModelRequest)]  # type: ignore[union-attr]
-        assert any("压缩" in c for c in contents)
-        assert any("对话摘要内容" in c for c in contents)
+        assert any("压缩" in c for c in contents)  # boundary
+        assert any("对话摘要内容" in c for c in contents)  # summary
+        # 近期消息被保留
+        assert any(
+            isinstance(m, ModelResponse) and any(
+                isinstance(p, TextPart) and "最近的回答" in p.content for p in m.parts
+            ) for m in messages
+        )
 
     @pytest.mark.asyncio
     async def test_full_compact_persists_to_history_loader(self, tmp_path) -> None:
         """full compact 后通过 history_loader.save() 持久化压缩后的消息"""
         from unittest.mock import AsyncMock
-        from pydantic_ai.messages import UserPromptPart
+        from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
         from src.agent.message.history_message_loader import HistoryMessageLoader
         from src.storage.local_backend import FilesystemBackend
 
@@ -395,6 +409,9 @@ class TestFullCompact:
             auto_compact_enabled=True,
             microcompact_enabled=False,
             min_savings_threshold=999999,
+            keep_recent_min_tokens=10,
+            keep_recent_max_tokens=100,
+            keep_recent_min_messages=1,
         )
         mock_summarize = AsyncMock(return_value="摘要")
         compactor = Compactor(
@@ -405,12 +422,14 @@ class TestFullCompact:
             session_id="s",
         )
 
-        big_msg = ModelRequest(parts=[UserPromptPart(content="x" * 1000)])
-        messages: list[ModelMessage] = [big_msg]
+        old_msg = ModelRequest(parts=[UserPromptPart(content="x" * 800)])
+        old_resp = ModelResponse(parts=[TextPart(content="y" * 200)])
+        recent_msg = ModelRequest(parts=[UserPromptPart(content="recent")])
+        messages: list[ModelMessage] = [old_msg, old_resp, recent_msg]
         result = await compactor.check(messages)
 
         assert result.compacted is True
 
-        # 验证持久化：从文件加载后应该有 boundary + summary
+        # 验证持久化：从文件加载后应该有 boundary + summary + kept messages
         loaded = await loader.load("u", "s")
-        assert len(loaded) >= 1  # 至少有摘要消息被存下来
+        assert len(loaded) >= 2  # 至少有 boundary + summary

@@ -42,6 +42,21 @@ class CompactConfig:
         default_factory=lambda: int(os.getenv("COMPACT_AUTO_BUFFER", "13000")),
     )
 
+    # full compact 时保留近期消息的最小 token 数（参考 Claude Code: 10000）
+    keep_recent_min_tokens: int = field(
+        default_factory=lambda: int(os.getenv("COMPACT_KEEP_RECENT_MIN_TOKENS", "10000")),
+    )
+
+    # full compact 时保留近期消息的最大 token 数（参考 Claude Code: 40000）
+    keep_recent_max_tokens: int = field(
+        default_factory=lambda: int(os.getenv("COMPACT_KEEP_RECENT_MAX_TOKENS", "40000")),
+    )
+
+    # full compact 时保留的最少含文本消息条数（参考 Claude Code: 5）
+    keep_recent_min_messages: int = field(
+        default_factory=lambda: int(os.getenv("COMPACT_KEEP_RECENT_MIN_MESSAGES", "5")),
+    )
+
     # 是否启用自动压缩
     auto_compact_enabled: bool = field(
         default_factory=lambda: os.getenv("COMPACT_AUTO_ENABLED", "true").lower() == "true",
