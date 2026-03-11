@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import sys
 from datetime import timedelta
 from typing import Any, Callable, Coroutine
 
@@ -148,10 +147,13 @@ def create_interrupt_worker(
     task_queue: str = "interrupt-queue",
 ) -> Worker:
     """创建 interrupt Worker（只处理 Workflow，无状态）。"""
-    is_debugging = "debugpy" in sys.modules
+    from src.config.settings import get_temporal_config
+
+    debug_mode = get_temporal_config().debug_mode
     return Worker(
         client,
         task_queue=task_queue,
         workflows=[InterruptWorkflow],
-        **({"workflow_runner": UnsandboxedWorkflowRunner()} if is_debugging else {}),
+        debug_mode=debug_mode,  # True 时禁用 deadlock 检测（调试断点不会误报）
+        **({"workflow_runner": UnsandboxedWorkflowRunner()} if debug_mode else {}),
     )

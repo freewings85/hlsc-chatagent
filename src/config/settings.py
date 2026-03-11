@@ -89,6 +89,7 @@ class TemporalConfig:
     enabled: bool = field(default_factory=lambda: os.getenv("TEMPORAL_ENABLED", "false").lower() == "true")
     host: str = field(default_factory=lambda: os.getenv("TEMPORAL_HOST", "localhost:7233"))
     interrupt_task_queue: str = field(default_factory=lambda: os.getenv("TEMPORAL_INTERRUPT_QUEUE", "interrupt-queue"))
+    debug_mode: bool = field(default_factory=lambda: os.getenv("TEMPORAL_DEBUG_MODE", "false").lower() == "true")
 
 
 @dataclass
