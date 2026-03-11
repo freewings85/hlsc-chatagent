@@ -305,6 +305,11 @@ def validate_message_alternation(
 # --------------------------------------------------------------------------- #
 
 
+def serialize_single_agent_message(msg: AgentMessage) -> str:
+    """将单条 AgentMessage 序列化为 JSON 字符串。"""
+    return msg.model_dump_json()
+
+
 def serialize_agent_messages(messages: list[AgentMessage]) -> str:
     """将 AgentMessage 列表序列化为 JSONL 字符串。每行一个 JSON 对象。"""
     lines: list[str] = []

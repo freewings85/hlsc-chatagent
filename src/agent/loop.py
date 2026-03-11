@@ -53,7 +53,7 @@ from src.agent.agent_message import (
 from src.agent.compact.compactor import Compactor, SummarizeFn
 from src.agent.deps import AgentDeps
 from src.agent.message.attachment_collector import AttachmentCollector
-from src.agent.message.memory_message_service import MemoryMessageService
+from src.agent.message.message_service import MemoryMessageService
 from src.agent.message.pre_model_call_service import PreModelCallMessageService
 from src.agent.message.transcript_service import TranscriptService
 from src.agent.prompt.prompt_builder import PromptBuilder

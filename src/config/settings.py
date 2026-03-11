@@ -111,6 +111,7 @@ _kafka_config: Optional[KafkaConfig] = None
 _compact_config: Optional["CompactConfig"] = None
 _user_fs_backend: Optional["BackendProtocol"] = None
 _agent_fs_backend: Optional["BackendProtocol"] = None
+_memory_service_type: str = os.getenv("MEMORY_SERVICE_TYPE", "fs")  # "fs" | "sqlite"
 _memory_message_service: Optional["MemoryMessageService"] = None
 _transcript_service: Optional["TranscriptService"] = None
 
@@ -204,12 +205,24 @@ def get_agent_fs_backend() -> "BackendProtocol":
 
 
 def get_memory_message_service() -> "MemoryMessageService":
-    """获取会话消息工作集服务（全局单例，跨 request 复用缓存）"""
+    """获取会话消息工作集服务（全局单例，跨 request 复用缓存）
+
+    通过 MEMORY_SERVICE_TYPE 环境变量选择实现：
+    - "fs"     — FileMemoryMessageService（jsonl 文件持久化）
+    - "sqlite" — SqliteMemoryMessageService（SQLite 持久化）
+    """
     global _memory_message_service
     if _memory_message_service is None:
-        from src.agent.message.memory_message_service import MemoryMessageService
+        if _memory_service_type == "sqlite":
+            from src.agent.message.sqlite_message_service import SqliteMemoryMessageService
 
-        _memory_message_service = MemoryMessageService(get_user_fs_backend())
+            _memory_message_service = SqliteMemoryMessageService(
+                get_user_fs_config().user_fs_dir,
+            )
+        else:
+            from src.agent.message.memory_message_service import FileMemoryMessageService
+
+            _memory_message_service = FileMemoryMessageService(get_user_fs_backend())
     return _memory_message_service
 
 

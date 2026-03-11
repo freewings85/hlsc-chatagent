@@ -16,6 +16,7 @@ dependencies = [
     "nacos-sdk-python==0.1.16",
     "aiokafka>=0.10.0",
     "temporalio>=1.23.0",
+    "aiosqlite>=0.22.1",
 ]
 
 [tool.pytest.ini_options]

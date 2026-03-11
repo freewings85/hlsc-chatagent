@@ -1,7 +1,6 @@
-"""MemoryMessageService：会话消息工作集管理。
+"""FileMemoryMessageService：文件持久化实现。
 
-当前实现：进程内字典缓存 + 文件持久化（messages.jsonl）。
-接口设计与 Redis 版兼容，后续可无缝切换。
+进程内字典缓存 + 文件持久化（messages.jsonl）。
 
 路径约定（与 HistoryMessageLoader 一致）：
   /{user_id}/sessions/{session_id}/messages.jsonl
@@ -25,12 +24,13 @@ from src.agent.message.message_repair import (
     load_transcript,
     repair_messages,
 )
+from src.agent.message.message_service import MemoryMessageService
 
 if TYPE_CHECKING:
     from src.common.filesystem_backend import BackendProtocol
 
 
-class MemoryMessageService:
+class FileMemoryMessageService(MemoryMessageService):
     """会话消息工作集（进程内字典缓存 + 文件持久化）。
 
     职责：
