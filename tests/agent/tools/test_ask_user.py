@@ -34,42 +34,19 @@ def _make_ctx(deps: AgentDeps) -> RunContext[AgentDeps]:
     return ctx
 
 
-class TestAskForUserFallback:
-    """无 Temporal client 时 fallback 到 fire-and-forget"""
+class TestAskUserNoTemporal:
+    """无 Temporal client 时报错"""
 
     @pytest.mark.asyncio
-    async def test_fallback_emits_interrupt_event(self) -> None:
-        queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
-        emitter = EventEmitter(queue)
-        deps = _make_deps(emitter=emitter, temporal_client=None)
-        ctx = _make_ctx(deps)
-
-        result = await ask_user(ctx, "确认订单？", type="confirm")
-
-        assert "等待用户" in result
-
-        # 应有 interrupt 事件
-        events = []
-        while not queue.empty():
-            e = queue.get_nowait()
-            if e is not None:
-                events.append(e)
-
-        assert len(events) == 1
-        assert events[0].type == EventType.INTERRUPT
-        assert events[0].data["question"] == "确认订单？"
-        assert events[0].data["type"] == "confirm"
-
-    @pytest.mark.asyncio
-    async def test_fallback_without_emitter(self) -> None:
+    async def test_raises_without_temporal(self) -> None:
         deps = _make_deps(emitter=None, temporal_client=None)
         ctx = _make_ctx(deps)
 
-        result = await ask_user(ctx, "确认？")
-        assert "等待用户" in result
+        with pytest.raises(RuntimeError, match="Temporal"):
+            await ask_user(ctx, "确认？")
 
 
-class TestAskForUserWithTemporal:
+class TestAskUserWithTemporal:
     """有 Temporal client 时通过 interrupt 机制暂停等待"""
 
     @pytest.mark.asyncio

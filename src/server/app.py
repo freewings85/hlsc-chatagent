@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"Temporal interrupt worker started (queue={config.interrupt_task_queue})")
     else:
         worker_task = None
-        logger.info("Temporal disabled, ask_user will use fire-and-forget mode")
+        logger.warning("Temporal disabled, ask_user 工具将不可用")
 
     yield
 
@@ -127,7 +127,7 @@ async def spa_fallback(full_path: str) -> HTMLResponse:
 
 
 def _get_temporal_client():
-    """获取 Temporal client（None 时 ask_user fallback）。"""
+    """获取 Temporal client（None 时 ask_user 报错）。"""
     return _temporal_client
 
 

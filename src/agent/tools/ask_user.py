@@ -1,16 +1,12 @@
 """ask_user 工具：暂停 agent 执行，等待用户提供信息后继续。
 
-与旧 interrupt 工具的区别：
-- 旧 interrupt：fire-and-forget，发完卡片立即返回，用户反馈靠下一条消息
-- ask_user：真正暂停 agent loop，await 直到用户回复，然后继续执行
-
-内部使用 Temporal interrupt 抽象层，tool 代码不包含任何 Temporal 细节。
+真正暂停 agent loop，await 直到用户回复，然后继续执行。
+依赖 Temporal interrupt 抽象层，未配置 Temporal 时报错。
 """
 
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 
 from pydantic_ai import RunContext
@@ -20,8 +16,6 @@ from src.agent.interrupt import interrupt as _do_interrupt
 from src.config.settings import get_temporal_config
 from src.event.event_model import EventModel
 from src.event.event_type import EventType
-
-logger = logging.getLogger(__name__)
 
 
 async def ask_user(
@@ -52,18 +46,6 @@ async def ask_user(
         parsed_data = json.loads(data)
     except (json.JSONDecodeError, TypeError):
         parsed_data = {"raw": data}
-
-    # 无 Temporal client 时 fallback 到 fire-and-forget 模式
-    if temporal_client is None:
-        logger.warning("ask_user: no temporal_client, falling back to fire-and-forget")
-        if emitter is not None:
-            await emitter.emit(EventModel(
-                session_id=session_id,
-                request_id="",
-                type=EventType.INTERRUPT,
-                data={"type": type, "question": question, **parsed_data},
-            ))
-        return "已向用户展示问题，等待用户在下一轮消息中反馈。不要猜测用户的选择，等待用户回复。"
 
     # 生成唯一 interrupt key
     interrupt_key = f"interrupt-{session_id}-{uuid.uuid4().hex[:8]}"

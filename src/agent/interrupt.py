@@ -59,7 +59,7 @@ class InterruptWorkflow:
 
 
 async def interrupt(
-    client: Client,
+    client: Client | None,
     key: str,
     callback: InterruptCallback,
     data: dict[str, Any],
@@ -70,7 +70,7 @@ async def interrupt(
     """发起一个 interrupt 调用，阻塞直到用户 resume。
 
     Args:
-        client: Temporal client
+        client: Temporal client（None 时直接报错）
         key: 唯一标识（建议用 session_id + 序号）
         callback: 幂等 async 函数，签名 (data, interrupt_id) -> None
         data: 传给 callback 的业务数据
@@ -80,6 +80,9 @@ async def interrupt(
     Returns:
         用户通过 resume 传回的数据
     """
+    if client is None:
+        raise RuntimeError("interrupt 需要 Temporal，请设置 TEMPORAL_ENABLED=true")
+
     handle = None
 
     # 尝试获取已存在的 Workflow（重连场景）

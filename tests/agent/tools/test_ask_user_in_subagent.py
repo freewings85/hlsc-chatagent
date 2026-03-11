@@ -74,20 +74,14 @@ class TestAskForUserInSubAgent:
     """sub agent 中调用 ask_user 的完整流程"""
 
     @pytest.mark.asyncio
-    async def test_subagent_ask_user_fallback(self) -> None:
-        """sub agent 无 Temporal 时 ask_user fallback 到 fire-and-forget"""
-
-        call_count = 0
+    async def test_subagent_ask_user_no_temporal_error(self) -> None:
+        """sub agent 无 Temporal 时 ask_user 报错，task 工具捕获异常返回错误消息"""
 
         def model_fn(messages: list[ModelMessage], info: object) -> ModelResponse:
-            nonlocal call_count
-            call_count += 1
-            # 检查是否已有 tool-return（即 ask_user 已返回）
             for msg in messages:
                 for part in msg.parts:
                     if hasattr(part, "part_kind") and part.part_kind == "tool-return":
-                        return ModelResponse(parts=[TextPart(content=f"用户反馈: {part.content}")])
-            # 第一次调用 ask_user
+                        return ModelResponse(parts=[TextPart(content=f"工具返回: {part.content}")])
             return ModelResponse(parts=[ToolCallPart(
                 tool_name="ask_user",
                 args=json.dumps({"question": "确认操作？", "type": "confirm"}),
@@ -97,7 +91,7 @@ class TestAskForUserInSubAgent:
             for msg in messages:
                 for part in msg.parts:
                     if hasattr(part, "part_kind") and part.part_kind == "tool-return":
-                        yield f"用户反馈: {part.content}"
+                        yield f"工具返回: {part.content}"
                         return
             yield {0: DeltaToolCall(
                 name="ask_user",
@@ -108,9 +102,8 @@ class TestAskForUserInSubAgent:
 
         queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
         emitter = EventEmitter(queue)
-        # 无 temporal_client → fallback
         deps = _make_parent_deps(
-            session_id="sub-fallback-test",
+            session_id="sub-no-temporal",
             emitter=emitter,
             temporal_client=None,
         )
@@ -119,14 +112,9 @@ class TestAskForUserInSubAgent:
         with patch("src.agent.tools.task.create_model", return_value=model):
             result = await task(ctx, "测试", "调用 ask_user 确认", subagent_type="general")
 
-        # fallback 模式返回"等待用户"
-        assert "等待用户" in result or "用户反馈" in result
-
-        # 应有 interrupt 事件
-        events = await _collect_events(queue)
-        interrupt_events = [e for e in events if e.type == EventType.INTERRUPT]
-        assert len(interrupt_events) >= 1, f"应有 interrupt 事件，实际事件类型: {[e.type for e in events]}"
-        assert interrupt_events[0].data["question"] == "确认操作？"
+        # ask_user 抛 RuntimeError，pydantic-ai 捕获后作为 RetryPrompt 传回 LLM
+        # LLM 再次回复时会包含错误信息
+        assert "Temporal" in result or "工具返回" in result
 
     @pytest.mark.asyncio
     async def test_subagent_ask_user_with_temporal_mock(self) -> None:

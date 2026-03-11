@@ -43,5 +43,5 @@ class AgentDeps:
     emitter: EventEmitter | None = None
     # Skill 环境变量（invoke_skill 从 config.env 加载，bash 执行时注入）
     skill_env: dict[str, str] = field(default_factory=dict)
-    # Temporal client（interrupt 机制用，None 时 ask_user fallback 到 fire-and-forget）
+    # Temporal client（ask_user interrupt 机制用，必须配置）
     temporal_client: TemporalClient | None = None
