@@ -216,20 +216,27 @@ def validate_message_alternation(
     messages: list[ModelMessage],
     user_prompt: str | None = None,
 ) -> list[str]:
-    """校验最终发送给模型的 ModelMessage 列表是否符合 user/assistant 交替规则。
+    """校验最终发送给模型的 ModelMessage 列表是否符合 LLM API 要求。
 
     应在所有处理（context injection、compact 等）完成后、模型调用前调用。
 
-    规则：
-    - 连续的 ModelRequest 视为一个 user turn（Pydantic AI 会合并）
-    - 连续的 ModelResponse 视为一个 assistant turn
-    - 合并后的 role 序列必须严格交替：user, assistant, user, ...
-    - 最后一条必须是 user（加上即将追加的 user_prompt）
+    校验两条规则：
+
+    1. **角色交替**：user/assistant 严格交替，最后一条是 user
+       - 连续的 ModelRequest 视为一个 user turn（Pydantic AI 会合并）
+       - 连续的 ModelResponse 视为一个 assistant turn
+
+    2. **tool_call ↔ tool_result 配对**：
+       - 每个 ToolCallPart(tool_call_id=X) 必须有对应的 ToolReturnPart(tool_call_id=X)
+       - 不允许悬挂的 tool_call（有调用没结果）
+       - 不允许孤儿 tool_result（有结果没调用）
     """
     if not messages and not user_prompt:
         return ["消息列表为空"]
 
     errors: list[str] = []
+
+    # ── 规则 1：角色交替 ──
 
     # 提取 role 序列（合并连续相同 role）
     roles: list[str] = []
@@ -253,6 +260,34 @@ def validate_message_alternation(
     # 校验最后一条是 user
     if roles and roles[-1] != "user":
         errors.append(f"最后一条消息应为 user，实际为 {roles[-1]}")
+
+    # ── 规则 2：tool_call ↔ tool_result 配对 ──
+
+    # 收集所有 tool_call_id（来自 ModelResponse 的 ToolCallPart）
+    call_ids: set[str] = set()
+    for msg in messages:
+        if isinstance(msg, ModelResponse):
+            for part in msg.parts:
+                if isinstance(part, ToolCallPart) and part.tool_call_id:
+                    call_ids.add(part.tool_call_id)
+
+    # 收集所有 tool_result 的 tool_call_id（来自 ModelRequest 的 ToolReturnPart）
+    result_ids: set[str] = set()
+    for msg in messages:
+        if isinstance(msg, ModelRequest):
+            for part in msg.parts:
+                if isinstance(part, ToolReturnPart) and part.tool_call_id:
+                    result_ids.add(part.tool_call_id)
+
+    # 悬挂的 tool_call：有调用没结果
+    dangling_calls = call_ids - result_ids
+    if dangling_calls:
+        errors.append(f"tool_call 缺少对应 tool_result: {dangling_calls}")
+
+    # 孤儿 tool_result：有结果没调用
+    orphan_results = result_ids - call_ids
+    if orphan_results:
+        errors.append(f"tool_result 缺少对应 tool_call: {orphan_results}")
 
     return errors
 
