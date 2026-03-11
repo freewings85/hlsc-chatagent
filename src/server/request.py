@@ -23,3 +23,10 @@ class AsyncChatRequest(BaseModel):
     session_id: str
     message: str
     user_id: str = "anonymous"
+
+
+class InterruptReplyRequest(BaseModel):
+    """interrupt 回复请求"""
+
+    interrupt_key: str
+    reply: str | dict = ""

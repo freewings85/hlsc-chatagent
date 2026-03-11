@@ -9,6 +9,8 @@ from src.agent.file_state import FileStateTracker
 from src.common.filesystem_backend import BackendProtocol
 
 if TYPE_CHECKING:
+    from temporalio.client import Client as TemporalClient
+
     from src.agent.skills.invoked_store import InvokedSkillStore
     from src.agent.skills.registry import SkillRegistry
     from src.event.event_emitter import EventEmitter
@@ -41,3 +43,5 @@ class AgentDeps:
     emitter: EventEmitter | None = None
     # Skill 环境变量（invoke_skill 从 config.env 加载，bash 执行时注入）
     skill_env: dict[str, str] = field(default_factory=dict)
+    # Temporal client（interrupt 机制用，None 时 ask_user fallback 到 fire-and-forget）
+    temporal_client: TemporalClient | None = None

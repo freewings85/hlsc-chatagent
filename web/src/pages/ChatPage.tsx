@@ -18,6 +18,8 @@ interface ToolCall {
 interface InterruptCard {
   type: string
   data: Record<string, unknown>
+  interruptKey?: string
+  question?: string
 }
 
 interface CardData {
@@ -221,7 +223,12 @@ export default function ChatPage() {
         }
         case 'interrupt': {
           const cardType = (d.type as string) ?? 'unknown'
-          const card: InterruptCard = { type: cardType, data: d }
+          const card: InterruptCard = {
+            type: cardType,
+            data: d,
+            interruptKey: (d.interrupt_key as string) ?? undefined,
+            question: (d.question as string) ?? undefined,
+          }
           const interrupts = [...last.interrupts, card]
           copy[copy.length - 1] = { ...last, interrupts }
           break
@@ -248,14 +255,32 @@ export default function ChatPage() {
     } catch { /* ignore */ }
   }
 
-  const replyToInterrupt = (reply: string) => {
-    if (streaming) return
-    setInput(reply)
-    // Use setTimeout to trigger send after state update
-    setTimeout(() => {
-      const btn = document.querySelector('.btn-send') as HTMLButtonElement | null
-      if (btn && !btn.disabled) btn.click()
-    }, 50)
+  const replyToInterrupt = async (interruptKey: string | undefined, reply: string) => {
+    if (!interruptKey) {
+      // Fallback: 无 interrupt_key（fire-and-forget 模式），用旧方式发消息
+      if (streaming) return
+      setInput(reply)
+      setTimeout(() => {
+        const btn = document.querySelector('.btn-send') as HTMLButtonElement | null
+        if (btn && !btn.disabled) btn.click()
+      }, 50)
+      return
+    }
+
+    // 通过 API 回复 interrupt
+    try {
+      const resp = await fetch(`${BASE}/chat/interrupt-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interrupt_key: interruptKey, reply }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
+        alert(`回复失败: ${err.error ?? resp.statusText}`)
+      }
+    } catch (err) {
+      alert(`回复失败: ${(err as Error).message}`)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -296,7 +321,7 @@ export default function ChatPage() {
                     <ToolBlock key={tool.id || j} tool={tool} />
                   ))}
                   {msg.interrupts.map((card, j) => (
-                    <InterruptBlock key={`int-${j}`} card={card} onReply={replyToInterrupt} disabled={streaming} />
+                    <InterruptBlock key={`int-${j}`} card={card} onReply={(reply) => replyToInterrupt(card.interruptKey, reply)} disabled={card.interruptKey ? false : streaming} />
                   ))}
                   {msg.text ? (
                     <div className="text-segment">
@@ -407,8 +432,17 @@ function InterruptBlock({ card, onReply, disabled }: {
   onReply: (reply: string) => void
   disabled: boolean
 }) {
+  const [replyText, setReplyText] = useState('')
+  const [replied, setReplied] = useState(false)
+
+  const handleReply = (text: string) => {
+    onReply(text)
+    setReplied(true)
+  }
+
   const renderData = () => {
-    const entries = Object.entries(card.data).filter(([k]) => k !== 'type')
+    const skipKeys = new Set(['type', 'question', 'interrupt_id', 'interrupt_key'])
+    const entries = Object.entries(card.data).filter(([k]) => !skipKeys.has(k))
     if (entries.length === 0) return null
     return (
       <div className="interrupt-data">
@@ -423,16 +457,36 @@ function InterruptBlock({ card, onReply, disabled }: {
   }
 
   return (
-    <div className="interrupt-block" data-interrupt-type={card.type}>
+    <div className="interrupt-block" data-interrupt-type={card.type} data-interrupt-key={card.interruptKey}>
       <div className="interrupt-header">
-        <span className="interrupt-icon">📋</span>
+        <span className="interrupt-icon">{card.interruptKey ? '⏸️' : '📋'}</span>
         <span className="interrupt-type">{card.type}</span>
+        {replied && <span className="interrupt-replied">已回复</span>}
       </div>
+      {card.question && <div className="interrupt-question">{card.question}</div>}
       {renderData()}
-      <div className="interrupt-actions">
-        <button className="btn-confirm" onClick={() => onReply('确认')} disabled={disabled}>确认</button>
-        <button className="btn-cancel" onClick={() => onReply('取消')} disabled={disabled}>取消</button>
-      </div>
+      {!replied && (
+        <div className="interrupt-actions">
+          {card.type === 'confirm' ? (
+            <>
+              <button className="btn-confirm" onClick={() => handleReply('确认')} disabled={disabled}>确认</button>
+              <button className="btn-cancel" onClick={() => handleReply('取消')} disabled={disabled}>取消</button>
+            </>
+          ) : (
+            <>
+              <input
+                className="interrupt-input"
+                placeholder="输入回复..."
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && replyText.trim()) handleReply(replyText.trim()) }}
+                disabled={disabled}
+              />
+              <button className="btn-confirm" onClick={() => handleReply(replyText.trim() || '确认')} disabled={disabled}>发送</button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

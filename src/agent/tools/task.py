@@ -223,6 +223,7 @@ async def _run_sub_agent(
         backend=parent_deps.backend,
         file_state_tracker=parent_deps.file_state_tracker,
         emitter=parent_deps.emitter,  # 共享父 emitter（事件推送）
+        temporal_client=parent_deps.temporal_client,  # 共享 Temporal client
     )
 
     # ── 4. 子 agent 的 SessionRequestTask ──

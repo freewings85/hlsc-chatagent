@@ -83,6 +83,15 @@ class ServerConfig:
 
 
 @dataclass
+class TemporalConfig:
+    """Temporal 配置"""
+
+    enabled: bool = field(default_factory=lambda: os.getenv("TEMPORAL_ENABLED", "false").lower() == "true")
+    host: str = field(default_factory=lambda: os.getenv("TEMPORAL_HOST", "localhost:7233"))
+    interrupt_task_queue: str = field(default_factory=lambda: os.getenv("TEMPORAL_INTERRUPT_QUEUE", "interrupt-queue"))
+
+
+@dataclass
 class KafkaConfig:
     """Kafka 配置"""
 
@@ -96,6 +105,7 @@ _llm_config: Optional[LLMConfig] = None
 _user_fs_config: Optional[UserFsConfig] = None
 _agent_fs_config: Optional[AgentFsConfig] = None
 _server_config: Optional[ServerConfig] = None
+_temporal_config: Optional[TemporalConfig] = None
 _kafka_config: Optional[KafkaConfig] = None
 _compact_config: Optional["CompactConfig"] = None
 _user_fs_backend: Optional["BackendProtocol"] = None
@@ -132,6 +142,14 @@ def get_server_config() -> ServerConfig:
     if _server_config is None:
         _server_config = ServerConfig()
     return _server_config
+
+
+def get_temporal_config() -> TemporalConfig:
+    """获取 Temporal 配置"""
+    global _temporal_config
+    if _temporal_config is None:
+        _temporal_config = TemporalConfig()
+    return _temporal_config
 
 
 def get_kafka_config() -> KafkaConfig:

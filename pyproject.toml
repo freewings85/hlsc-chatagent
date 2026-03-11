@@ -15,6 +15,7 @@ dependencies = [
     "python-multipart>=0.0.22",
     "nacos-sdk-python==0.1.16",
     "aiokafka>=0.10.0",
+    "temporalio>=1.23.0",
 ]
 
 [tool.pytest.ini_options]

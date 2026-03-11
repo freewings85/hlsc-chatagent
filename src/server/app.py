@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -11,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.server.request import AsyncChatRequest, ChatRequest, StopRequest
+from src.server.request import AsyncChatRequest, ChatRequest, InterruptReplyRequest, StopRequest
 from src.server.agent_md_api import router as agent_md_router
 from src.server.mcp_api import router as mcp_router
 from src.server.skill_api import router as skill_router
@@ -21,10 +22,56 @@ logger: logging.Logger = logging.getLogger(__name__)
 # 运行中的任务注册表：task_id → (SessionRequestTask, asyncio.Task)
 _running_tasks: dict[str, tuple[object, asyncio.Task[None]]] = {}
 
+# Temporal client（lifespan 中初始化）
+_temporal_client = None
+_interrupt_worker = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期：启动/关闭 Temporal Worker。"""
+    global _temporal_client, _interrupt_worker
+
+    from src.config.settings import get_temporal_config
+
+    config = get_temporal_config()
+    if config.enabled:
+        from temporalio.client import Client
+
+        from src.agent.interrupt import create_interrupt_worker
+
+        _temporal_client = await Client.connect(config.host)
+        _interrupt_worker = create_interrupt_worker(
+            _temporal_client,
+            task_queue=config.interrupt_task_queue,
+        )
+        # Worker 作为后台任务运行
+        worker_task = asyncio.create_task(_interrupt_worker.run())
+        logger.info(f"Temporal interrupt worker started (queue={config.interrupt_task_queue})")
+    else:
+        worker_task = None
+        logger.info("Temporal disabled, ask_user will use fire-and-forget mode")
+
+    yield
+
+    # Shutdown
+    if _interrupt_worker is not None:
+        await _interrupt_worker.shutdown()
+    if worker_task is not None and not worker_task.done():
+        worker_task.cancel()
+        try:
+            await worker_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    _temporal_client = None
+    _interrupt_worker = None
+
+
 app: FastAPI = FastAPI(
     title="ChatAgent API",
     description="通用对话 Agent",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS（允许 Vite dev server 跨域请求）
@@ -79,6 +126,11 @@ async def spa_fallback(full_path: str) -> HTMLResponse:
     return HTMLResponse(content="<h1>web/index.html 不存在</h1>", status_code=404)
 
 
+def _get_temporal_client():
+    """获取 Temporal client（None 时 ask_user fallback）。"""
+    return _temporal_client
+
+
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     """SSE 流式对话接口。
@@ -121,6 +173,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         user_id=request.user_id,
         available_tools=list(ALL_FS_TOOLS),
         tool_map=create_default_tool_map(),
+        temporal_client=_get_temporal_client(),
     )
 
     # 后台运行 Agent Loop，前台 SSE generator 消费事件
@@ -188,6 +241,33 @@ async def chat_stop(request: StopRequest) -> JSONResponse:
     return JSONResponse({"status": "cancelled", "task_id": request.task_id})
 
 
+@app.post("/chat/interrupt-reply")
+async def interrupt_reply(request: InterruptReplyRequest) -> JSONResponse:
+    """回复一个等待中的 interrupt，恢复 agent 执行。
+
+    前端收到 interrupt 事件后，用户操作完毕调用此接口。
+    interrupt_key 来自 interrupt 事件的 data.interrupt_key 字段。
+    """
+    if _temporal_client is None:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Temporal 未启用，无法处理 interrupt reply"},
+        )
+
+    from src.agent.interrupt import resume
+
+    try:
+        reply_data = request.reply if isinstance(request.reply, dict) else {"reply": request.reply}
+        await resume(_temporal_client, request.interrupt_key, reply_data)
+        return JSONResponse({"status": "ok", "interrupt_key": request.interrupt_key})
+    except Exception as exc:
+        logger.warning(f"interrupt-reply failed: {exc}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(exc), "interrupt_key": request.interrupt_key},
+        )
+
+
 @app.post("/chat/async")
 async def chat_async(request: AsyncChatRequest) -> JSONResponse:
     """异步对话接口：立即返回 task_id，事件通过 Kafka 推送。
@@ -231,6 +311,7 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
         user_id=request.user_id,
         available_tools=list(ALL_FS_TOOLS),
         tool_map=create_default_tool_map(),
+        temporal_client=_get_temporal_client(),
     )
 
     loop_task = asyncio.create_task(
