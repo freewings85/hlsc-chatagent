@@ -448,6 +448,21 @@ class FilesystemBackend(BackendProtocol):
                 responses.append(FileDownloadResponse(path=path, content=None, error="invalid_path"))
         return responses
 
+    def append(self, file_path: str, content: str) -> WriteResult:
+        """Append content to a file, creating it if it doesn't exist."""
+        resolved_path = self._resolve_path(file_path)
+        try:
+            resolved_path.parent.mkdir(parents=True, exist_ok=True)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            fd = os.open(resolved_path, flags, 0o644)
+            with os.fdopen(fd, "a", encoding="utf-8") as f:
+                f.write(content)
+            return WriteResult(path=file_path, files_update=None)
+        except (OSError, UnicodeEncodeError) as e:
+            return WriteResult(error=f"Error appending to file '{file_path}': {e}")
+
     def exists(self, path: str) -> bool:
         """Check if a path exists."""
         try:

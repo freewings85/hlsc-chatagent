@@ -364,22 +364,6 @@ class TestErrorPaths:
             with pytest.raises(OSError, match="写入失败"):
                 await svc.update("u", "s", [make_user_msg("new")])
 
-    async def test_append_read_fails_raises_os_error(
-        self, backend: FilesystemBackend
-    ) -> None:
-        """追加时读取失败抛 OSError"""
-        from unittest.mock import AsyncMock, patch
-        from src.common.filesystem_backend import FileDownloadResponse
-
-        svc = MemoryMessageService(backend)
-        # 先写文件让 aexists 返回 True
-        await svc.insert_batch("u", "s", [make_user_msg("existing")])
-
-        error_resp = FileDownloadResponse(path="/u/sessions/s/messages.jsonl", error="read error", content=None)
-        with patch.object(backend, "adownload_files", new=AsyncMock(return_value=[error_resp])):
-            with pytest.raises(OSError, match="读取失败"):
-                await svc.insert_batch("u", "s", [make_user_msg("new")])
-
     async def test_append_write_fails_raises_os_error(
         self, backend: FilesystemBackend
     ) -> None:
@@ -390,7 +374,7 @@ class TestErrorPaths:
         svc = MemoryMessageService(backend)
 
         with patch.object(
-            backend, "awrite",
+            backend, "aappend",
             new=AsyncMock(return_value=WriteResult(error="disk full"))
         ):
             with pytest.raises(OSError, match="写入失败"):

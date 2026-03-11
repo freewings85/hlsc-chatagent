@@ -57,14 +57,6 @@ class TranscriptService:
         lock_key = f"{user_id}:{session_id}"
 
         async with self._locks[lock_key]:
-            existing = ""
-            if await self._backend.aexists(path):
-                responses = await self._backend.adownload_files([path])
-                resp = responses[0]
-                if resp.error is not None or resp.content is None:
-                    raise OSError(f"读取失败，中止追加以防数据丢失: {path}")
-                existing = resp.content.decode("utf-8")
-                await self._backend.adelete(path)
-            result = await self._backend.awrite(path, existing + append_content)
+            result = await self._backend.aappend(path, append_content)
             if result.error is not None:
                 raise OSError(f"写入失败: {path}: {result.error}")

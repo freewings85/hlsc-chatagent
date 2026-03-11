@@ -111,6 +111,8 @@ _kafka_config: Optional[KafkaConfig] = None
 _compact_config: Optional["CompactConfig"] = None
 _user_fs_backend: Optional["BackendProtocol"] = None
 _agent_fs_backend: Optional["BackendProtocol"] = None
+_memory_message_service: Optional["MemoryMessageService"] = None
+_transcript_service: Optional["TranscriptService"] = None
 
 
 def get_llm_config() -> LLMConfig:
@@ -199,3 +201,23 @@ def get_agent_fs_backend() -> "BackendProtocol":
         config = get_agent_fs_config()
         _agent_fs_backend = FilesystemBackend(root_dir=config.agent_fs_dir, virtual_mode=True)
     return _agent_fs_backend
+
+
+def get_memory_message_service() -> "MemoryMessageService":
+    """获取会话消息工作集服务（全局单例，跨 request 复用缓存）"""
+    global _memory_message_service
+    if _memory_message_service is None:
+        from src.agent.message.memory_message_service import MemoryMessageService
+
+        _memory_message_service = MemoryMessageService(get_user_fs_backend())
+    return _memory_message_service
+
+
+def get_transcript_service() -> "TranscriptService":
+    """获取 transcript 审计日志服务（全局单例）"""
+    global _transcript_service
+    if _transcript_service is None:
+        from src.agent.message.transcript_service import TranscriptService
+
+        _transcript_service = TranscriptService(get_user_fs_backend())
+    return _transcript_service

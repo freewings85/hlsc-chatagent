@@ -154,6 +154,13 @@ class BackendProtocol(abc.ABC):
     async def aexists(self, path: str) -> bool:
         return await asyncio.to_thread(self.exists, path)
 
+    def append(self, file_path: str, content: str) -> WriteResult:
+        """Append content to a file, creating it if it doesn't exist."""
+        raise NotImplementedError
+
+    async def aappend(self, file_path: str, content: str) -> WriteResult:
+        return await asyncio.to_thread(self.append, file_path, content)
+
     def delete(self, path: str) -> bool:
         raise NotImplementedError
 

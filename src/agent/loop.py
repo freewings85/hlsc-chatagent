@@ -63,7 +63,13 @@ from src.agent.skills.tool import invoke_skill
 from src.agent.mcp.loader import load_mcp_toolsets
 from src.agent.toolset import get_tools
 from src.common.session_request_task import SessionRequestTask
-from src.config.settings import get_agent_fs_backend, get_backend, get_compact_config
+from src.config.settings import (
+    get_agent_fs_backend,
+    get_backend,
+    get_compact_config,
+    get_memory_message_service,
+    get_transcript_service,
+)
 from src.event.event_emitter import EventEmitter
 from src.agent.card_parser import make_card_reminder, parse_card
 from src.event.event_model import EventModel
@@ -530,9 +536,9 @@ async def run_main_agent(
     deps.backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
     deps.emitter = emitter
 
-    # 服务初始化
-    memory_service = MemoryMessageService(backend)
-    transcript_service = TranscriptService(backend)
+    # 服务获取（全局单例，跨 request 复用缓存）
+    memory_service = get_memory_message_service()
+    transcript_service = get_transcript_service()
     prompt_builder: PromptBuilder = PromptBuilder(
         user_fs_backend=backend,
         agent_fs_backend=agent_fs_backend,

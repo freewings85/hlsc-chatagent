@@ -133,32 +133,15 @@ class TestSessionIsolation:
 class TestErrorPaths:
     """错误路径测试"""
 
-    async def test_read_fails_raises_os_error(
+    async def test_append_fails_raises_os_error(
         self, backend: FilesystemBackend, service: TranscriptService
     ) -> None:
-        """读取现有 transcript 失败时抛 OSError"""
-        from unittest.mock import AsyncMock, patch
-        from src.common.filesystem_backend import FileDownloadResponse
-
-        # 先写一条消息让文件存在
-        await service.append("u", "s", [make_user_msg("existing")])
-
-        error_resp = FileDownloadResponse(
-            path="/u/sessions/s/transcript.jsonl", error="read error", content=None
-        )
-        with patch.object(backend, "adownload_files", new=AsyncMock(return_value=[error_resp])):
-            with pytest.raises(OSError, match="读取失败"):
-                await service.append("u", "s", [make_user_msg("new")])
-
-    async def test_write_fails_raises_os_error(
-        self, backend: FilesystemBackend, service: TranscriptService
-    ) -> None:
-        """写入 transcript 失败时抛 OSError"""
+        """追加 transcript 失败时抛 OSError"""
         from unittest.mock import AsyncMock, patch
         from src.common.filesystem_backend import WriteResult
 
         with patch.object(
-            backend, "awrite",
+            backend, "aappend",
             new=AsyncMock(return_value=WriteResult(error="disk full"))
         ):
             with pytest.raises(OSError, match="写入失败"):
