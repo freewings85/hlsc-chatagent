@@ -6,8 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.agent_message import AgentMessage, AssistantMessage, UserMessage
+from src.agent.agent_message import (
+    AgentMessage,
+    AssistantMessage,
+    ToolCall,
+    ToolResult,
+    UserMessage,
+    serialize_agent_messages,
+)
+from src.agent.message.history_message_loader import _transcript_path
 from src.agent.message.memory_message_service import MemoryMessageService
+from src.agent.message.message_repair import _CANCELLED_CONTENT
 from src.storage.local_backend import FilesystemBackend
 
 
@@ -171,6 +180,144 @@ class TestSessionIsolation:
         assert r1[0].content == "session1"
         assert len(r2) == 1
         assert r2[0].content == "session2"
+
+
+class TestLoadTimeRepair:
+    """加载时自动修复 tool_call/tool_result 配对问题。"""
+
+    async def test_load_repairs_missing_tool_result_from_transcript(
+        self, backend: FilesystemBackend,
+    ) -> None:
+        """messages 缺少 tool_result，从 transcript 找回并修复。"""
+        # messages.jsonl：有 tool_call 但没有 tool_result
+        broken_msgs: list[AgentMessage] = [
+            UserMessage(content="查天气"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCall(tool_name="weather", tool_call_id="c1", args="{}")],
+            ),
+        ]
+        msgs_content = serialize_agent_messages(broken_msgs)
+        await backend.awrite("/u/sessions/s/messages.jsonl", msgs_content)
+
+        # transcript.jsonl：包含完整的 tool_result
+        transcript_msgs: list[AgentMessage] = [
+            UserMessage(content="查天气"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCall(tool_name="weather", tool_call_id="c1", args="{}")],
+            ),
+            UserMessage(
+                content="",
+                tool_results=[ToolResult(tool_name="weather", tool_call_id="c1", content="晴天")],
+            ),
+            AssistantMessage(content="今天是晴天"),
+        ]
+        transcript_content = serialize_agent_messages(transcript_msgs)
+        await backend.awrite(_transcript_path("u", "s"), transcript_content)
+
+        svc = MemoryMessageService(backend)
+        result = await svc.load("u", "s")
+
+        # 修复后应有 3 条消息（原 2 + 补齐 1）
+        assert len(result) == 3
+        repair_msg = result[-1]
+        assert isinstance(repair_msg, UserMessage)
+        assert repair_msg.tool_results[0].tool_call_id == "c1"
+        assert repair_msg.tool_results[0].content == "晴天"
+        assert repair_msg.metadata.get("is_repair") is True
+
+    async def test_load_repairs_with_virtual_when_transcript_missing(
+        self, backend: FilesystemBackend,
+    ) -> None:
+        """transcript 不存在时，补虚拟 tool_result。"""
+        broken_msgs: list[AgentMessage] = [
+            UserMessage(content="查天气"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCall(tool_name="weather", tool_call_id="c1", args="{}")],
+            ),
+        ]
+        msgs_content = serialize_agent_messages(broken_msgs)
+        await backend.awrite("/u/sessions/s/messages.jsonl", msgs_content)
+
+        svc = MemoryMessageService(backend)
+        result = await svc.load("u", "s")
+
+        assert len(result) == 3
+        repair_msg = result[-1]
+        assert isinstance(repair_msg, UserMessage)
+        assert repair_msg.tool_results[0].content == _CANCELLED_CONTENT
+
+    async def test_load_no_repair_when_paired(
+        self, backend: FilesystemBackend,
+    ) -> None:
+        """配对完整时不触发修复。"""
+        good_msgs: list[AgentMessage] = [
+            UserMessage(content="查天气"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCall(tool_name="weather", tool_call_id="c1", args="{}")],
+            ),
+            UserMessage(
+                content="",
+                tool_results=[ToolResult(tool_name="weather", tool_call_id="c1", content="晴天")],
+            ),
+            AssistantMessage(content="今天是晴天"),
+        ]
+        msgs_content = serialize_agent_messages(good_msgs)
+        await backend.awrite("/u/sessions/s/messages.jsonl", msgs_content)
+
+        svc = MemoryMessageService(backend)
+        result = await svc.load("u", "s")
+
+        assert len(result) == 4  # 无修复
+
+    async def test_load_repair_persisted_to_file(
+        self, backend: FilesystemBackend,
+    ) -> None:
+        """修复后的 messages.jsonl 被覆写，第二次加载不需要再修复。"""
+        broken_msgs: list[AgentMessage] = [
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCall(tool_name="t1", tool_call_id="c1", args="{}")],
+            ),
+        ]
+        await backend.awrite("/u/sessions/s/messages.jsonl", serialize_agent_messages(broken_msgs))
+
+        svc = MemoryMessageService(backend)
+        result1 = await svc.load("u", "s")
+        assert len(result1) == 2  # repaired
+
+        # 新实例，从文件加载（不经过缓存）
+        svc2 = MemoryMessageService(backend)
+        result2 = await svc2.load("u", "s")
+        assert len(result2) == 2  # 文件已修复，直接加载
+
+    async def test_load_repairs_multiple_tool_calls(
+        self, backend: FilesystemBackend,
+    ) -> None:
+        """一条 assistant 有多个 tool_calls 全部缺失，全部补齐。"""
+        broken_msgs: list[AgentMessage] = [
+            AssistantMessage(
+                content="",
+                tool_calls=[
+                    ToolCall(tool_name="t1", tool_call_id="c1", args="{}"),
+                    ToolCall(tool_name="t2", tool_call_id="c2", args="{}"),
+                ],
+            ),
+        ]
+        await backend.awrite("/u/sessions/s/messages.jsonl", serialize_agent_messages(broken_msgs))
+
+        svc = MemoryMessageService(backend)
+        result = await svc.load("u", "s")
+
+        assert len(result) == 2
+        repair_msg = result[-1]
+        assert isinstance(repair_msg, UserMessage)
+        assert len(repair_msg.tool_results) == 2
+        ids = {tr.tool_call_id for tr in repair_msg.tool_results}
+        assert ids == {"c1", "c2"}
 
 
 class TestErrorPaths:

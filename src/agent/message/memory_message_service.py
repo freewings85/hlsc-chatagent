@@ -20,6 +20,11 @@ from src.agent.agent_message import (
     should_persist,
 )
 from src.agent.message.history_message_loader import _messages_path
+from src.agent.message.message_repair import (
+    find_missing_tool_call_ids,
+    load_transcript,
+    repair_messages,
+)
 
 if TYPE_CHECKING:
     from src.common.filesystem_backend import BackendProtocol
@@ -43,12 +48,27 @@ class MemoryMessageService:
         return f"{user_id}:{session_id}"
 
     async def load(self, user_id: str, session_id: str) -> list[AgentMessage]:
-        """加载消息工作集，优先从缓存读取。"""
+        """加载消息工作集，优先从缓存读取。
+
+        首次从文件加载时自动检测 tool_call/tool_result 配对问题：
+        - 先从 transcript.jsonl 查找缺失的 tool_result
+        - 找不到则补虚拟 tool_result（标记 is_repair）
+        - 修复后覆写 messages.jsonl
+        """
         key = self._cache_key(user_id, session_id)
         if key in self._cache:
             return list(self._cache[key])
 
         messages = await self._load_from_file(user_id, session_id)
+
+        # 加载时修复：检测 tool_call/tool_result 配对问题
+        if messages and find_missing_tool_call_ids(messages):
+            transcript = await load_transcript(self._backend, user_id, session_id)
+            repaired = repair_messages(messages, transcript)
+            if repaired is not messages:
+                messages = repaired
+                await self._overwrite_file(user_id, session_id, messages)
+
         self._cache[key] = messages
         return list(messages)
 
