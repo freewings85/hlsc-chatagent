@@ -13,8 +13,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.server.request import AsyncChatRequest, ChatRequest, InterruptReplyRequest, StopRequest
-from src.server.agent_md_api import router as agent_md_router
 from src.server.mcp_api import router as mcp_router
+from src.server.prompt_api import router as prompt_router
 from src.server.skill_api import router as skill_router
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ app.add_middleware(
 
 # 管理 API
 app.include_router(skill_router)
-app.include_router(agent_md_router)
+app.include_router(prompt_router)
 app.include_router(mcp_router)
 
 _WEB_DIR: Path = Path(__file__).parent.parent.parent / "web"

@@ -541,7 +541,6 @@ async def run_main_agent(
     transcript_service = get_transcript_service()
     prompt_builder: PromptBuilder = PromptBuilder(
         user_fs_backend=backend,
-        agent_fs_backend=agent_fs_backend,
     )
     context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
         user_id=task.user_id,

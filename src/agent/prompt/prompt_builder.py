@@ -1,7 +1,13 @@
-"""PromptBuilder：加载系统提示词 + 构建上下文消息（agent.md / memory.md）"""
+"""PromptBuilder：加载系统提示词 + 构建上下文消息（agent.md / memory.md）
+
+所有提示词文件统一存放在 ./prompts/ 目录下，通过管理 API 可查看和编辑：
+- prompts/templates/*.md — 系统提示词模板（按顺序拼接）
+- prompts/agent.md — 项目级业务配置
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,8 +16,11 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 if TYPE_CHECKING:
     from src.common.filesystem_backend import BackendProtocol
 
-# 代码内模板路径（按拼接顺序排列，见 templates/README.md）
-_TEMPLATES_DIR: Path = Path(__file__).parent / "templates"
+# 提示词根目录（可通过 PROMPTS_DIR 环境变量覆盖）
+_PROMPTS_DIR: Path = Path(os.getenv("PROMPTS_DIR", "prompts"))
+_TEMPLATES_DIR: Path = _PROMPTS_DIR / "templates"
+
+# 系统提示词模板（按拼接顺序排列，见 templates/README.md）
 _SYSTEM_PROMPT_PARTS: list[Path] = [
     _TEMPLATES_DIR / "identity.md",
     _TEMPLATES_DIR / "behavior.md",
@@ -21,8 +30,8 @@ _SYSTEM_PROMPT_PARTS: list[Path] = [
     _TEMPLATES_DIR / "card.md",
 ]
 
-# agent_fs backend 中的路径（系统级，全局共享）
-_AGENT_MD_PATH = "/agent.md"
+# agent.md 路径（项目级业务配置）
+_AGENT_MD_PATH: Path = _TEMPLATES_DIR / "agent.md"
 
 # user_fs backend 中的路径（按用户隔离）
 _MEMORY_MD_PATH = "/{user_id}/memory.md"
@@ -31,21 +40,19 @@ _MEMORY_MD_PATH = "/{user_id}/memory.md"
 class PromptBuilder:
     """加载系统提示词和上下文消息。
 
-    - system_prompt: 从代码内模板加载，传给 agent 的 system_prompt 参数
+    - system_prompt: 从 prompts/templates/ 加载，传给 agent 的 system_prompt 参数
     - context_messages: agent.md / memory.md 等，作为 is_meta 消息注入到 message_history 前面
 
-    使用两个 backend：
-    - agent_fs_backend: 读取 agent.md（系统级，全局共享）
-    - user_fs_backend: 读取 memory.md（按用户隔离）
+    使用 user_fs_backend 读取 memory.md（按用户隔离），
+    agent.md 和 templates 直接从本地 prompts/ 目录读取。
     """
 
     def __init__(
         self,
         user_fs_backend: BackendProtocol,
-        agent_fs_backend: BackendProtocol,
+        agent_fs_backend: BackendProtocol | None = None,
     ) -> None:
         self._user_fs_backend: BackendProtocol = user_fs_backend
-        self._agent_fs_backend: BackendProtocol = agent_fs_backend
         self._system_prompt_cache: str | None = None
 
     @staticmethod
@@ -58,6 +65,14 @@ class PromptBuilder:
                 if content:
                     parts.append(content)
         return "\n\n".join(parts)
+
+    @staticmethod
+    def load_agent_md() -> str | None:
+        """加载 agent.md（项目级业务配置）。"""
+        if _AGENT_MD_PATH.exists():
+            content = _AGENT_MD_PATH.read_text(encoding="utf-8").strip()
+            return content if content else None
+        return None
 
     def build_system_prompt(self) -> str:
         """加载系统提示词（带实例缓存）。"""
@@ -72,10 +87,8 @@ class PromptBuilder:
         """
         messages: list[ModelRequest] = []
 
-        # agent.md（系统级，从 agent_fs_backend 读取）
-        agent_md: str | None = await self._read_if_exists(
-            self._agent_fs_backend, _AGENT_MD_PATH,
-        )
+        # agent.md（项目级，从 prompts/ 目录直接读取）
+        agent_md = self.load_agent_md()
         if agent_md:
             messages.append(
                 ModelRequest(
