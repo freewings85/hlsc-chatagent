@@ -35,10 +35,10 @@ def _make_ctx(deps: AgentDeps) -> RunContext[AgentDeps]:
 
 
 class TestAskUserNoTemporal:
-    """无 Temporal client 时报错"""
+    """无 Temporal client 时抛 RuntimeError，由引擎层 wrap_tool_safe 捕获后返回给 LLM"""
 
     @pytest.mark.asyncio
-    async def test_raises_without_temporal(self) -> None:
+    async def test_raises_runtime_error_without_temporal(self) -> None:
         deps = _make_deps(emitter=None, temporal_client=None)
         ctx = _make_ctx(deps)
 

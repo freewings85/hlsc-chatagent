@@ -75,12 +75,14 @@ class TestAskForUserInSubAgent:
 
     @pytest.mark.asyncio
     async def test_subagent_ask_user_no_temporal_error(self) -> None:
-        """sub agent 无 Temporal 时 ask_user 报错，task 工具捕获异常返回错误消息"""
+        """sub agent 无 Temporal 时 ask_user 抛 RuntimeError，
+        引擎层 wrap_tool_safe 捕获后返回错误字符串，LLM 收到 tool-return 后正常回复"""
 
         def model_fn(messages: list[ModelMessage], info: object) -> ModelResponse:
             for msg in messages:
                 for part in msg.parts:
-                    if hasattr(part, "part_kind") and part.part_kind == "tool-return":
+                    pk = getattr(part, "part_kind", "")
+                    if pk == "tool-return":
                         return ModelResponse(parts=[TextPart(content=f"工具返回: {part.content}")])
             return ModelResponse(parts=[ToolCallPart(
                 tool_name="ask_user",
@@ -90,7 +92,8 @@ class TestAskForUserInSubAgent:
         async def stream_fn(messages: list[ModelMessage], info: AgentInfo):
             for msg in messages:
                 for part in msg.parts:
-                    if hasattr(part, "part_kind") and part.part_kind == "tool-return":
+                    pk = getattr(part, "part_kind", "")
+                    if pk == "tool-return":
                         yield f"工具返回: {part.content}"
                         return
             yield {0: DeltaToolCall(
@@ -112,9 +115,8 @@ class TestAskForUserInSubAgent:
         with patch("src.agent.tools.task.create_model", return_value=model):
             result = await task(ctx, "测试", "调用 ask_user 确认", subagent_type="general")
 
-        # ask_user 抛 RuntimeError，pydantic-ai 捕获后作为 RetryPrompt 传回 LLM
-        # LLM 再次回复时会包含错误信息
-        assert "Temporal" in result or "工具返回" in result
+        # RuntimeError 被 wrap_tool_safe 捕获 → tool-return 包含错误信息 → LLM 正常回复
+        assert "Temporal" in result or "工具执行错误" in result or "工具返回" in result
 
     @pytest.mark.asyncio
     async def test_subagent_ask_user_with_temporal_mock(self) -> None:

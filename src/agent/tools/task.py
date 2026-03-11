@@ -113,12 +113,14 @@ def _build_subagent_get_tools(tool_names: list[str], parent_deps: AgentDeps):
     from pydantic_ai import Tool
     from pydantic_ai.toolsets.function import FunctionToolset
 
+    from src.agent.toolset import wrap_tool_safe
+
     def get_tools(ctx: RunContext[AgentDeps]) -> FunctionToolset:
         toolset = FunctionToolset()
         for name in tool_names:
             func = parent_deps.tool_map.get(name)
             if func is not None:
-                toolset.add_tool(Tool(func, name=name))
+                toolset.add_tool(Tool(wrap_tool_safe(func), name=name))
         return toolset
 
     return get_tools

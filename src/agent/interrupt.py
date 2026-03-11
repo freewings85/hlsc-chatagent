@@ -81,7 +81,7 @@ async def interrupt(
         用户通过 resume 传回的数据
     """
     if client is None:
-        raise RuntimeError("interrupt 需要 Temporal，请设置 TEMPORAL_ENABLED=true")
+        raise RuntimeError("interrupt 不可用：Temporal 未配置，请设置 TEMPORAL_ENABLED=true")
 
     handle = None
 
