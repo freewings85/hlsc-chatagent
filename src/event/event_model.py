@@ -21,6 +21,8 @@ class EventModel:
     timestamp: int = field(default_factory=lambda: int(time.time() * 1000))
     finish_reason: str | None = None
     agent_name: str = "main"
+    agent_path: str = "main"
+    parent_tool_call_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """转为可 JSON 序列化的 dict。"""
@@ -32,6 +34,8 @@ class EventModel:
             "timestamp": self.timestamp,
             "finish_reason": self.finish_reason,
             "agent_name": self.agent_name,
+            "agent_path": self.agent_path,
+            "parent_tool_call_id": self.parent_tool_call_id,
         }
 
     def to_json(self) -> str:
