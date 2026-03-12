@@ -13,6 +13,10 @@ interface ToolCall {
   args: string
   result?: string
   status: 'pending' | 'done' | 'error'
+  // Subagent nested content (populated via parent_tool_call_id)
+  subText: string
+  subTools: ToolCall[]
+  subInterrupts: InterruptCard[]
 }
 
 interface InterruptCard {
@@ -120,6 +124,7 @@ export default function ChatPage() {
     // Add user message + empty assistant placeholder
     const userMsg: ChatMessage = { role: 'user', text, tools: [], interrupts: [], cards: {} }
     const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [], cards: {} }
+    const newTool = (): ToolCall => ({ id: '', name: '', args: '', status: 'pending', subText: '', subTools: [], subInterrupts: [] })
     setMessages(prev => [...prev, userMsg, asstMsg])
 
     let buffer = ''
@@ -170,12 +175,76 @@ export default function ChatPage() {
 
   const handleEvent = (type: string, data: Record<string, unknown>) => {
     const d = (data.data ?? data) as Record<string, unknown>
+    const parentToolCallId = (data.parent_tool_call_id as string) ?? null
 
     setMessages(prev => {
       const copy = [...prev]
       const last = copy[copy.length - 1]
       if (!last || last.role !== 'assistant') return copy
 
+      // Helper: update a tool's sub-content by parent_tool_call_id
+      const updateToolSub = (
+        tools: ToolCall[],
+        parentId: string,
+        updater: (tool: ToolCall) => ToolCall,
+      ): ToolCall[] => tools.map(t => t.id === parentId ? updater(t) : t)
+
+      // If event has parent_tool_call_id, route to the parent tool's nested content
+      if (parentToolCallId) {
+        switch (type) {
+          case 'text': {
+            const content = (d.content as string) ?? ''
+            if (content) {
+              const tools = updateToolSub(last.tools, parentToolCallId, t => ({
+                ...t, subText: t.subText + content,
+              }))
+              copy[copy.length - 1] = { ...last, tools }
+            }
+            break
+          }
+          case 'tool_call_start': {
+            const id = (d.tool_call_id as string) ?? ''
+            const name = (d.tool_name as string) ?? 'unknown'
+            const tools = updateToolSub(last.tools, parentToolCallId, t => ({
+              ...t,
+              subTools: [...t.subTools, { id, name, args: '', status: 'pending' as const, subText: '', subTools: [], subInterrupts: [] }],
+            }))
+            copy[copy.length - 1] = { ...last, tools }
+            break
+          }
+          case 'tool_result': {
+            const id = (d.tool_call_id as string) ?? ''
+            const rawResult = d.result
+            const result = typeof rawResult === 'object' ? JSON.stringify(rawResult, null, 2) : String(rawResult ?? '')
+            const tools = updateToolSub(last.tools, parentToolCallId, t => ({
+              ...t,
+              subTools: t.subTools.map(st => st.id === id ? { ...st, result, status: 'done' as const } : st),
+            }))
+            copy[copy.length - 1] = { ...last, tools }
+            break
+          }
+          case 'interrupt': {
+            const cardType = (d.type as string) ?? 'unknown'
+            const card: InterruptCard = {
+              type: cardType,
+              data: d,
+              interruptKey: (d.interrupt_key as string) ?? undefined,
+              question: (d.question as string) ?? undefined,
+            }
+            const tools = updateToolSub(last.tools, parentToolCallId, t => ({
+              ...t, subInterrupts: [...t.subInterrupts, card],
+            }))
+            copy[copy.length - 1] = { ...last, tools }
+            break
+          }
+          default:
+            // Other event types with parent — ignore for now
+            break
+        }
+        return copy
+      }
+
+      // Top-level events (no parent_tool_call_id)
       switch (type) {
         case 'chat_request_start': {
           taskIdRef.current = (d.task_id as string) ?? null
@@ -189,7 +258,7 @@ export default function ChatPage() {
         case 'tool_call_start': {
           const id = (d.tool_call_id as string) ?? ''
           const name = (d.tool_name as string) ?? 'unknown'
-          const tools = [...last.tools, { id, name, args: '', status: 'pending' as const }]
+          const tools = [...last.tools, { id, name, args: '', status: 'pending' as const, subText: '', subTools: [], subInterrupts: [] }]
           copy[copy.length - 1] = { ...last, tools }
           break
         }
@@ -324,7 +393,7 @@ export default function ChatPage() {
               ) : (
                 <>
                   {msg.tools.map((tool, j) => (
-                    <ToolBlock key={tool.id || j} tool={tool} />
+                    <ToolBlock key={tool.id || j} tool={tool} onReplyInterrupt={replyToInterrupt} streaming={streaming} />
                   ))}
                   {msg.interrupts.map((card, j) => (
                     <InterruptBlock key={`int-${j}`} card={card} onReply={(reply) => replyToInterrupt(card.interruptKey, reply)} disabled={card.interruptKey ? false : streaming} />
@@ -501,8 +570,13 @@ function InterruptBlock({ card, onReply, disabled }: {
 // ToolBlock sub-component
 // --------------------------------------------------------------------------
 
-function ToolBlock({ tool }: { tool: ToolCall }) {
+function ToolBlock({ tool, onReplyInterrupt, streaming }: {
+  tool: ToolCall
+  onReplyInterrupt?: (interruptKey: string | undefined, reply: string) => void
+  streaming?: boolean
+}) {
   const [expanded, setExpanded] = useState(false)
+  const hasSubContent = tool.subText || tool.subTools.length > 0 || tool.subInterrupts.length > 0
 
   let argsPreview = ''
   try {
@@ -513,15 +587,34 @@ function ToolBlock({ tool }: { tool: ToolCall }) {
   }
 
   return (
-    <div className={`tool-block ${expanded ? 'expanded' : ''}`}>
+    <div className={`tool-block ${expanded || hasSubContent ? 'expanded' : ''}`}>
       <div className="tool-header" onClick={() => setExpanded(!expanded)}>
-        <span className="tool-icon">🔧</span>
+        <span className="tool-icon">{hasSubContent ? '🤖' : '🔧'}</span>
         <span className="tool-name">{tool.name}</span>
         <span className="tool-args-preview">{argsPreview}</span>
         <span className={`tool-status ${tool.status}`}>
           {tool.status === 'pending' ? '⏳ 运行中' : tool.status === 'done' ? '✓ 完成' : '✗ 错误'}
         </span>
       </div>
+      {/* Subagent nested content — always visible when present */}
+      {hasSubContent && (
+        <div className="tool-sub-content">
+          {tool.subTools.map((st, j) => (
+            <ToolBlock key={st.id || j} tool={st} onReplyInterrupt={onReplyInterrupt} streaming={streaming} />
+          ))}
+          {tool.subInterrupts.map((card, j) => (
+            <InterruptBlock
+              key={`sub-int-${j}`}
+              card={card}
+              onReply={(reply) => onReplyInterrupt?.(card.interruptKey, reply)}
+              disabled={card.interruptKey ? false : !!streaming}
+            />
+          ))}
+          {tool.subText && (
+            <div className="tool-sub-text">{tool.subText}</div>
+          )}
+        </div>
+      )}
       {expanded && (
         <div className="tool-details">
           <div className="tool-section">

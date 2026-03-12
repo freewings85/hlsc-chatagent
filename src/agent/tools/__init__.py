@@ -11,6 +11,7 @@
 
 from src.agent.tools.ask_user import ask_user
 from src.agent.tools.bash import bash
+from src.agent.tools.call_price_finder import call_price_finder
 from src.agent.file_state import ChangedFile, FileEntry, FileStateTracker
 from src.agent.tools.fs import edit, glob, grep, read, write
 from src.agent.tools.task import task
@@ -29,12 +30,16 @@ __all__ = [
     "bash",
     "task",
     "ask_user",
+    "call_price_finder",
     # 便捷工厂
     "ALL_FS_TOOLS",
     "create_default_tool_map",
 ]
 
-ALL_FS_TOOLS: list[str] = ["read", "edit", "write", "glob", "grep", "bash", "task", "ask_user"]
+ALL_FS_TOOLS: list[str] = [
+    "read", "edit", "write", "glob", "grep", "bash", "task", "ask_user",
+    "call_price_finder",
+]
 
 
 def create_default_tool_map() -> dict:
@@ -48,4 +53,5 @@ def create_default_tool_map() -> dict:
         "bash": bash,
         "task": task,
         "ask_user": ask_user,
+        "call_price_finder": call_price_finder,
     }

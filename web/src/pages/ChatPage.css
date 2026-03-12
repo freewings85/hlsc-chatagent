@@ -169,6 +169,24 @@
 .tool-details { display: none; }
 .tool-block.expanded .tool-details { display: block; }
 
+/* Subagent nested content inside tool cards */
+.tool-sub-content {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+}
+.tool-sub-content .tool-block {
+  margin-top: 6px;
+}
+.tool-sub-text {
+  padding: 6px 0;
+  color: var(--fg);
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .tool-section {
   padding: 8px 12px;
   border-top: 1px solid var(--border);
