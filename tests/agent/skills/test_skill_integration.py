@@ -27,19 +27,19 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from src.agent.compact.compactor import CompactResult
-from src.agent.deps import AgentDeps
-from src.agent.message.attachment_collector import AttachmentCollector
-from src.agent.message.context_injector import wrap_system_reminder
-from src.agent.message.pre_model_call_service import (
+from src.sdk._agent.compact.compactor import CompactResult
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.message.attachment_collector import AttachmentCollector
+from src.sdk._agent.message.context_injector import wrap_system_reminder
+from src.sdk._agent.message.pre_model_call_service import (
     PreModelCallMessageService,
     _INVOKED_SKILLS_SOURCE,
     _SKILL_LISTING_SOURCE,
 )
-from src.agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
-from src.agent.skills.registry import SkillEntry, SkillRegistry
-from src.agent.skills.tool import invoke_skill
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
+from src.sdk._agent.skills.registry import SkillEntry, SkillRegistry
+from src.sdk._agent.skills.tool import invoke_skill
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 # --------------------------------------------------------------------------- #
@@ -85,8 +85,8 @@ def make_pre_call_service(
     store: InvokedSkillStore | None = None,
 ) -> PreModelCallMessageService:
     """创建一个最简化的 PreModelCallMessageService（无 context、无 attachment、无 compact）。"""
-    from src.agent.compact.compactor import Compactor, CompactConfig
-    from src.agent.file_state import FileStateTracker
+    from src.sdk._agent.compact.compactor import Compactor, CompactConfig
+    from src.sdk._agent.file_state import FileStateTracker
 
     compactor = Compactor(
         config=CompactConfig(

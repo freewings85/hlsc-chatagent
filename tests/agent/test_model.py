@@ -2,8 +2,8 @@
 
 from unittest.mock import patch
 
-from src.agent.model import create_model
-from src.config.settings import LLMConfig
+from src.sdk._agent.model import create_model
+from src.sdk._config.settings import LLMConfig
 
 
 class TestCreateModel:
@@ -41,7 +41,7 @@ class TestCreateModel:
 
     def test_default_config(self) -> None:
         """不传 config 使用 get_llm_config()"""
-        with patch("src.agent.model.get_llm_config") as mock_get:
+        with patch("src.sdk._agent.model.get_llm_config") as mock_get:
             mock_get.return_value = LLMConfig(
                 llm_type="openai", api_key="k", model="m",
             )

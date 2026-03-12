@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src.server.skill_api import _resolve_skill_md_url
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._server.skill_api import _resolve_skill_md_url
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 # --------------------------------------------------------------------------- #
@@ -75,7 +75,7 @@ class TestSkillApiEndpoints:
 
     @pytest.fixture
     def client(self) -> TestClient:
-        from src.server.app import app
+        from src.sdk._server.app import app
         return TestClient(app)
 
     def test_list_skills(self, client: TestClient) -> None:
@@ -123,8 +123,8 @@ class TestSkillApiEndpoints:
 
         skills_backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
 
-        with patch("src.server.skill_api.get_agent_fs_backend", return_value=skills_backend), \
-             patch("src.server.skill_api.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.sdk._server.skill_api.get_agent_fs_backend", return_value=skills_backend), \
+             patch("src.sdk._server.skill_api.httpx.AsyncClient") as mock_client_cls:
             # Mock HTTP response
             mock_resp = AsyncMock()
             mock_resp.text = skill_content
@@ -159,8 +159,8 @@ class TestSkillApiEndpoints:
         """下载到的内容不是有效 SKILL.md 时返回 400。"""
         skills_backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
 
-        with patch("src.server.skill_api.get_agent_fs_backend", return_value=skills_backend), \
-             patch("src.server.skill_api.httpx.AsyncClient") as mock_client_cls:
+        with patch("src.sdk._server.skill_api.get_agent_fs_backend", return_value=skills_backend), \
+             patch("src.sdk._server.skill_api.httpx.AsyncClient") as mock_client_cls:
             mock_resp = AsyncMock()
             mock_resp.text = "# Not a skill\nNo frontmatter here."
             mock_resp.raise_for_status = lambda: None

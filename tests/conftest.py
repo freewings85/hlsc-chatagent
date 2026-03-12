@@ -8,10 +8,10 @@ from pydantic_ai import RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from src.agent.deps import AgentDeps
-from src.common.session_request_task import SessionRequestTask
-from src.event.event_emitter import EventEmitter
-from src.event.event_model import EventModel
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._common.session_request_task import SessionRequestTask
+from src.sdk._event.event_emitter import EventEmitter
+from src.sdk._event.event_model import EventModel
 
 
 # ---- Mock Models (non-streaming) ----

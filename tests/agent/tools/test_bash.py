@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agent.deps import AgentDeps
-from src.agent.tools.bash import MAX_OUTPUT_BYTES, bash
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.tools.bash import MAX_OUTPUT_BYTES, bash
 
 
 def make_ctx() -> MagicMock:

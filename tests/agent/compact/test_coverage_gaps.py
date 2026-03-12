@@ -12,9 +12,9 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from src.agent.compact.compactor import CompactResult, Compactor
-from src.agent.compact.config import CompactConfig
-from src.agent.compact.token_counter import estimate_part_tokens
+from src.sdk._agent.compact.compactor import CompactResult, Compactor
+from src.sdk._agent.compact.config import CompactConfig
+from src.sdk._agent.compact.token_counter import estimate_part_tokens
 
 
 class TestCompactorDisabled:

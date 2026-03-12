@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from src.server.a2a_adapter import ChatAgentExecutor, _build_agent_card, mount_a2a
+from src.sdk._server.a2a_adapter import ChatAgentExecutor, _build_agent_card, mount_a2a
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ class TestA2ABasicFlow:
     async def test_send_message(self, client: AsyncClient, monkeypatch) -> None:
         """验证 message/send 返回有效的 A2A 响应。"""
         # Mock agent loop 使其立即返回
-        from src.server import a2a_adapter
+        from src.sdk._server import a2a_adapter
 
         async def _mock_execute(self, context, event_queue):
             from a2a.server.tasks import TaskUpdater
@@ -89,7 +89,7 @@ class TestA2ABasicFlow:
 
     async def test_send_subscribe_streaming(self, client: AsyncClient, monkeypatch) -> None:
         """验证 message/stream (sendSubscribe) 返回 SSE 流。"""
-        from src.server import a2a_adapter
+        from src.sdk._server import a2a_adapter
 
         async def _mock_execute(self, context, event_queue):
             from a2a.server.tasks import TaskUpdater
@@ -133,7 +133,7 @@ class TestA2ABasicFlow:
 
     async def test_input_required_flow(self, client: AsyncClient, monkeypatch) -> None:
         """验证 HITL：agent 返回 input-required 状态。"""
-        from src.server import a2a_adapter
+        from src.sdk._server import a2a_adapter
 
         async def _mock_execute(self, context, event_queue):
             from a2a.server.tasks import TaskUpdater

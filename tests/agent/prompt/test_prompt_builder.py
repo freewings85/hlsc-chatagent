@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pytest
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 
-from src.agent.prompt.prompt_builder import PromptBuilder
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.prompt.prompt_builder import PromptBuilder
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 def _make_builder(user_fs_root: Path, prompts_dir: Path) -> PromptBuilder:
@@ -39,7 +39,7 @@ class TestPromptBuilder:
         prompts_dir.mkdir()
         builder = _make_builder(tmp_path / "user", prompts_dir)
 
-        with patch("src.agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
+        with patch("src.sdk._agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
             messages = await builder.build_context_messages(user_id="u1")
         assert messages == []
 
@@ -52,7 +52,7 @@ class TestPromptBuilder:
 
         builder = _make_builder(tmp_path / "user", prompts_dir)
 
-        with patch("src.agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
+        with patch("src.sdk._agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
             messages = await builder.build_context_messages(user_id="u1")
 
         assert len(messages) == 1
@@ -77,7 +77,7 @@ class TestPromptBuilder:
 
         builder = _make_builder(user_fs_root, prompts_dir)
 
-        with patch("src.agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
+        with patch("src.sdk._agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
             messages = await builder.build_context_messages(user_id="u1")
 
         assert len(messages) == 2
@@ -96,7 +96,7 @@ class TestPromptBuilderEdgeCases:
         prompts_dir.mkdir()
         builder = _make_builder(tmp_path / "user", prompts_dir)
 
-        with patch("src.agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
+        with patch("src.sdk._agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
             messages = await builder.build_context_messages(user_id="nonexistent")
         assert messages == []
 
@@ -109,6 +109,6 @@ class TestPromptBuilderEdgeCases:
 
         builder = _make_builder(tmp_path / "user", prompts_dir)
 
-        with patch("src.agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
+        with patch("src.sdk._agent.prompt.prompt_builder._AGENT_MD_PATH", prompts_dir / "agent.md"):
             messages = await builder.build_context_messages(user_id="u1")
         assert messages == []

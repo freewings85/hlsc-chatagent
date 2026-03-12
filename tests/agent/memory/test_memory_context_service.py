@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.agent.memory.inmemory_context_service import InMemoryContextService
-from src.common.request_context import RequestContext
+from src.sdk._agent.memory.inmemory_context_service import InMemoryContextService
+from src.sdk._common.request_context import RequestContext
 
 
 class SampleContext(RequestContext):

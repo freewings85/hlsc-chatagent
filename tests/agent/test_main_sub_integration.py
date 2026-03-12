@@ -21,11 +21,11 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from src.agent.deps import AgentDeps
-from src.agent.loop import create_agent, run_main_agent
-from src.event.event_emitter import EventEmitter
-from src.event.event_model import EventModel
-from src.event.event_type import EventType
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.loop import create_agent, run_main_agent
+from src.sdk._event.event_emitter import EventEmitter
+from src.sdk._event.event_model import EventModel
+from src.sdk._event.event_type import EventType
 
 
 async def _collect_events(queue: asyncio.Queue[EventModel | None]) -> list[EventModel]:
@@ -97,7 +97,7 @@ class TestMainSubAgentIntegration:
     async def test_main_agent_calls_task_full_flow(self, make_task, make_emitter) -> None:
         """主 agent 调用 task 工具，触发子 agent，验证完整事件流"""
         from unittest.mock import patch
-        from src.agent.tools.task import task as task_tool
+        from src.sdk._agent.tools.task import task as task_tool
 
         # 主 agent model
         main_model = FunctionModel(
@@ -118,7 +118,7 @@ class TestMainSubAgentIntegration:
         task, _ = make_task("帮我分析代码")
         event_queue, emitter = make_emitter()
 
-        with patch("src.agent.tools.task.create_model", return_value=sub_model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=sub_model):
             await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         events = await _collect_events(event_queue)
@@ -194,7 +194,7 @@ class TestMainSubAgentIntegration:
     async def test_event_ordering(self, make_task, make_emitter) -> None:
         """事件顺序：主 agent tool_call_start → 子 agent events → 主 agent tool_result → 主 agent text → end"""
         from unittest.mock import patch
-        from src.agent.tools.task import task as task_tool
+        from src.sdk._agent.tools.task import task as task_tool
 
         main_model = FunctionModel(
             mock_main_calls_task,
@@ -213,7 +213,7 @@ class TestMainSubAgentIntegration:
         task, _ = make_task("分析代码")
         event_queue, emitter = make_emitter()
 
-        with patch("src.agent.tools.task.create_model", return_value=sub_model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=sub_model):
             await run_main_agent(emitter, task, agent, deps, message_history=[])
 
         events = await _collect_events(event_queue)

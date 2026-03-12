@@ -9,7 +9,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from src.agent.compact.token_counter import (
+from src.sdk._agent.compact.token_counter import (
     estimate_message_tokens,
     estimate_messages_tokens,
     estimate_tokens,

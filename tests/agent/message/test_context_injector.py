@@ -2,7 +2,7 @@
 
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from src.agent.message.context_injector import (
+from src.sdk._agent.message.context_injector import (
     inject_context,
     merge_context_messages,
     wrap_system_reminder,

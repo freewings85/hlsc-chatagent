@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.agent_message import (
+from src.sdk._agent.agent_message import (
     AgentMessage,
     AssistantMessage,
     ToolCall,
@@ -14,10 +14,10 @@ from src.agent.agent_message import (
     UserMessage,
     serialize_agent_messages,
 )
-from src.agent.message.history_message_loader import _transcript_path
-from src.agent.memory.file_memory_message_service import FileMemoryMessageService
-from src.agent.message.message_repair import _CANCELLED_CONTENT
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.message.history_message_loader import _transcript_path
+from src.sdk._agent.memory.file_memory_message_service import FileMemoryMessageService
+from src.sdk._agent.message.message_repair import _CANCELLED_CONTENT
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 def make_user_msg(content: str) -> UserMessage:
@@ -353,7 +353,7 @@ class TestErrorPaths:
     ) -> None:
         """覆写时 awrite 失败抛 OSError"""
         from unittest.mock import AsyncMock, patch
-        from src.common.filesystem_backend import WriteResult
+        from src.sdk._common.filesystem_backend import WriteResult
 
         svc = FileMemoryMessageService(backend)
 
@@ -369,7 +369,7 @@ class TestErrorPaths:
     ) -> None:
         """追加时写入失败抛 OSError"""
         from unittest.mock import AsyncMock, patch
-        from src.common.filesystem_backend import WriteResult
+        from src.sdk._common.filesystem_backend import WriteResult
 
         svc = FileMemoryMessageService(backend)
 

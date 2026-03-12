@@ -5,11 +5,11 @@ import asyncio
 import pytest
 from pydantic_ai.models.function import FunctionModel
 
-from src.agent.deps import AgentDeps
-from src.agent.loop import create_agent, run_main_agent
-from src.event.event_emitter import EventEmitter
-from src.event.event_model import EventModel
-from src.event.event_type import EventType
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.loop import create_agent, run_main_agent
+from src.sdk._event.event_emitter import EventEmitter
+from src.sdk._event.event_model import EventModel
+from src.sdk._event.event_type import EventType
 from tests.conftest import (
     mock_get_weather,
     mock_simple_text,
@@ -290,7 +290,7 @@ class TestFormatMessagesForSummary:
     def test_formats_user_and_assistant_messages(self) -> None:
         from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-        from src.agent.loop import _format_messages_for_summary
+        from src.sdk._agent.loop import _format_messages_for_summary
 
         messages = [
             ModelRequest(parts=[UserPromptPart(content="用户问题")]),
@@ -303,7 +303,7 @@ class TestFormatMessagesForSummary:
     def test_truncates_long_content(self) -> None:
         from pydantic_ai.messages import ModelRequest, UserPromptPart
 
-        from src.agent.loop import _format_messages_for_summary
+        from src.sdk._agent.loop import _format_messages_for_summary
 
         long_content = "x" * 1000
         messages = [ModelRequest(parts=[UserPromptPart(content=long_content)])]
@@ -313,7 +313,7 @@ class TestFormatMessagesForSummary:
     def test_skips_non_text_parts(self) -> None:
         from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
-        from src.agent.loop import _format_messages_for_summary
+        from src.sdk._agent.loop import _format_messages_for_summary
 
         messages = [
             ModelRequest(parts=[ToolReturnPart(tool_name="r", content="result", tool_call_id="c1")])
@@ -322,7 +322,7 @@ class TestFormatMessagesForSummary:
         assert result == ""  # ToolReturnPart 不被处理
 
     def test_empty_messages_returns_empty_string(self) -> None:
-        from src.agent.loop import _format_messages_for_summary
+        from src.sdk._agent.loop import _format_messages_for_summary
 
         result = _format_messages_for_summary([])
         assert result == ""
@@ -338,8 +338,8 @@ class TestCompactBlockIntegration:
 
         from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
-        from src.agent.compact.config import CompactConfig
-        from src.agent.deps import AgentDeps
+        from src.sdk._agent.compact.config import CompactConfig
+        from src.sdk._agent.deps import AgentDeps
 
         # 大 tool result 消息（两条各 5000 字符 ≈ 2500 tokens）
         big_content = "x" * 5000
@@ -369,7 +369,7 @@ class TestCompactBlockIntegration:
         event_queue, emitter = make_emitter()
         deps = AgentDeps()
 
-        with patch("src.agent.loop.get_compact_config", return_value=small_config):
+        with patch("src.sdk._agent.loop.get_compact_config", return_value=small_config):
             await run_main_agent(emitter, task, agent, deps, message_history=message_history)
 
         events = await _collect_events(event_queue)
@@ -387,7 +387,7 @@ class TestMakeSummarizeFn:
         from pydantic_ai import Agent
         from pydantic_ai.messages import ModelRequest, UserPromptPart
 
-        from src.agent.loop import _make_summarize_fn
+        from src.sdk._agent.loop import _make_summarize_fn
 
         model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
         # 使用不带 DynamicToolset 的 Agent，因为 _make_summarize_fn 内部调 agent.run() 不传 deps

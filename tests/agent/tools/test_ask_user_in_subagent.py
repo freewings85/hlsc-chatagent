@@ -16,12 +16,12 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from unittest.mock import MagicMock, patch
 
-from src.agent.deps import AgentDeps
-from src.agent.tools.task import task
-from src.agent.tools.ask_user import ask_user
-from src.event.event_emitter import EventEmitter
-from src.event.event_model import EventModel
-from src.event.event_type import EventType
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.tools.task import task
+from src.sdk._agent.tools.ask_user import ask_user
+from src.sdk._event.event_emitter import EventEmitter
+from src.sdk._event.event_model import EventModel
+from src.sdk._event.event_type import EventType
 
 
 # ── 辅助函数 ────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ class TestAskForUserInSubAgent:
         )
         ctx = _make_ctx(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             result = await task(ctx, "测试", "调用 ask_user 确认", subagent_type="general")
 
         # RuntimeError 被 wrap_tool_safe 捕获 → tool-return 包含错误信息 → LLM 正常回复
@@ -162,8 +162,8 @@ class TestAskForUserInSubAgent:
         ctx = _make_ctx(deps)
 
         with (
-            patch("src.agent.tools.task.create_model", return_value=model),
-            patch("src.agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt),
+            patch("src.sdk._agent.tools.task.create_model", return_value=model),
+            patch("src.sdk._agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt),
         ):
             result = await task(ctx, "选择测试", "让用户选择方案", subagent_type="general")
 
@@ -252,8 +252,8 @@ class TestAskForUserInSubAgent:
         ctx = _make_ctx(deps)
 
         with (
-            patch("src.agent.tools.task.create_model", return_value=model),
-            patch("src.agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt),
+            patch("src.sdk._agent.tools.task.create_model", return_value=model),
+            patch("src.sdk._agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt),
         ):
             result = await task(ctx, "多次询问", "需要两次确认", subagent_type="general")
 
@@ -312,8 +312,8 @@ class TestAskForUserInSubAgent:
         ctx = _make_ctx(deps)
 
         with (
-            patch("src.agent.tools.task.create_model", return_value=model),
-            patch("src.agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt),
+            patch("src.sdk._agent.tools.task.create_model", return_value=model),
+            patch("src.sdk._agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt),
         ):
             await task(ctx, "继承测试", "确认", subagent_type="general")
 

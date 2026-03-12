@@ -10,11 +10,11 @@ from fastapi.testclient import TestClient
 @pytest.fixture()
 def _patch_backend(tmp_path, monkeypatch):
     """用临时目录替换 agent_fs_backend"""
-    from src.storage.local_backend import FilesystemBackend
+    from src.sdk._storage.local_backend import FilesystemBackend
 
     backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
     monkeypatch.setattr(
-        "src.server.skill_api.get_agent_fs_backend",
+        "src.sdk._server.skill_api.get_agent_fs_backend",
         lambda: backend,
     )
     return backend
@@ -22,7 +22,7 @@ def _patch_backend(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def client(_patch_backend) -> TestClient:
-    from src.server.app import app
+    from src.sdk._server.app import app
 
     return TestClient(app)
 

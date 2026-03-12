@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.agent_message import AssistantMessage, UserMessage
-from src.agent.message.transcript_service import TranscriptService
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.agent_message import AssistantMessage, UserMessage
+from src.sdk._agent.message.transcript_service import TranscriptService
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 def make_user_msg(content: str) -> UserMessage:
@@ -138,7 +138,7 @@ class TestErrorPaths:
     ) -> None:
         """追加 transcript 失败时抛 OSError"""
         from unittest.mock import AsyncMock, patch
-        from src.common.filesystem_backend import WriteResult
+        from src.sdk._common.filesystem_backend import WriteResult
 
         with patch.object(
             backend, "aappend",

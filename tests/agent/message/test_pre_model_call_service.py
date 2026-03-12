@@ -9,18 +9,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from src.agent.compact.compactor import CompactResult, Compactor
-from src.agent.compact.config import CompactConfig
-from src.agent.file_state import FileStateTracker
-from src.agent.message.attachment_collector import AttachmentCollector, _ATTACHMENT_SOURCE
-from src.agent.message.context_injector import _MERGED_META_SOURCE
-from src.agent.message.pre_model_call_service import (
+from src.sdk._agent.compact.compactor import CompactResult, Compactor
+from src.sdk._agent.compact.config import CompactConfig
+from src.sdk._agent.file_state import FileStateTracker
+from src.sdk._agent.message.attachment_collector import AttachmentCollector, _ATTACHMENT_SOURCE
+from src.sdk._agent.message.context_injector import _MERGED_META_SOURCE
+from src.sdk._agent.message.pre_model_call_service import (
     PreModelCallMessageService,
     _INVOKED_SKILLS_SOURCE,
     _SKILL_LISTING_SOURCE,
 )
-from src.agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
-from src.agent.skills.registry import SkillEntry, SkillRegistry
+from src.sdk._agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
+from src.sdk._agent.skills.registry import SkillEntry, SkillRegistry
 
 
 def make_user_msg(content: str, source: str | None = None) -> ModelRequest:
@@ -136,9 +136,9 @@ class TestHandleNoCompact:
 class TestHandleWithCompact:
     async def test_compacted_true_when_microcompact_triggers(self, tmp_path: Path) -> None:
         """microcompact 触发时 compacted=True"""
-        from src.agent.message.history_message_loader import _serialize_messages
+        from src.sdk._agent.message.history_message_loader import _serialize_messages
 
-        from src.storage.local_backend import FilesystemBackend
+        from src.sdk._storage.local_backend import FilesystemBackend
         backend = FilesystemBackend(root_dir=str(tmp_path), virtual_mode=True)
 
         # 创建一个低阈值的 config，确保 microcompact 触发
@@ -151,7 +151,7 @@ class TestHandleWithCompact:
             min_savings_threshold=1,  # 很低的节省阈值
         )
 
-        from src.agent.compact.token_counter import estimate_messages_tokens
+        from src.sdk._agent.compact.token_counter import estimate_messages_tokens
         from pydantic_ai.messages import ToolReturnPart
 
         # 构造一个有大 tool result 的消息

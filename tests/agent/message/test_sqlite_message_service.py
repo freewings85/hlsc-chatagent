@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.agent_message import (
+from src.sdk._agent.agent_message import (
     AgentMessage,
     AssistantMessage,
     ToolCall,
     ToolResult,
     UserMessage,
 )
-from src.agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
+from src.sdk._agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
 
 
 def make_user_msg(content: str) -> UserMessage:
@@ -169,7 +169,7 @@ class TestLoadTimeRepair:
 
     async def test_load_repairs_missing_tool_result(self, service: SqliteMemoryMessageService) -> None:
         """缺少 tool_result 时补虚拟 result。"""
-        from src.agent.message.message_repair import _CANCELLED_CONTENT
+        from src.sdk._agent.message.message_repair import _CANCELLED_CONTENT
 
         broken_msgs: list[AgentMessage] = [
             UserMessage(content="查天气"),

@@ -10,7 +10,7 @@ import uuid
 import pytest
 from temporalio.client import Client
 
-from src.agent.interrupt import (
+from src.sdk._agent.interrupt import (
     InterruptWorkflow,
     create_interrupt_worker,
     interrupt,
@@ -37,8 +37,16 @@ async def temporal_client():
 
 @pytest.fixture
 async def temporal_worker(temporal_client):
-    """启动 interrupt worker。"""
-    worker = create_interrupt_worker(temporal_client, task_queue=TASK_QUEUE)
+    """启动 interrupt worker（测试用 unsandboxed runner 避免 import path 校验问题）。"""
+    from temporalio.worker import UnsandboxedWorkflowRunner
+    from src.sdk._agent.interrupt import InterruptWorkflow
+    from temporalio.worker import Worker
+    worker = Worker(
+        temporal_client,
+        task_queue=TASK_QUEUE,
+        workflows=[InterruptWorkflow],
+        workflow_runner=UnsandboxedWorkflowRunner(),
+    )
     task = asyncio.create_task(worker.run())
     yield worker
     await worker.shutdown()

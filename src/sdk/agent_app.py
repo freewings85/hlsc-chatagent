@@ -58,7 +58,7 @@ class AgentApp:
             if config.temporal_enabled:
                 try:
                     from temporalio.client import Client
-                    from src.agent.interrupt import create_interrupt_worker
+                    from src.sdk._agent.interrupt import create_interrupt_worker
 
                     self._temporal_client = await Client.connect(config.temporal_host)
                     self._interrupt_worker = create_interrupt_worker(
@@ -105,9 +105,9 @@ class AgentApp:
         # SSE Chat Stream
         @fastapi_app.post("/chat/stream")
         async def chat_stream(request: dict[str, Any]) -> StreamingResponse:
-            from src.event.event_emitter import EventEmitter
-            from src.event.event_model import EventModel
-            from src.event.event_type import EventType
+            from src.sdk._event.event_emitter import EventEmitter
+            from src.sdk._event.event_model import EventModel
+            from src.sdk._event.event_type import EventType
 
             session_id = request.get("session_id", "default")
             user_id = request.get("user_id", "anonymous")
@@ -172,7 +172,7 @@ class AgentApp:
                     status_code=503,
                     content={"error": "Temporal 未启用"},
                 )
-            from src.agent.interrupt import resume
+            from src.sdk._agent.interrupt import resume
             interrupt_key = request.get("interrupt_key", "")
             reply = request.get("reply", "")
             reply_data = reply if isinstance(reply, dict) else {"reply": reply}
@@ -193,7 +193,7 @@ class AgentApp:
     def _mount_a2a(self, fastapi_app: Any) -> None:
         """挂载 A2A 协议端点"""
         try:
-            from src.server.a2a_adapter import mount_a2a
+            from src.sdk._server.a2a_adapter import mount_a2a
 
             config = self._config
             mount_a2a(
@@ -215,9 +215,9 @@ class AgentApp:
 
         复用 SDK Agent 的配置，为每个 A2A 请求创建新的 pydantic_ai Agent + deps。
         """
-        from src.agent.deps import AgentDeps
-        from src.agent.loop import create_agent
-        from src.storage.local_backend import FilesystemBackend
+        from src.sdk._agent.deps import AgentDeps
+        from src.sdk._agent.loop import create_agent
+        from src.sdk._storage.local_backend import FilesystemBackend
 
         model = self._agent._build_model()
         available_tools, tool_map = self._agent._build_tool_map()

@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic_ai import RunContext
 
-from src.agent.deps import AgentDeps
-from src.agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
-from src.agent.skills.registry import SkillEntry, SkillRegistry
-from src.agent.skills.tool import invoke_skill
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
+from src.sdk._agent.skills.registry import SkillEntry, SkillRegistry
+from src.sdk._agent.skills.tool import invoke_skill
 
 
 def make_entry(

@@ -26,7 +26,7 @@ from typing import Any
 
 import pytest
 
-from src.agent.skills.registry import SkillEntry, _parse_frontmatter_line, parse_skill_file
+from src.sdk._agent.skills.registry import SkillEntry, _parse_frontmatter_line, parse_skill_file
 
 
 # --------------------------------------------------------------------------- #

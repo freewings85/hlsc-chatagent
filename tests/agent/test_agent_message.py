@@ -16,7 +16,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from src.agent.agent_message import (
+from src.sdk._agent.agent_message import (
     AgentMessage,
     AssistantMessage,
     ToolCall,

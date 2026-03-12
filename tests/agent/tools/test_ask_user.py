@@ -8,11 +8,11 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from unittest.mock import MagicMock
 
-from src.agent.deps import AgentDeps
-from src.agent.tools.ask_user import ask_user
-from src.event.event_emitter import EventEmitter
-from src.event.event_model import EventModel
-from src.event.event_type import EventType
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.tools.ask_user import ask_user
+from src.sdk._event.event_emitter import EventEmitter
+from src.sdk._event.event_model import EventModel
+from src.sdk._event.event_type import EventType
 
 
 def _make_deps(
@@ -77,7 +77,7 @@ class TestAskUserWithTemporal:
         )
         ctx = _make_ctx(deps)
 
-        with patch("src.agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt):
+        with patch("src.sdk._agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt):
             result = await ask_user(ctx, "确认订单？", type="confirm", data='{"amount": 100}')
 
         assert result == "确认"
@@ -110,7 +110,7 @@ class TestAskUserWithTemporal:
         deps = _make_deps(temporal_client=MagicMock())
         ctx = _make_ctx(deps)
 
-        with patch("src.agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt):
+        with patch("src.sdk._agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt):
             result = await ask_user(ctx, "选择方案")
 
         import json
@@ -132,7 +132,7 @@ class TestAskUserWithTemporal:
         deps = _make_deps(session_id="my-session-123", temporal_client=MagicMock())
         ctx = _make_ctx(deps)
 
-        with patch("src.agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt):
+        with patch("src.sdk._agent.tools.ask_user._do_interrupt", side_effect=mock_interrupt):
             await ask_user(ctx, "问题")
 
         assert len(captured_keys) == 1

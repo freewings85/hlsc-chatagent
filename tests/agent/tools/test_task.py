@@ -7,11 +7,11 @@ from pydantic_ai import RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from src.agent.deps import AgentDeps
-from src.agent.tools.task import task, _resolve_subagent_tools
-from src.event.event_emitter import EventEmitter
-from src.event.event_model import EventModel
-from src.event.event_type import EventType
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.tools.task import task, _resolve_subagent_tools
+from src.sdk._event.event_emitter import EventEmitter
+from src.sdk._event.event_model import EventModel
+from src.sdk._event.event_type import EventType
 
 
 # ── Mock 工具 ──────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ class TestSubAgentLoop:
         ctx = _make_run_context(deps)
 
         # patch create_model 让子 agent 使用我们的 mock model
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             result = await task(ctx, "分析任务", "分析代码结构", subagent_type="general")
 
         assert "子 agent 分析完成" in result
@@ -160,7 +160,7 @@ class TestSubAgentLoop:
         deps = _make_parent_deps(emitter=emitter)
         ctx = _make_run_context(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             await task(ctx, "test", "do something", subagent_type="plan")
 
         events = await _collect_events(queue)
@@ -187,7 +187,7 @@ class TestSubAgentLoop:
         deps = _make_parent_deps(emitter=emitter)
         ctx = _make_run_context(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             await task(ctx, "test", "do something")
 
         events = await _collect_events(queue)
@@ -211,7 +211,7 @@ class TestSubAgentLoop:
         deps = _make_parent_deps(emitter=emitter)
         ctx = _make_run_context(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             await task(ctx, "test", "do something")
 
         # emitter 不应该被关闭（_closed = False）
@@ -244,7 +244,7 @@ class TestSubAgentLoop:
         deps = _make_parent_deps(emitter=emitter)
         ctx = _make_run_context(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             result = await task(ctx, "读文件", "读取 /tmp/test.txt", subagent_type="general")
 
         assert "文件内容" in result
@@ -269,7 +269,7 @@ class TestSubAgentLoop:
         deps = _make_parent_deps(emitter=emitter)
         ctx = _make_run_context(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             result = await task(ctx, "test", "do something")
 
         # task 工具捕获异常，返回错误消息
@@ -293,7 +293,7 @@ class TestSubAgentLoop:
         deps = _make_parent_deps(session_id="parent-session-123", emitter=emitter)
         ctx = _make_run_context(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             await task(ctx, "test", "do something")
 
         events = await _collect_events(queue)
@@ -315,7 +315,7 @@ class TestSubAgentLoop:
         deps = _make_parent_deps(emitter=None)
         ctx = _make_run_context(deps)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             result = await task(ctx, "test", "do something")
 
         assert "完成" in result
@@ -347,9 +347,9 @@ class TestSubAgentLoop:
             if original_append is not None:
                 await original_append(user_id, session_id, messages)
 
-        with patch("src.agent.tools.task.create_model", return_value=model):
+        with patch("src.sdk._agent.tools.task.create_model", return_value=model):
             with patch(
-                "src.agent.message.transcript_service.TranscriptService.append",
+                "src.sdk._agent.message.transcript_service.TranscriptService.append",
                 side_effect=capture_append,
             ):
                 await task(ctx, "test", "do something", subagent_type="plan")

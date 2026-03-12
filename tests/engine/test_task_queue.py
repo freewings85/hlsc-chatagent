@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from src.common.session_request_task import SessionRequestTask
-from src.engine.task_queue import SessionRequestTaskQueue
+from src.sdk._common.session_request_task import SessionRequestTask
+from src.sdk._engine.task_queue import SessionRequestTaskQueue
 from tests.conftest import MockSinker
 
 

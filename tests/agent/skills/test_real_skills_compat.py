@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.skills.registry import SkillEntry, parse_skill_file
+from src.sdk._agent.skills.registry import SkillEntry, parse_skill_file
 
 # --------------------------------------------------------------------------- #
 # 真实 skills 路径
@@ -296,7 +296,7 @@ class TestCrossFormatCompatibility:
 
     def test_load_from_real_directories_with_registry(self) -> None:
         """用 SkillRegistry.load() 加载真实目录，验证批量加载。"""
-        from src.agent.skills.registry import SkillRegistry
+        from src.sdk._agent.skills.registry import SkillRegistry
         dirs = []
         if _OPENCLAW_SKILLS_DIR.is_dir():
             dirs.append(_OPENCLAW_SKILLS_DIR)

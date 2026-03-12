@@ -8,9 +8,9 @@ from unittest.mock import patch
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from src.agent.compact.compactor import CompactResult
-from src.agent.file_state import FileStateTracker
-from src.agent.message.attachment_collector import (
+from src.sdk._agent.compact.compactor import CompactResult
+from src.sdk._agent.file_state import FileStateTracker
+from src.sdk._agent.message.attachment_collector import (
     AttachmentCollector,
     _ATTACHMENT_SOURCE,
 )

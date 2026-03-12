@@ -1,8 +1,8 @@
 """配置模块测试"""
 
-from src.agent.compact.config import CompactConfig
-from src.config import settings
-from src.config.settings import LLMConfig, UserFsConfig, AgentFsConfig, ServerConfig
+from src.sdk._agent.compact.config import CompactConfig
+from src.sdk._config import settings
+from src.sdk._config.settings import LLMConfig, UserFsConfig, AgentFsConfig, ServerConfig
 
 
 class TestLLMConfig:

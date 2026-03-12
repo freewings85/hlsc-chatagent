@@ -14,7 +14,7 @@ import uuid
 import pytest
 from temporalio.client import Client, WorkflowExecutionStatus
 
-from src.agent.interrupt import (
+from src.sdk._agent.interrupt import (
     InterruptWorkflow,
     create_interrupt_worker,
     interrupt,
@@ -39,7 +39,14 @@ async def temporal_client():
 
 @pytest.fixture
 async def temporal_worker(temporal_client):
-    worker = create_interrupt_worker(temporal_client, task_queue=TASK_QUEUE)
+    from temporalio.worker import UnsandboxedWorkflowRunner, Worker
+    from src.sdk._agent.interrupt import InterruptWorkflow
+    worker = Worker(
+        temporal_client,
+        task_queue=TASK_QUEUE,
+        workflows=[InterruptWorkflow],
+        workflow_runner=UnsandboxedWorkflowRunner(),
+    )
     task = asyncio.create_task(worker.run())
     yield worker
     await worker.shutdown()

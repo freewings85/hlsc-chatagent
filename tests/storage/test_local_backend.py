@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 class TestFilesystemBackend:

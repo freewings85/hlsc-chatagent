@@ -1,6 +1,6 @@
 """request_context 单元测试"""
 
-from src.utils.request_context import (
+from src.sdk._utils.request_context import (
     clear_request_context,
     get_request_id,
     get_session_id,

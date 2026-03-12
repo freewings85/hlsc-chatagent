@@ -4,10 +4,10 @@ import asyncio
 
 import pytest
 
-from src.event.event_handler import EventHandler
-from src.event.event_model import EventModel
-from src.event.event_sinker_sse import SseSinker
-from src.event.event_type import EventType
+from src.sdk._event.event_handler import EventHandler
+from src.sdk._event.event_model import EventModel
+from src.sdk._event.event_sinker_sse import SseSinker
+from src.sdk._event.event_type import EventType
 from tests.conftest import MockSinker
 
 
@@ -60,7 +60,7 @@ class TestEventEmitterEdgeCases:
     @pytest.mark.asyncio
     async def test_emit_after_close_silent(self) -> None:
         """close() 后再 emit() 静默丢弃，不抛异常"""
-        from src.event.event_emitter import EventEmitter
+        from src.sdk._event.event_emitter import EventEmitter
         queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
         emitter = EventEmitter(queue)
 
@@ -80,7 +80,7 @@ class TestEventEmitterEdgeCases:
     @pytest.mark.asyncio
     async def test_double_close_safe(self) -> None:
         """多次 close() 只放一个 sentinel"""
-        from src.event.event_emitter import EventEmitter
+        from src.sdk._event.event_emitter import EventEmitter
         queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
         emitter = EventEmitter(queue)
 

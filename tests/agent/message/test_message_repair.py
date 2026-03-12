@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from src.agent.agent_message import (
+from src.sdk._agent.agent_message import (
     AgentMessage,
     AssistantMessage,
     ToolCall,
     ToolResult,
     UserMessage,
 )
-from src.agent.message.message_repair import (
+from src.sdk._agent.message.message_repair import (
     _CANCELLED_CONTENT,
     find_missing_tool_call_ids,
     find_tool_results_in_transcript,

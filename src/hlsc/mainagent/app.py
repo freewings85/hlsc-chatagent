@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 
 def create_main_agent() -> Agent:
     """创建 HLSC 主 Agent"""
-    from src.agent.tools import create_default_tool_map
-    from src.storage.local_backend import FilesystemBackend
+    from src.sdk._agent.tools import create_default_tool_map
+    from src.sdk._storage.local_backend import FilesystemBackend
 
     user_fs_dir = os.getenv("USER_FS_DIR", "data")
     user_fs_backend = FilesystemBackend(root_dir=user_fs_dir, virtual_mode=True)

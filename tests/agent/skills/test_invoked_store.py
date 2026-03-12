@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.skills.invoked_store import InvokedSkill, InvokedSkillStore, _invoked_skills_path
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.skills.invoked_store import InvokedSkill, InvokedSkillStore, _invoked_skills_path
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 def make_backend(tmp_path: Path) -> FilesystemBackend:
@@ -76,7 +76,7 @@ class TestInvokedSkillStoreLoad:
     async def test_load_handles_empty_file(self, tmp_path: Path) -> None:
         """空文件时 load 静默跳过，返回空字典（覆盖 line 84: if not raw: return）"""
         from unittest.mock import AsyncMock, MagicMock, patch
-        from src.common.filesystem_backend import FileDownloadResponse
+        from src.sdk._common.filesystem_backend import FileDownloadResponse
 
         backend = make_backend(tmp_path)
         path = _invoked_skills_path("u1", "s1")
@@ -92,7 +92,7 @@ class TestInvokedSkillStoreLoad:
     async def test_load_handles_download_error(self, tmp_path: Path) -> None:
         """adownload_files 返回 error 时 load 静默跳过（覆盖 line 81: resp.error is not None）"""
         from unittest.mock import patch
-        from src.common.filesystem_backend import FileDownloadResponse
+        from src.sdk._common.filesystem_backend import FileDownloadResponse
 
         backend = make_backend(tmp_path)
         # FileOperationError 是 Literal 类型，用字符串字面值
@@ -176,7 +176,7 @@ class TestInvokedSkillStoreFlushErrors:
     async def test_flush_raises_on_delete_failure(self, tmp_path: Path) -> None:
         """adelete 返回 False 时 record() 应抛出 OSError（覆盖 line 126）"""
         from unittest.mock import patch
-        from src.common.filesystem_backend import WriteResult
+        from src.sdk._common.filesystem_backend import WriteResult
 
         backend = make_backend(tmp_path)
         store = make_store(backend)
@@ -189,7 +189,7 @@ class TestInvokedSkillStoreFlushErrors:
     async def test_flush_raises_on_write_failure(self, tmp_path: Path) -> None:
         """awrite 返回 error 时 record() 应抛出 OSError（覆盖 line 130）"""
         from unittest.mock import patch
-        from src.common.filesystem_backend import WriteResult
+        from src.sdk._common.filesystem_backend import WriteResult
 
         backend = make_backend(tmp_path)
         store = make_store(backend)

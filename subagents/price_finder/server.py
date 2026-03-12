@@ -52,9 +52,9 @@ def _agent_factory(
     session_id: str, user_id: str, temporal_client: Any
 ) -> tuple:
     """创建 PriceFinder 专属的 agent + deps。"""
-    from src.agent.deps import AgentDeps
-    from src.agent.loop import create_agent
-    from src.agent.model import create_model
+    from src.sdk._agent.deps import AgentDeps
+    from src.sdk._agent.loop import create_agent
+    from src.sdk._agent.model import create_model
 
     from subagents.price_finder.tools import (
         PRICE_FINDER_TOOLS,
@@ -81,13 +81,13 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI):
         global _temporal_client, _interrupt_worker
 
-        from src.config.settings import get_temporal_config
+        from src.sdk._config.settings import get_temporal_config
 
         config = get_temporal_config()
         if config.enabled:
             from temporalio.client import Client
 
-            from src.agent.interrupt import create_interrupt_worker
+            from src.sdk._agent.interrupt import create_interrupt_worker
 
             _temporal_client = await Client.connect(config.host)
             _interrupt_worker = create_interrupt_worker(
@@ -138,7 +138,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": "price_finder"}
 
     # 挂载 A2A 端点
-    from src.server.a2a_adapter import mount_a2a
+    from src.sdk._server.a2a_adapter import mount_a2a
 
     mount_a2a(
         app,

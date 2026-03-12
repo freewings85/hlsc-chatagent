@@ -1,6 +1,6 @@
 """请求模型测试"""
 
-from src.server.request import ChatRequest
+from src.sdk._server.request import ChatRequest
 
 
 class TestChatRequest:

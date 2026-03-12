@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.skills.registry import (
+from src.sdk._agent.skills.registry import (
     SkillEntry,
     SkillRegistry,
     _MAX_SKILL_DESC_CHARS,
@@ -411,7 +411,7 @@ when_to_use: "Use when doing thing {i}."
 class TestBundledSkills:
     def test_bundled_example_skill_loadable(self) -> None:
         """内置 example skill 可正常加载"""
-        from src.agent.skills.registry import get_default_skill_dirs
+        from src.sdk._agent.skills.registry import get_default_skill_dirs
         dirs = get_default_skill_dirs()
         # 只加载 bundled dir（第一个）
         registry = SkillRegistry.load([dirs[0]])

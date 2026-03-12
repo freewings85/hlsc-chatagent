@@ -3,9 +3,9 @@
 import pytest
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from src.agent.agent_message import AssistantMessage, UserMessage
-from src.agent.message.history_message_loader import HistoryMessageLoader, _deserialize_messages
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.agent_message import AssistantMessage, UserMessage
+from src.sdk._agent.message.history_message_loader import HistoryMessageLoader, _deserialize_messages
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 def make_user(content: str) -> UserMessage:
@@ -290,7 +290,7 @@ class TestHistoryLoaderBackendFailure:
         original_download = backend.adownload_files
 
         async def failing_download(paths: list[str]) -> list:
-            from src.common.filesystem_backend import FileDownloadResponse
+            from src.sdk._common.filesystem_backend import FileDownloadResponse
             return [FileDownloadResponse(path=paths[0], content=None, error="read error")]
 
         backend.adownload_files = failing_download  # type: ignore[assignment]
@@ -314,7 +314,7 @@ class TestHistoryLoaderBackendFailure:
         original_write = backend.awrite
 
         async def failing_write(path: str, content: str) -> object:
-            from src.common.filesystem_backend import WriteResult
+            from src.sdk._common.filesystem_backend import WriteResult
             return WriteResult(path=path, error="disk full")
 
         backend.awrite = failing_write  # type: ignore[assignment]
@@ -343,7 +343,7 @@ class TestSaveEdgeCases:
     @pytest.mark.asyncio
     async def test_save_delete_failure_raises(self, tmp_path) -> None:
         """save 时 adelete 返回 False → 抛出 OSError"""
-        from src.storage.local_backend import FilesystemBackend
+        from src.sdk._storage.local_backend import FilesystemBackend
         backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
         loader = HistoryMessageLoader(backend)
 
@@ -376,8 +376,8 @@ class TestAppendEdgeCases:
     @pytest.mark.asyncio
     async def test_append_write_failure_raises(self, tmp_path) -> None:
         """append 时 awrite 失败 → 抛出 OSError"""
-        from src.storage.local_backend import FilesystemBackend
-        from src.common.filesystem_backend import WriteResult
+        from src.sdk._storage.local_backend import FilesystemBackend
+        from src.sdk._common.filesystem_backend import WriteResult
         backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=True)
         loader = HistoryMessageLoader(backend)
 

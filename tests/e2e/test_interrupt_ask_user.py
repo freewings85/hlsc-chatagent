@@ -84,7 +84,7 @@ def interrupt_server_url():
     }
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "src.server.app:app",
+        [sys.executable, "-m", "uvicorn", "src.sdk._server.app:app",
          "--host", "127.0.0.1",
          "--port", str(INTERRUPT_TEST_PORT),
          "--log-level", "warning"],
@@ -287,7 +287,7 @@ class TestInterruptAPIFlow:
         from unittest.mock import patch
 
         # 临时 patch _temporal_client 为 None
-        import src.server.app as app_mod
+        import src.sdk._server.app as app_mod
         original = app_mod._temporal_client
         app_mod._temporal_client = None
         try:

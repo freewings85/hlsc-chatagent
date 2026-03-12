@@ -30,7 +30,7 @@ TIMEOUT_MS: int = 180_000
 def server_url() -> str:  # type: ignore[return]
     env = {**os.environ, "SERVER_PORT": str(TEST_PORT)}
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "src.server.app:app",
+        [sys.executable, "-m", "uvicorn", "src.sdk._server.app:app",
          "--host", "127.0.0.1", "--port", str(TEST_PORT), "--log-level", "info"],
         env=env, cwd=str(PROJECT_ROOT),
     )

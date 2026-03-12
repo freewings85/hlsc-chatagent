@@ -11,11 +11,11 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from src.agent.compact.compactor import CompactResult, Compactor, _PLACEHOLDER
-from src.agent.compact.config import CompactConfig
-from src.agent.compact.token_counter import estimate_messages_tokens
-from src.agent.message.history_message_loader import HistoryMessageLoader
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.compact.compactor import CompactResult, Compactor, _PLACEHOLDER
+from src.sdk._agent.compact.config import CompactConfig
+from src.sdk._agent.compact.token_counter import estimate_messages_tokens
+from src.sdk._agent.message.history_message_loader import HistoryMessageLoader
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 def _make_tool_exchange(tool_name: str, result: str) -> list[ModelMessage]:
@@ -312,7 +312,7 @@ class TestCompactWithPersistence:
 
         # 重新从文件加载，验证压缩后的内容被持久化了
         # load() 返回 AgentMessage，检查 UserMessage.tool_results
-        from src.agent.agent_message import UserMessage as AgentUserMessage
+        from src.sdk._agent.agent_message import UserMessage as AgentUserMessage
         loaded = await loader.load("u1", "s1")
         tool_results = [
             tr for m in loaded if isinstance(m, AgentUserMessage)
@@ -397,8 +397,8 @@ class TestFullCompact:
         """full compact 后通过 history_loader.save() 持久化压缩后的消息"""
         from unittest.mock import AsyncMock
         from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
-        from src.agent.message.history_message_loader import HistoryMessageLoader
-        from src.storage.local_backend import FilesystemBackend
+        from src.sdk._agent.message.history_message_loader import HistoryMessageLoader
+        from src.sdk._storage.local_backend import FilesystemBackend
 
         backend = FilesystemBackend(root_dir=str(tmp_path), virtual_mode=True)
         loader = HistoryMessageLoader(backend)

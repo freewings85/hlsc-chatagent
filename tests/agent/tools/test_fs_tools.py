@@ -13,12 +13,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.agent.deps import AgentDeps
-from src.agent.file_state import FileStateTracker
-from src.agent.tools.fs import edit, glob, grep, read, write
-from src.agent.tools import create_default_tool_map
-from src.common.filesystem_backend import EditResult, WriteResult
-from src.storage.local_backend import FilesystemBackend
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.file_state import FileStateTracker
+from src.sdk._agent.tools.fs import edit, glob, grep, read, write
+from src.sdk._agent.tools import create_default_tool_map
+from src.sdk._common.filesystem_backend import EditResult, WriteResult
+from src.sdk._storage.local_backend import FilesystemBackend
 
 
 # ---------------------------------------------------------------------------

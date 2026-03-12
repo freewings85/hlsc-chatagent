@@ -1,6 +1,6 @@
 """AgentDeps 测试"""
 
-from src.agent.deps import AgentDeps
+from src.sdk._agent.deps import AgentDeps
 
 
 class TestAgentDeps:

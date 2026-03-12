@@ -4,8 +4,8 @@ import pytest
 from pydantic_ai import ModelRetry, RunContext
 from unittest.mock import MagicMock
 
-from src.agent.deps import AgentDeps
-from src.agent.toolset import wrap_tool_safe
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.toolset import wrap_tool_safe
 
 
 class TestWrapToolSafe:

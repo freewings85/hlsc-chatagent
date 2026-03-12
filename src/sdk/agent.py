@@ -107,15 +107,15 @@ class Agent:
         if self._memory_service is not None:
             return self._memory_service
 
-        from src.storage.local_backend import FilesystemBackend
+        from src.sdk._storage.local_backend import FilesystemBackend
 
         backend = FilesystemBackend(root_dir=self._memory_config.data_dir, virtual_mode=True)
 
         if self._memory_config.backend == "sqlite":
-            from src.agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
+            from src.sdk._agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
             self._memory_service = SqliteMemoryMessageService(self._memory_config.data_dir)
         else:
-            from src.agent.memory.file_memory_message_service import FileMemoryMessageService
+            from src.sdk._agent.memory.file_memory_message_service import FileMemoryMessageService
             self._memory_service = FileMemoryMessageService(backend)
         return self._memory_service
 
@@ -125,20 +125,20 @@ class Agent:
             return self._transcript_service
 
         if not self._transcript_config.enabled:
-            from src.agent.message.transcript_service import TranscriptService
-            from src.storage.local_backend import FilesystemBackend
+            from src.sdk._agent.message.transcript_service import TranscriptService
+            from src.sdk._storage.local_backend import FilesystemBackend
             backend = FilesystemBackend(root_dir=self._transcript_config.data_dir, virtual_mode=True)
             self._transcript_service = TranscriptService(backend)
         else:
-            from src.agent.message.transcript_service import TranscriptService
-            from src.storage.local_backend import FilesystemBackend
+            from src.sdk._agent.message.transcript_service import TranscriptService
+            from src.sdk._storage.local_backend import FilesystemBackend
             backend = FilesystemBackend(root_dir=self._transcript_config.data_dir, virtual_mode=True)
             self._transcript_service = TranscriptService(backend)
         return self._transcript_service
 
     def _build_compact_config(self) -> Any:
         """将 SDK CompactConfig 转换为内部 CompactConfig"""
-        from src.agent.compact.config import CompactConfig as InternalCompactConfig
+        from src.sdk._agent.compact.config import CompactConfig as InternalCompactConfig
         return InternalCompactConfig(
             context_window=self._compact_config.context_window,
             output_reserve=self._compact_config.reserve_output_tokens,
@@ -167,18 +167,18 @@ class Agent:
         Returns:
             最终响应文本，或 None
         """
-        from src.agent.agent_message import AgentMessage, from_model_messages
-        from src.agent.compact.compactor import Compactor
-        from src.agent.deps import AgentDeps
-        from src.agent.file_state import FileStateTracker
-        from src.agent.loop import LoopContext, create_agent, run_agent_loop, _make_summarize_fn
-        from src.agent.message.attachment_collector import AttachmentCollector
-        from src.agent.message.pre_model_call_service import PreModelCallMessageService
-        from src.agent.skills.invoked_store import InvokedSkillStore
-        from src.agent.skills.registry import SkillRegistry
-        from src.agent.skills.tool import invoke_skill
-        from src.common.session_request_task import SessionRequestTask
-        from src.storage.local_backend import FilesystemBackend
+        from src.sdk._agent.agent_message import AgentMessage, from_model_messages
+        from src.sdk._agent.compact.compactor import Compactor
+        from src.sdk._agent.deps import AgentDeps
+        from src.sdk._agent.file_state import FileStateTracker
+        from src.sdk._agent.loop import LoopContext, create_agent, run_agent_loop, _make_summarize_fn
+        from src.sdk._agent.message.attachment_collector import AttachmentCollector
+        from src.sdk._agent.message.pre_model_call_service import PreModelCallMessageService
+        from src.sdk._agent.skills.invoked_store import InvokedSkillStore
+        from src.sdk._agent.skills.registry import SkillRegistry
+        from src.sdk._agent.skills.tool import invoke_skill
+        from src.sdk._common.session_request_task import SessionRequestTask
+        from src.sdk._storage.local_backend import FilesystemBackend
 
         # 1. 加载 prompt
         prompt_result: PromptResult = await self._prompt_loader.load(user_id, session_id)
@@ -274,8 +274,8 @@ class Agent:
         # 13. MCP toolsets
         mcp_toolsets = None
         if isinstance(self._tools, ToolConfig) and self._tools.mcp_config:
-            from src.agent.mcp.loader import load_mcp_toolsets
-            from src.storage.local_backend import FilesystemBackend as FsB
+            from src.sdk._agent.mcp.loader import load_mcp_toolsets
+            from src.sdk._storage.local_backend import FilesystemBackend as FsB
             agent_fs = FsB(root_dir=".chatagent", virtual_mode=True)
             mcp_toolsets = await load_mcp_toolsets(agent_fs)
 

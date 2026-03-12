@@ -6,11 +6,11 @@ import json
 
 from pydantic_ai import RunContext
 
-from src.agent.deps import AgentDeps
-from src.agent.interrupt import interrupt as _do_interrupt
-from src.config.settings import get_temporal_config
-from src.event.event_model import EventModel
-from src.event.event_type import EventType
+from src.sdk._agent.deps import AgentDeps
+from src.sdk._agent.interrupt import interrupt as _do_interrupt
+from src.sdk._config.settings import get_temporal_config
+from src.sdk._event.event_model import EventModel
+from src.sdk._event.event_type import EventType
 
 
 async def find_best_price_of_project(

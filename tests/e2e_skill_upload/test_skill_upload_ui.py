@@ -82,7 +82,7 @@ def servers():
 
     # 启动后端
     backend = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "src.server.app:app",
+        [sys.executable, "-m", "uvicorn", "src.sdk._server.app:app",
          "--host", "127.0.0.1",
          "--port", str(BACKEND_PORT),
          "--log-level", "info"],

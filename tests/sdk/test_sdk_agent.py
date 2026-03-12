@@ -10,8 +10,8 @@ import pytest
 from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from src.event.event_emitter import EventEmitter
-from src.event.event_model import EventModel
+from src.sdk._event.event_emitter import EventEmitter
+from src.sdk._event.event_model import EventModel
 from src.sdk import Agent, StaticPromptLoader, ToolConfig
 from src.sdk.config import MemoryConfig, TranscriptConfig, CompactConfig
 

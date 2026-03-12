@@ -56,7 +56,7 @@ def base_url() -> str:  # type: ignore[return]
     }
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "src.server.app:app",
+        [sys.executable, "-m", "uvicorn", "src.sdk._server.app:app",
          "--host", "127.0.0.1",
          "--port", str(PLAYWRIGHT_PORT),
          "--log-level", "warning"],
