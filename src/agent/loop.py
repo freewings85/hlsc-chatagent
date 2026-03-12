@@ -122,14 +122,24 @@ class LoopContext:
 def create_agent(
     model: Model,
     history_processors: list[Any] | None = None,
+    system_prompt: str | None = None,
 ) -> Agent[AgentDeps, str]:
-    """创建 Agent 实例（system prompt 由 PreModelCallMessageService 注入）"""
-    return Agent(
-        model,
-        deps_type=AgentDeps,
-        toolsets=[DynamicToolset(get_tools, per_run_step=True)],
-        history_processors=history_processors or [],
-    )
+    """创建 Agent 实例。
+
+    Args:
+        model: LLM 模型
+        history_processors: 消息历史处理器
+        system_prompt: 可选的 system prompt（subagent 场景）。
+            main agent 由 PreModelCallMessageService 注入，不需要此参数。
+    """
+    kwargs: dict[str, Any] = {
+        "deps_type": AgentDeps,
+        "toolsets": [DynamicToolset(get_tools, per_run_step=True)],
+        "history_processors": history_processors or [],
+    }
+    if system_prompt:
+        kwargs["system_prompt"] = system_prompt
+    return Agent(model, **kwargs)
 
 
 # ── 辅助函数 ───────────────────────────────────────────────────────────────

@@ -31,6 +31,23 @@ def _get_temporal_client():
     return _temporal_client
 
 
+_PRICE_FINDER_SYSTEM_PROMPT = """\
+你是 PriceFinder Agent。你只有一个能力：调用 find_best_price_of_project 工具。
+
+## 绝对规则（违反即失败）
+
+1. 收到任何消息后，你必须**立即**调用 find_best_price_of_project 工具
+2. 禁止不调用工具就回复用户
+3. 禁止编造任何价格数据
+4. 禁止向用户提问或要求澄清
+5. 将用户消息中的项目描述直接作为 project_name 参数传给工具
+
+## 流程
+
+用户消息 → 调用 find_best_price_of_project(project_name=用户描述) → 返回工具结果
+"""
+
+
 def _agent_factory(
     session_id: str, user_id: str, temporal_client: Any
 ) -> tuple:
@@ -45,7 +62,7 @@ def _agent_factory(
     )
 
     model = create_model()
-    agent = create_agent(model)
+    agent = create_agent(model, system_prompt=_PRICE_FINDER_SYSTEM_PROMPT)
     deps = AgentDeps(
         session_id=session_id,
         user_id=user_id,

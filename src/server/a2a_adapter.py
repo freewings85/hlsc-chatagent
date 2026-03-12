@@ -222,10 +222,6 @@ class ChatAgentExecutor(AgentExecutor):
                 content = event.data.get("content", "")
                 if content:
                     text_buffer.append(content)
-                    await updater.add_artifact(
-                        parts=[Part(root=TextPart(text=content))],
-                        append=True,
-                    )
 
             elif event.type == EventType.INTERRUPT:
                 # HITL：记住 interrupt_key，返回 input-required

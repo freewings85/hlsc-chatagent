@@ -54,6 +54,7 @@ async def call_price_finder(
 
     context_id = f"pf-{session_id}-{uuid4().hex[:8]}"
     final_text_parts: list[str] = []
+    _emitted_artifact_ids: set[str] = set()  # 去重：避免 resume 后重复发送 artifacts
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
         # 首次调用
@@ -63,13 +64,20 @@ async def call_price_finder(
             task_state = result.get("status", {}).get("state", "")
             task_id = result.get("id", "")
 
-            # 处理 artifacts
+            # 处理 artifacts（去重）
             await _emit_artifacts(
                 result, emitter, session_id, agent_path,
                 parent_tool_call_id, final_text_parts,
+                _emitted_artifact_ids,
             )
 
             if task_state == "completed":
+                # 从 status.message 提取最终文本（updater.complete 放在这里）
+                status_msg = result.get("status", {}).get("message")
+                if status_msg:
+                    completed_text = _extract_text(status_msg)
+                    if completed_text and completed_text not in final_text_parts:
+                        final_text_parts.append(completed_text)
                 break
             elif task_state == "failed":
                 error = _extract_text(result.get("status", {}).get("message"))
@@ -165,6 +173,7 @@ async def _emit_artifacts(
     agent_path: str,
     parent_tool_call_id: str,
     text_parts: list[str],
+    emitted_ids: set[str] | None = None,
 ) -> None:
     """从 A2A task result 中提取 artifacts，转为 EventModel 发给前端。"""
     if emitter is None:
@@ -172,6 +181,12 @@ async def _emit_artifacts(
 
     artifacts = task_result.get("artifacts", [])
     for artifact in artifacts:
+        # 用 artifact index（或 id）去重，避免 resume 后重复发送
+        art_id = artifact.get("artifactId", "") or artifact.get("index", "")
+        if emitted_ids is not None and art_id:
+            if art_id in emitted_ids:
+                continue
+            emitted_ids.add(art_id)
         parts = artifact.get("parts", [])
         for part in parts:
             kind = part.get("kind", "") or part.get("type", "")
