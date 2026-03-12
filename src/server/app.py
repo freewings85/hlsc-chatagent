@@ -87,6 +87,17 @@ app.include_router(skill_router)
 app.include_router(prompt_router)
 app.include_router(mcp_router)
 
+
+def _get_temporal_client():
+    """获取 Temporal client（None 时 ask_user 报错）。"""
+    return _temporal_client
+
+
+# A2A 协议端点
+from src.server.a2a_adapter import mount_a2a
+
+mount_a2a(app, temporal_client_getter=_get_temporal_client)
+
 _WEB_DIR: Path = Path(__file__).parent.parent.parent / "web"
 _DIST_DIR: Path = _WEB_DIR / "dist"
 
@@ -124,11 +135,6 @@ async def spa_fallback(full_path: str) -> HTMLResponse:
     if dev_html.exists():
         return HTMLResponse(content=dev_html.read_text(encoding="utf-8"))
     return HTMLResponse(content="<h1>web/index.html 不存在</h1>", status_code=404)
-
-
-def _get_temporal_client():
-    """获取 Temporal client（None 时 ask_user 报错）。"""
-    return _temporal_client
 
 
 @app.post("/chat/stream")
