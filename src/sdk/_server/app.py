@@ -98,7 +98,7 @@ from src.sdk._server.a2a_adapter import mount_a2a
 
 mount_a2a(app, temporal_client_getter=_get_temporal_client)
 
-_WEB_DIR: Path = Path(__file__).parent.parent.parent / "web"
+_WEB_DIR: Path = Path(__file__).parent.parent.parent.parent / "web"
 _DIST_DIR: Path = _WEB_DIR / "dist"
 
 

@@ -113,7 +113,7 @@ def _classify_source(skill_path: Path) -> str:
     """判断 skill 来源：bundled / project。"""
     try:
         rel = skill_path.resolve()
-        bundled_dir = (Path(__file__).parent.parent / "agent" / "skills" / "bundled").resolve()
+        bundled_dir = (Path(__file__).parent.parent / "_agent" / "skills" / "bundled").resolve()
 
         if str(rel).startswith(str(bundled_dir)):
             return "bundled"

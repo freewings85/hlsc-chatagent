@@ -169,5 +169,7 @@ def create_interrupt_worker(
         task_queue=task_queue,
         workflows=[InterruptWorkflow],
         debug_mode=debug_mode,  # True 时禁用 deadlock 检测（调试断点不会误报）
-        **({"workflow_runner": UnsandboxedWorkflowRunner()} if debug_mode else {}),
+        # 始终使用 UnsandboxedWorkflowRunner：
+        # 下划线前缀模块路径（src.sdk._agent）导致 Temporal sandbox 校验失败
+        workflow_runner=UnsandboxedWorkflowRunner(),
     )
