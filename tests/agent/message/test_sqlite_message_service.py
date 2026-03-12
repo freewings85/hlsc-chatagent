@@ -13,7 +13,7 @@ from src.agent.agent_message import (
     ToolResult,
     UserMessage,
 )
-from src.agent.message.sqlite_message_service import SqliteMemoryMessageService
+from src.agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
 
 
 def make_user_msg(content: str) -> UserMessage:

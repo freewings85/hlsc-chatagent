@@ -14,6 +14,9 @@ from dotenv import load_dotenv
 
 if TYPE_CHECKING:
     from src.agent.compact.config import CompactConfig
+    from src.agent.memory.memory_context_service import MemoryContextService
+    from src.agent.memory.memory_message_service import MemoryMessageService
+    from src.agent.message.transcript_service import TranscriptService
     from src.common.filesystem_backend import BackendProtocol
 
 # Fallback：如果 nacos 没有预先加载环境变量，确保 .env 至少被读取
@@ -113,6 +116,7 @@ _user_fs_backend: Optional["BackendProtocol"] = None
 _agent_fs_backend: Optional["BackendProtocol"] = None
 _memory_service_type: str = os.getenv("MEMORY_SERVICE_TYPE", "fs")  # "fs" | "sqlite"
 _memory_message_service: Optional["MemoryMessageService"] = None
+_memory_context_service: Optional["MemoryContextService"] = None
 _transcript_service: Optional["TranscriptService"] = None
 
 
@@ -214,16 +218,28 @@ def get_memory_message_service() -> "MemoryMessageService":
     global _memory_message_service
     if _memory_message_service is None:
         if _memory_service_type == "sqlite":
-            from src.agent.message.sqlite_message_service import SqliteMemoryMessageService
+            from src.agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
 
             _memory_message_service = SqliteMemoryMessageService(
                 get_user_fs_config().user_fs_dir,
             )
         else:
-            from src.agent.message.memory_message_service import FileMemoryMessageService
+            from src.agent.memory.file_memory_message_service import FileMemoryMessageService
 
             _memory_message_service = FileMemoryMessageService(get_user_fs_backend())
     return _memory_message_service
+
+
+def get_memory_context_service() -> "MemoryContextService":
+    """获取请求上下文工作集服务（全局单例）"""
+    global _memory_context_service
+    if _memory_context_service is None:
+        from src.agent.memory.inmemory_context_service import InMemoryContextService
+
+        from src.hlsc.hlsc_context import hlsc_context_formatter
+
+        _memory_context_service = InMemoryContextService(formatter=hlsc_context_formatter)
+    return _memory_context_service
 
 
 def get_transcript_service() -> "TranscriptService":

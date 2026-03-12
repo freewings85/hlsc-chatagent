@@ -5,8 +5,12 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from src.common.event_sinker import EventSinker
+
+if TYPE_CHECKING:
+    from src.common.request_context import RequestContext
 
 
 @dataclass
@@ -21,3 +25,4 @@ class SessionRequestTask:
     request_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
     cancelled: bool = False
+    context: RequestContext | None = None

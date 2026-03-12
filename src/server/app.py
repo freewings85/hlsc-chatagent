@@ -164,6 +164,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         message=request.message,
         user_id=request.user_id,
         sinker=sinker,
+        context=request.context,
     )
 
     model = create_model()
@@ -319,6 +320,7 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
         message=request.message,
         user_id=request.user_id,
         sinker=sinker,
+        context=request.context,
     )
 
     model = create_model()

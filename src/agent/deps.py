@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
     from src.agent.skills.invoked_store import InvokedSkillStore
     from src.agent.skills.registry import SkillRegistry
+    from src.common.request_context import RequestContext
     from src.event.event_emitter import EventEmitter
 
 # tool 函数类型：async def fn(ctx: RunContext[AgentDeps], ...) -> str
@@ -43,5 +44,7 @@ class AgentDeps:
     emitter: EventEmitter | None = None
     # Skill 环境变量（invoke_skill 从 config.env 加载，bash 执行时注入）
     skill_env: dict[str, str] = field(default_factory=dict)
+    # 请求上下文（位置、车辆信息等），工具可通过 ctx.deps.request_context 读取
+    request_context: RequestContext | None = None
     # Temporal client（ask_user interrupt 机制用，必须配置）
     temporal_client: TemporalClient | None = None

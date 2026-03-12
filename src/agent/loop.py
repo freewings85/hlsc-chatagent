@@ -25,6 +25,7 @@ from pydantic_ai.messages import (
     TextPartDelta,
     ToolCallPart,
     ToolCallPartDelta,
+    UserPromptPart,
 )
 from pydantic_ai.models import Model
 from pydantic_ai.toolsets import AbstractToolset
@@ -53,7 +54,8 @@ from src.agent.agent_message import (
 from src.agent.compact.compactor import Compactor, SummarizeFn
 from src.agent.deps import AgentDeps
 from src.agent.message.attachment_collector import AttachmentCollector
-from src.agent.message.message_service import MemoryMessageService
+from src.agent.memory.memory_context_service import MemoryContextService
+from src.agent.memory.memory_message_service import MemoryMessageService
 from src.agent.message.pre_model_call_service import PreModelCallMessageService
 from src.agent.message.transcript_service import TranscriptService
 from src.agent.prompt.prompt_builder import PromptBuilder
@@ -67,6 +69,7 @@ from src.config.settings import (
     get_agent_fs_backend,
     get_backend,
     get_compact_config,
+    get_memory_context_service,
     get_memory_message_service,
     get_transcript_service,
 )
@@ -538,6 +541,7 @@ async def run_main_agent(
 
     # 服务获取（全局单例，跨 request 复用缓存）
     memory_service = get_memory_message_service()
+    context_service = get_memory_context_service()
     transcript_service = get_transcript_service()
     prompt_builder: PromptBuilder = PromptBuilder(
         user_fs_backend=backend,
@@ -545,6 +549,18 @@ async def run_main_agent(
     context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
         user_id=task.user_id,
     )
+
+    # 请求上下文 diff：只在有变化时注入消息，同时更新 deps 供工具读取
+    if task.context is not None:
+        changed = await context_service.diff(task.user_id, task.session_id, task.context)
+        if changed:
+            context_text = context_service.format_changed(changed)
+            context_messages.append(ModelRequest(
+                parts=[UserPromptPart(content=context_text)],
+                metadata={"is_meta": True, "source": "request_context"},
+            ))
+        await context_service.set(task.user_id, task.session_id, task.context)
+        deps.request_context = task.context
     attachment_collector = AttachmentCollector(deps.file_state_tracker)
     compactor = Compactor(
         config=get_compact_config(),

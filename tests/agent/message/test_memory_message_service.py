@@ -15,7 +15,7 @@ from src.agent.agent_message import (
     serialize_agent_messages,
 )
 from src.agent.message.history_message_loader import _transcript_path
-from src.agent.message.memory_message_service import FileMemoryMessageService
+from src.agent.memory.file_memory_message_service import FileMemoryMessageService
 from src.agent.message.message_repair import _CANCELLED_CONTENT
 from src.storage.local_backend import FilesystemBackend
 

@@ -189,7 +189,7 @@ async def _run_sub_agent(
     from src.agent.file_state import FileStateTracker
     from src.agent.loop import LoopContext, _make_summarize_fn, run_agent_loop
     from src.agent.message.attachment_collector import AttachmentCollector
-    from src.agent.message.memory_message_service import FileMemoryMessageService
+    from src.agent.memory.file_memory_message_service import FileMemoryMessageService
     from src.agent.message.pre_model_call_service import PreModelCallMessageService
     from src.agent.message.transcript_service import TranscriptService
     from src.common.session_request_task import SessionRequestTask

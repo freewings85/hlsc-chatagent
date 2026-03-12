@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel
 
+from src.common.request_context import RequestContext
+
 
 class ChatRequest(BaseModel):
     """对话请求"""
@@ -9,6 +11,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     user_id: str = "anonymous"
+    context: RequestContext | None = None
 
 
 class StopRequest(BaseModel):
@@ -23,6 +26,7 @@ class AsyncChatRequest(BaseModel):
     session_id: str
     message: str
     user_id: str = "anonymous"
+    context: RequestContext | None = None
 
 
 class InterruptReplyRequest(BaseModel):
