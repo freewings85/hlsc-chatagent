@@ -82,10 +82,10 @@ docker run -d --name hlsc-web-demo-price-finder \
 
 ### 配置加载顺序
 
-1. `server.py --env /dev/null` → 跳过 `.env.local` 加载
-2. `nacos.py` import → 读取 `ACTIVE` → 加载 `.env.{ACTIVE}`
-3. `nacos.py` → `get_nacos_config()` → 从 Nacos 服务端拉取完整配置写入 `os.environ`
-4. 后续代码从 `os.environ` 读取所有配置
+1. `nacos.py` import → 读取 `ACTIVE` → 加载 `.env.{ACTIVE}`
+2. `nacos.py` → `get_nacos_config()` → 从 Nacos 服务端拉取完整配置写入 `os.environ`
+3. 后续代码从 `os.environ` 读取所有配置
+4. `server.py --port/--host` 命令行参数覆盖（优先级最高）
 
 ### Volume 挂载说明
 

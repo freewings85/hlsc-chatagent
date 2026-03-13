@@ -1,9 +1,14 @@
 """Agent 启动入口（通用模板）
 
+配置加载由 nacos.py 统一处理：
+  ACTIVE=local  → 加载 .env.local（本地开发）
+  ACTIVE=test   → 加载 .env.test → Nacos 拉取远程配置
+  ACTIVE=uat    → 加载 .env.uat  → Nacos 拉取远程配置
+
 启动方式：
     uv run python server.py
-    uv run python server.py --env .env.local
     uv run python server.py --port 8101
+    ACTIVE=test uv run python server.py
 """
 
 from __future__ import annotations
@@ -12,44 +17,25 @@ import argparse
 import os
 
 
-def _load_env() -> argparse.Namespace:
-    """解析 --env 参数并加载配置（必须在任何 agent_sdk import 之前）。"""
+def main() -> None:
+    # 解析命令行参数（仅 --port/--host，配置加载交给 nacos.py）
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--env", type=str,
-        default=os.path.join(os.path.dirname(__file__), ".env.local"),
-        help="配置文件路径（默认: 同目录 .env.local）",
-    )
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--host", type=str, default=None)
     args = parser.parse_args()
 
-    from dotenv import load_dotenv
+    # nacos.py 在 import 时自动根据 ACTIVE 加载 .env.{ACTIVE} + Nacos 远程配置
+    from agent_sdk._common.nacos import register_service, deregister_service
 
-    if os.path.exists(args.env):
-        load_dotenv(args.env, override=True)
-        print(f"[config] loaded: {args.env}")
-    else:
-        print(f"[config] WARNING: {args.env} not found, using defaults")
-        load_dotenv()
-
+    # 命令行参数覆盖（优先级最高）
     if args.port is not None:
         os.environ["SERVER_PORT"] = str(args.port)
     if args.host is not None:
         os.environ["SERVER_HOST"] = args.host
 
-    return args
-
-
-def main() -> None:
-    _load_env()
-
-    from agent_sdk._common.nacos import register_service, deregister_service
-
     register_service()
 
     import logging
-    import uvicorn
 
     logging.basicConfig(level=logging.INFO)
 

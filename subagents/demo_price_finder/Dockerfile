@@ -48,4 +48,4 @@ EXPOSE 8101
 
 ENV ACTIVE=test
 
-CMD ["uv", "run", "python", "server.py", "--env", "/dev/null"]
+CMD ["uv", "run", "python", "server.py"]
