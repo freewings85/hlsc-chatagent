@@ -58,7 +58,6 @@ from agent_sdk._agent.memory.memory_context_service import MemoryContextService
 from agent_sdk._agent.memory.memory_message_service import MemoryMessageService
 from agent_sdk._agent.message.pre_model_call_service import PreModelCallMessageService
 from agent_sdk._agent.message.transcript_service import TranscriptService
-from agent_sdk._agent.prompt.prompt_builder import PromptBuilder
 from agent_sdk._agent.skills.invoked_store import InvokedSkillStore
 from agent_sdk._agent.skills.registry import SkillRegistry, get_default_skill_dirs
 from agent_sdk._agent.skills.tool import invoke_skill
@@ -521,18 +520,23 @@ async def run_main_agent(
     deps: AgentDeps,
     message_history: list[ModelMessage] | None = None,
     max_iterations: int = 25,
+    prompt_loader: Any = None,
 ) -> None:
-    """主 Agent 入口。保持现有 API 签名不变（app.py / task_worker.py 不用改）。
+    """主 Agent 入口（遗留路径，新代码请用 Agent.run()）。
 
     负责：
     1. 设置 backend + request_context
-    2. 构建 PromptBuilder → context_messages
+    2. 通过 prompt_loader 加载 context_messages
     3. 构建 Skill 系统 → 注入 deps
     4. 构建 PreModelCallMessageService
     5. 加载 MCP toolsets
     6. 加载历史（MemoryMessageService）
     7. 组装 LoopContext
     8. 调用 run_agent_loop(ctx)
+
+    Args:
+        prompt_loader: PromptLoader 实例，用于加载 system_prompt 和 context_messages。
+            必须提供（不再有 PromptBuilder 兜底）。
     """
     # 确保 deps 与 task 的 session/user 信息一致
     deps.session_id = task.session_id
@@ -553,12 +557,16 @@ async def run_main_agent(
     memory_service = get_memory_message_service()
     context_service = get_memory_context_service()
     transcript_service = get_transcript_service()
-    prompt_builder: PromptBuilder = PromptBuilder(
-        user_fs_backend=backend,
-    )
-    context_messages: list[ModelRequest] = await prompt_builder.build_context_messages(
-        user_id=task.user_id,
-    )
+
+    # 加载 prompt
+    from agent_sdk.prompt_loader import PromptResult
+    if prompt_loader is not None:
+        prompt_result: PromptResult = await prompt_loader.load(task.user_id, task.session_id)
+        system_prompt: str | None = prompt_result.system_prompt or None
+        context_messages: list[ModelRequest] = list(prompt_result.context_messages)
+    else:
+        system_prompt = None
+        context_messages = []
 
     # 请求上下文 diff：只在有变化时注入消息，同时更新 deps 供工具读取
     if task.context is not None:
@@ -591,7 +599,6 @@ async def run_main_agent(
         deps.available_tools = [t for t in deps.available_tools if t != "Skill"] + ["Skill"]
         deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
 
-    system_prompt = PromptBuilder.load_system_prompt()
     pre_call_service = PreModelCallMessageService(
         compactor=compactor,
         context_messages=context_messages,

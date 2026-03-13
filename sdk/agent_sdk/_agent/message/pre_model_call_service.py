@@ -3,7 +3,7 @@
 封装设计文档 §3.3 中的处理流程：
   0a. invoked_skills inject — 已激活 skill 指令 → prepend（compact 安全）
   0b. skill_listing inject  — 可用 skill 列表 → prepend（Decision 2）
-  1.  context injection     — agent.md / memory.md → prepend to [0]
+  1.  context injection     — AGENTS.md / MEMORY.md → prepend to [0]
   2.  attachment inject     — changed_files → append（compact 之前）
   3.  compact check         — microcompact 或 full compact
   4.  post-compact attach   — 若 full compact 产出了 attachments，重新注入
@@ -119,7 +119,7 @@ class PreModelCallMessageService:
             if invoked_attachment is not None:
                 working.insert(0, invoked_attachment)
 
-        # 1. Context injection（agent.md + memory.md → prepend to [0]）
+        # 1. Context injection（AGENTS.md + MEMORY.md → prepend to [0]）
         inject_context(working, self._context_messages)
 
         # 1.5 System prompt injection → 始终在 [0]，确保 system prompt 在所有消息之前

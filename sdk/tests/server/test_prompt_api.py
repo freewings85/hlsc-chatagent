@@ -20,7 +20,7 @@ class TestPromptApi:
 
     @pytest.fixture
     def client(self, templates_dir: Path) -> TestClient:
-        with patch("agent_sdk._agent.prompt.prompt_builder._TEMPLATES_DIR", templates_dir):
+        with patch("agent_sdk._server.prompt_api._TEMPLATES_DIR", templates_dir):
             from agent_sdk._server.app import app
             yield TestClient(app)
 

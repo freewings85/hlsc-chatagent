@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-import agent_sdk._agent.prompt.prompt_builder as _pb
-
 logger: logging.Logger = logging.getLogger(__name__)
 
 router: APIRouter = APIRouter(prefix="/api/prompts", tags=["prompts"])
+
+# 模板目录（从环境变量读取）
+_PROMPTS_DIR_RAW: str | None = os.getenv("PROMPTS_DIR")
+_TEMPLATES_DIR: Path = Path(_PROMPTS_DIR_RAW) / "templates" if _PROMPTS_DIR_RAW else Path("prompts/templates")
 
 # 允许编辑的文件后缀白名单
 _ALLOWED_EXTENSIONS: set[str] = {".md"}
@@ -45,8 +48,8 @@ class PromptUpdateResponse(BaseModel):
 
 def _resolve_and_validate(file_path: str) -> Path:
     """解析路径并校验安全性（防止路径穿越）。"""
-    resolved = (_pb._TEMPLATES_DIR / file_path).resolve()
-    templates_resolved = _pb._TEMPLATES_DIR.resolve()
+    resolved = (_TEMPLATES_DIR / file_path).resolve()
+    templates_resolved = _TEMPLATES_DIR.resolve()
     if not str(resolved).startswith(str(templates_resolved)):
         raise HTTPException(status_code=400, detail="路径不合法")
     if resolved.suffix not in _ALLOWED_EXTENSIONS:
@@ -58,12 +61,12 @@ def _resolve_and_validate(file_path: str) -> Path:
 async def list_prompts() -> PromptListResponse:
     """列出所有提示词文件。"""
     files: list[PromptFileInfo] = []
-    templates_resolved = _pb._TEMPLATES_DIR.resolve()
+    templates_resolved = _TEMPLATES_DIR.resolve()
 
-    if not _pb._TEMPLATES_DIR.exists():
+    if not _TEMPLATES_DIR.exists():
         return PromptListResponse(files=[])
 
-    for p in sorted(_pb._TEMPLATES_DIR.rglob("*")):
+    for p in sorted(_TEMPLATES_DIR.rglob("*")):
         if not p.is_file() or p.suffix not in _ALLOWED_EXTENSIONS:
             continue
         rel = str(p.resolve().relative_to(templates_resolved))

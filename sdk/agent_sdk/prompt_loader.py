@@ -44,18 +44,18 @@ class StaticPromptLoader:
 
 
 # ── TemplatePromptLoader 约定路径 ──
-_MEMORY_MD_PATH = "/{user_id}/memory.md"
+_MEMORY_MD_PATH = "/{user_id}/MEMORY.md"
 
 
 class TemplatePromptLoader:
     """模板目录拼接 + context 文件的 prompt loader
 
     约定：
-    - memory.md 固定在 {USER_FS_DIR}/{user_id}/memory.md（有则注入，无则跳过）
+    - MEMORY.md 固定在 {USER_FS_DIR}/{user_id}/MEMORY.md（有则注入，无则跳过）
 
     Args:
         template_parts: 模板文件路径列表，按顺序拼接为 system_prompt
-        agent_md_path: agent.md 路径（项目级业务配置），有则注入为 context_message，None 则跳过
+        agent_md_path: AGENTS.md 路径（项目级业务配置），有则注入为 context_message，None 则跳过
     """
 
     def __init__(
@@ -84,23 +84,24 @@ class TemplatePromptLoader:
         system_prompt = self._load_system_prompt()
         context_messages: list[ModelRequest] = []
 
-        # agent.md
+        # AGENTS.md / agent.md（项目级业务配置）
         if self._agent_md_path and self._agent_md_path.exists():
             content = self._agent_md_path.read_text(encoding="utf-8").strip()
+            filename = self._agent_md_path.name
             if content:
                 context_messages.append(ModelRequest(
                     parts=[UserPromptPart(
-                        content=f"Contents of agent.md (project instructions):\n\n{content}",
+                        content=f"Contents of {filename} (project instructions):\n\n{content}",
                     )],
                     metadata={"is_meta": True, "source": "agent_md"},
                 ))
 
-        # memory.md
+        # MEMORY.md
         memory_md = await self._read_memory_md(user_id)
         if memory_md:
             context_messages.append(ModelRequest(
                 parts=[UserPromptPart(
-                    content=f"Contents of memory.md (auto-memory, persists across sessions):\n\n{memory_md}",
+                    content=f"Contents of MEMORY.md (auto-memory, persists across sessions):\n\n{memory_md}",
                 )],
                 metadata={"is_meta": True, "source": "memory"},
             ))
@@ -108,7 +109,7 @@ class TemplatePromptLoader:
         return PromptResult(system_prompt=system_prompt, context_messages=context_messages)
 
     async def _read_memory_md(self, user_id: str) -> str | None:
-        """从 user_fs_backend 读取 memory.md"""
+        """从 user_fs_backend 读取 MEMORY.md"""
         from agent_sdk.config import get_user_fs_backend
 
         backend = get_user_fs_backend()

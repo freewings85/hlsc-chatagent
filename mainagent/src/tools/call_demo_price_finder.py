@@ -34,8 +34,13 @@ async def call_demo_price_finder(
     This tool communicates with a remote DemoPriceFinder agent via A2A protocol.
     The subagent may ask the user for confirmation during execution.
 
+    触发示例 — 当用户表达以下意图时应调用此工具：
+    - 询价类："更换刹车片多少钱？"、"油漆维修哪家便宜？"、"帮我查一下换轮胎的价格"
+    - 比价类："哪家店做保养最划算？"、"找个最便宜的地方修空调"
+    - 维修项目 + 价格关键词组合："变速箱维修报个价"、"发动机大修费用"
+
     Args:
-        query: Description of what to search for (e.g. "更换刹车片").
+        query: 维修项目描述（e.g. "更换刹车片"、"油漆维修"、"空调维修"）。
 
     Returns:
         The subagent's final response.

@@ -269,7 +269,7 @@ async def _run_sub_agent(
     # PreModelCallMessageService — 精简版（无 skill listing，有 compact + attachment）
     pre_call_service = PreModelCallMessageService(
         compactor=compactor,
-        context_messages=[],  # 子 agent 无 context injection（agent.md/memory.md）
+        context_messages=[],  # 子 agent 无 context injection（AGENTS.md/MEMORY.md）
         attachment_collector=attachment_collector,
         skill_registry=None,  # 子 agent 不注入 skill listing
         invoked_skill_store=None,
