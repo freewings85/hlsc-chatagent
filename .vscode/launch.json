@@ -2,10 +2,22 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Backend: FastAPI",
+      "name": "MainAgent",
       "type": "debugpy",
       "request": "launch",
-      "program": "server.py",
+      "program": "src/hlsc/mainagent/server.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "NO_PROXY": "127.0.0.1,localhost,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8",
+        "no_proxy": "127.0.0.1,localhost,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
+      }
+    },
+    {
+      "name": "PriceFinder",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "src/hlsc/subagents/price_finder/server.py",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {

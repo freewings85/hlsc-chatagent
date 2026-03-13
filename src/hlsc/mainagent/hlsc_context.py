@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.sdk._common.request_context import RequestContext
-from src.hlsc.hlsc_core import CarInfo, LocationInfo
+from src.hlsc.mainagent.hlsc_core import CarInfo, LocationInfo
 
 
 class HlscRequestContext(RequestContext):

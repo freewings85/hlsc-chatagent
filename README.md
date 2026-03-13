@@ -2,6 +2,93 @@
 
 话痨说车对话 Agent
 
+## 快速启动
+
+### 1. 启动后端
+
+每个 Agent 通过各自目录下的 `server.py` 启动，默认加载同目录 `.env.local`：
+
+```bash
+# MainAgent（端口 8100）
+uv run python src/hlsc/mainagent/server.py
+
+# PriceFinder Subagent（端口 8101）
+uv run python src/hlsc/subagents/price_finder/server.py
+```
+
+也可指定配置文件或覆盖端口：
+
+```bash
+uv run python src/hlsc/mainagent/server.py --env src/hlsc/mainagent/.env.uat
+uv run python src/hlsc/mainagent/server.py --port 9000
+```
+
+VS Code 用户直接 F5，选择 **MainAgent** 或 **PriceFinder** 配置。
+
+### 2. 启动前端
+
+前端是公用的 React SPA，通过 Vite proxy 连接不同后端：
+
+```bash
+cd web
+
+# 连接 MainAgent（默认 proxy → localhost:8100）
+npm run dev
+
+# 连接 PriceFinder Subagent
+VITE_PROXY_TARGET=http://127.0.0.1:8101 VITE_PORT=3101 npm run dev
+```
+
+打开浏览器：
+- MainAgent: http://localhost:3100
+- PriceFinder: http://localhost:3101
+
+### 3. 前置依赖
+
+- **Temporal Server**（ask_user interrupt 机制依赖）：`TEMPORAL_ENABLED=true`
+- **Nacos**（生产配置中心）：本地开发用 `USE_NACOS=FALSE`
+
+## 项目结构
+
+```
+src/
+├── sdk/                              # 通用框架（可复用）
+│   ├── agent.py                      # Agent 纯逻辑层
+│   ├── agent_app.py                  # AgentApp 部署容器
+│   ├── config.py                     # 配置类
+│   ├── prompt_loader.py              # PromptLoader 协议
+│   └── _agent/, _server/, ...        # 内部实现
+│
+├── hlsc/                             # 话痨说车业务
+│   ├── mainagent/
+│   │   ├── server.py                 # 启动入口
+│   │   ├── app.py                    # Agent 工厂
+│   │   ├── .env.local                # 本地配置
+│   │   ├── prompt_loader.py          # 主 Agent PromptLoader
+│   │   ├── hlsc_context.py           # 业务上下文
+│   │   └── hlsc_core.py              # 核心模型（CarInfo 等）
+│   │
+│   └── subagents/
+│       └── price_finder/
+│           ├── server.py             # 启动入口
+│           ├── tools.py              # 比价工具
+│           └── .env.local            # 本地配置
+│
+web/                                  # 公用前端（React + Vite）
+```
+
+## 配置说明
+
+每个 Agent 目录下有完整的 `.env.local`，包含所有配置项。生产环境通过 Nacos 下发。
+
+| 配置项 | 说明 | MainAgent 默认 | PriceFinder 默认 |
+|--------|------|---------------|-----------------|
+| `SERVER_PORT` | 服务端口 | 8100 | 8101 |
+| `USER_FS_DIR` | 用户数据目录 | data | src/hlsc/subagents/price_finder/data |
+| `MEMORY_SERVICE_TYPE` | 存储实现 | sqlite | fs |
+| `TEMPORAL_ENABLED` | Temporal 开关 | true | true |
+| `PRICE_FINDER_URL` | Subagent 地址 | http://localhost:8101 | — |
+
 ## 消息持久化架构
 
 ### 存储层
@@ -87,48 +174,6 @@ data: {json}
 
 - **`agent_path`**：以 `|` 分隔的 agent 层级路径，如 `"main"`, `"main|inquiry"`, `"main|inquiry|compare"`
 - **`parent_tool_call_id`**：触发此 subagent 的**直接父 agent** 中的 `tool_call_id`
-
-#### Main Agent 事件示例
-
-```json
-{"type": "text",            "agent_path": "main", "parent_tool_call_id": null,
- "data": {"content": "好的，我来帮你询价"}}
-
-{"type": "tool_call_start", "agent_path": "main", "parent_tool_call_id": null,
- "data": {"tool_name": "run_inquiry", "tool_call_id": "call_A"}}
-
-{"type": "tool_result",     "agent_path": "main", "parent_tool_call_id": null,
- "data": {"tool_name": "run_inquiry", "tool_call_id": "call_A", "result": "询价完成"}}
-```
-
-Main agent 事件的 `parent_tool_call_id` 始终为 `null`。
-
-#### Subagent 事件示例（在 run_inquiry tool 内部）
-
-```json
-{"type": "text",            "agent_path": "main|inquiry", "parent_tool_call_id": "call_A",
- "data": {"content": "正在查询匹配项目..."}}
-
-{"type": "tool_call_start", "agent_path": "main|inquiry", "parent_tool_call_id": "call_A",
- "data": {"tool_name": "search_parts", "tool_call_id": "call_B"}}
-
-{"type": "tool_result",     "agent_path": "main|inquiry", "parent_tool_call_id": "call_A",
- "data": {"tool_name": "search_parts", "tool_call_id": "call_B", "result": "找到3个配件"}}
-
-{"type": "interrupt",       "agent_path": "main|inquiry", "parent_tool_call_id": "call_A",
- "data": {"question": "确认方案A？", "type": "confirm"}}
-```
-
-所有 subagent 事件的 `parent_tool_call_id` 指向 main agent 中 `"call_A"` 这个 tool call。
-
-#### Sub-subagent 事件示例（inquiry 的 tool 内部再调 subagent）
-
-```json
-{"type": "text",            "agent_path": "main|inquiry|compare", "parent_tool_call_id": "call_B",
- "data": {"content": "比价中..."}}
-```
-
-`parent_tool_call_id` 指向 inquiry agent 中的 `"call_B"`，无限嵌套同理。
 
 #### 前端渲染规则
 

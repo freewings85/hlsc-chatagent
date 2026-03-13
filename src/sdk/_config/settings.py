@@ -236,7 +236,7 @@ def get_memory_context_service() -> "MemoryContextService":
     if _memory_context_service is None:
         from src.sdk._agent.memory.inmemory_context_service import InMemoryContextService
 
-        from src.hlsc.hlsc_context import hlsc_context_formatter
+        from src.hlsc.mainagent.hlsc_context import hlsc_context_formatter
 
         _memory_context_service = InMemoryContextService(formatter=hlsc_context_formatter)
     return _memory_context_service

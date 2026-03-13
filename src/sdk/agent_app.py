@@ -185,10 +185,66 @@ class AgentApp:
                     content={"error": str(exc)},
                 )
 
+        # 管理 API（skills / prompts / MCP）
+        from src.sdk._server.skill_api import router as skill_router
+        from src.sdk._server.prompt_api import router as prompt_router
+        from src.sdk._server.mcp_api import router as mcp_router
+
+        fastapi_app.include_router(skill_router)
+        fastapi_app.include_router(prompt_router)
+        fastapi_app.include_router(mcp_router)
+
         # A2A 端点
         self._mount_a2a(fastapi_app)
 
+        # Web 静态文件（公用前端）
+        self._mount_web(fastapi_app)
+
         return fastapi_app
+
+    def _mount_web(self, fastapi_app: Any) -> None:
+        """挂载 Web 静态文件（公用前端）"""
+        from pathlib import Path
+
+        from fastapi.responses import HTMLResponse
+        from fastapi.staticfiles import StaticFiles
+
+        # 从项目根目录查找 web/dist
+        # 优先使用环境变量，否则从 src/sdk/ 向上找
+        import os
+
+        web_dir = os.getenv("WEB_DIR")
+        if web_dir:
+            web_path = Path(web_dir)
+        else:
+            # src/sdk/agent_app.py → 向上两层到 src/ → 再向上到项目根
+            web_path = Path(__file__).parent.parent.parent / "web"
+
+        dist_dir = web_path / "dist"
+
+        @fastapi_app.get("/", response_class=HTMLResponse)
+        async def index() -> HTMLResponse:
+            dist_html = dist_dir / "index.html"
+            if dist_html.exists():
+                return HTMLResponse(content=dist_html.read_text(encoding="utf-8"))
+            dev_html = web_path / "index.html"
+            if dev_html.exists():
+                return HTMLResponse(content=dev_html.read_text(encoding="utf-8"))
+            return HTMLResponse(content="<h1>web/index.html not found</h1>", status_code=404)
+
+        if dist_dir.is_dir() and (dist_dir / "assets").is_dir():
+            fastapi_app.mount(
+                "/assets",
+                StaticFiles(directory=str(dist_dir / "assets")),
+                name="static-assets",
+            )
+
+        @fastapi_app.get("/{full_path:path}", response_class=HTMLResponse)
+        async def spa_fallback(full_path: str) -> HTMLResponse:
+            dist_html = dist_dir / "index.html"
+            if dist_html.exists():
+                return HTMLResponse(content=dist_html.read_text(encoding="utf-8"))
+            return HTMLResponse(content="", status_code=404)
 
     def _mount_a2a(self, fastapi_app: Any) -> None:
         """挂载 A2A 协议端点"""

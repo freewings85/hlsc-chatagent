@@ -198,7 +198,8 @@ class SkillRegistry:
         每个目录中：每个子目录对应一个 skill，子目录下的 SKILL.md 为定义文件。
         """
         registry = cls()
-        for base_dir in dirs:
+        for d in dirs:
+            base_dir = Path(d) if isinstance(d, str) else d
             if not base_dir.is_dir():
                 continue
             for skill_dir in sorted(base_dir.iterdir()):

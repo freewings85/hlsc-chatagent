@@ -16,8 +16,14 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 if TYPE_CHECKING:
     from src.sdk._common.filesystem_backend import BackendProtocol
 
-# 提示词根目录（可通过 PROMPTS_DIR 环境变量覆盖）
-_PROMPTS_DIR: Path = Path(os.getenv("PROMPTS_DIR", "prompts"))
+# 提示词根目录（必须通过 PROMPTS_DIR 环境变量配置）
+_PROMPTS_DIR_RAW: str | None = os.getenv("PROMPTS_DIR")
+if not _PROMPTS_DIR_RAW:
+    raise RuntimeError(
+        "环境变量 PROMPTS_DIR 未配置。"
+        "每个 Agent 必须在 .env.local 中设置 PROMPTS_DIR 指向自己的 prompts 目录。"
+    )
+_PROMPTS_DIR: Path = Path(_PROMPTS_DIR_RAW)
 _TEMPLATES_DIR: Path = _PROMPTS_DIR / "templates"
 
 # 系统提示词模板（按拼接顺序排列，见 templates/README.md）

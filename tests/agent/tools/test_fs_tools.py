@@ -451,5 +451,4 @@ class TestCreateDefaultToolMap:
         assert "bash" in tool_map
         assert "task" in tool_map
         assert "ask_user" in tool_map
-        assert "call_price_finder" in tool_map
-        assert len(tool_map) == 9
+        assert len(tool_map) == 8

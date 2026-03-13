@@ -11,7 +11,6 @@
 
 from src.sdk._agent.tools.ask_user import ask_user
 from src.sdk._agent.tools.bash import bash
-from src.sdk._agent.tools.call_price_finder import call_price_finder
 from src.sdk._agent.file_state import ChangedFile, FileEntry, FileStateTracker
 from src.sdk._agent.tools.fs import edit, glob, grep, read, write
 from src.sdk._agent.tools.task import task
@@ -30,7 +29,6 @@ __all__ = [
     "bash",
     "task",
     "ask_user",
-    "call_price_finder",
     # 便捷工厂
     "ALL_FS_TOOLS",
     "create_default_tool_map",
@@ -38,12 +36,11 @@ __all__ = [
 
 ALL_FS_TOOLS: list[str] = [
     "read", "edit", "write", "glob", "grep", "bash", "task", "ask_user",
-    "call_price_finder",
 ]
 
 
 def create_default_tool_map() -> dict:
-    """创建包含所有工具的 tool_map，用于初始化 AgentDeps。"""
+    """创建 SDK 内置工具的 tool_map。业务工具由各 Agent 自行注册。"""
     return {
         "read": read,
         "edit": edit,
@@ -53,5 +50,4 @@ def create_default_tool_map() -> dict:
         "bash": bash,
         "task": task,
         "ask_user": ask_user,
-        "call_price_finder": call_price_finder,
     }
