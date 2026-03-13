@@ -34,13 +34,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY subagents/demo_price_finder/server.py subagents/demo_price_finder/
 COPY subagents/demo_price_finder/src subagents/demo_price_finder/src
 COPY subagents/demo_price_finder/prompts subagents/demo_price_finder/prompts
-COPY subagents/demo_price_finder/.env* subagents/demo_price_finder/
 
-# 创建运行时目录
+# 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
+COPY subagents/demo_price_finder/.env.test subagents/demo_price_finder/.env.test.nacos subagents/demo_price_finder/
+COPY subagents/demo_price_finder/.env.uat subagents/demo_price_finder/.env.uat.nacos subagents/demo_price_finder/
+
+# 运行时目录（生产环境应挂载为 volume）
 RUN mkdir -p subagents/demo_price_finder/.chatagent subagents/demo_price_finder/logs subagents/demo_price_finder/data
 
 WORKDIR /app/subagents/demo_price_finder
 
 EXPOSE 8101
 
-CMD ["uv", "run", "python", "server.py"]
+ENV ACTIVE=test
+
+CMD ["uv", "run", "python", "server.py", "--env", "/dev/null"]

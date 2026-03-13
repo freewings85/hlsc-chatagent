@@ -34,13 +34,21 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY mainagent/server.py mainagent/
 COPY mainagent/src mainagent/src
 COPY mainagent/prompts mainagent/prompts
-COPY mainagent/.env* mainagent/
 
-# 创建运行时目录
+# 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
+# 不拷贝 .env.local（开发用）
+COPY mainagent/.env.test mainagent/.env.test.nacos mainagent/
+COPY mainagent/.env.uat mainagent/.env.uat.nacos mainagent/
+
+# 运行时目录（生产环境应挂载为 volume）
 RUN mkdir -p mainagent/.chatagent mainagent/logs mainagent/data
 
 WORKDIR /app/mainagent
 
 EXPOSE 8100
 
-CMD ["uv", "run", "python", "server.py"]
+# ACTIVE 环境变量决定加载哪个 .env 文件（test/uat）
+# nacos.py 在 import 时自动读取 .env.{ACTIVE} 并从 Nacos 拉取配置
+ENV ACTIVE=test
+
+CMD ["uv", "run", "python", "server.py", "--env", "/dev/null"]
