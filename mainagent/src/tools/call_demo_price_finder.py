@@ -1,4 +1,4 @@
-"""call_price_finder 工具：通过 A2A 协议调用 PriceFinder subagent。
+"""call_demo_price_finder 工具：通过 A2A 协议调用 DemoPriceFinder subagent。
 
 将 subagent 的事件流转为带 agent_path / parent_tool_call_id 的 EventModel
 转发给前端，实现 tool 卡片内嵌套展示 subagent 输出。
@@ -20,21 +20,18 @@ from agent_sdk._config.settings import get_temporal_config
 from agent_sdk._event.event_model import EventModel
 from agent_sdk._event.event_type import EventType
 
+from src.config import DEMO_PRICE_FINDER_URL
+
 logger = logging.getLogger(__name__)
 
-# PriceFinder subagent 地址（可通过环境变量配置）
-import os
 
-PRICE_FINDER_URL = os.getenv("PRICE_FINDER_URL", "http://localhost:8101")
-
-
-async def call_price_finder(
+async def call_demo_price_finder(
     ctx: RunContext[AgentDeps],
     query: str,
 ) -> str:
-    """Call the PriceFinder subagent to find the best price for a car repair project.
+    """Call the DemoPriceFinder subagent to find the best price for a car repair project.
 
-    This tool communicates with a remote PriceFinder agent via A2A protocol.
+    This tool communicates with a remote DemoPriceFinder agent via A2A protocol.
     The subagent may ask the user for confirmation during execution.
 
     Args:
@@ -50,7 +47,7 @@ async def call_price_finder(
     # 获取当前 tool call 的 ID（由 Pydantic AI 在 CallToolsNode 中设置）
     # 这个 ID 用于 parent_tool_call_id，让前端知道 subagent 事件隶属于哪个 tool
     parent_tool_call_id = getattr(ctx, "tool_call_id", None) or ""
-    agent_path = "main|price_finder"
+    agent_path = "main|demo_price_finder"
 
     context_id = f"pf-{session_id}-{uuid4().hex[:8]}"
     final_text_parts: list[str] = []
@@ -91,7 +88,7 @@ async def call_price_finder(
                 break
             elif task_state == "failed":
                 error = _extract_text(result.get("status", {}).get("message"))
-                return f"PriceFinder 失败: {error}"
+                return f"DemoPriceFinder 失败: {error}"
             elif task_state == "input-required":
                 # 从 status.message 中提取 question
                 status_msg = result.get("status", {}).get("message", {})
@@ -113,7 +110,7 @@ async def call_price_finder(
                                 "question": question,
                                 "interrupt_id": interrupt_id,
                                 "interrupt_key": main_interrupt_key,
-                                "source": "price_finder",
+                                "source": "demo_price_finder",
                             },
                             agent_path=agent_path,
                             parent_tool_call_id=parent_tool_call_id,
@@ -140,7 +137,7 @@ async def call_price_finder(
                 # working 或其他状态，不应该在非流式中出现
                 break
 
-    return "".join(final_text_parts) if final_text_parts else "PriceFinder 执行完成"
+    return "".join(final_text_parts) if final_text_parts else "DemoPriceFinder 执行完成"
 
 
 async def _a2a_send(
@@ -166,7 +163,7 @@ async def _a2a_send(
         "params": {"message": msg},
     }
 
-    resp = await client.post(f"{PRICE_FINDER_URL}/a2a", json=request_body)
+    resp = await client.post(f"{DEMO_PRICE_FINDER_URL}/a2a", json=request_body)
     resp.raise_for_status()
     data = resp.json()
 

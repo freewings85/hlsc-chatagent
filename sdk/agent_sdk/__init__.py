@@ -6,22 +6,21 @@
     from agent_sdk import Agent, AgentApp, AgentAppConfig, StaticPromptLoader
 
     agent = Agent(
-        prompt_loader=StaticPromptLoader("你是 PriceFinder Agent..."),
-        tools={"find_best_price": find_best_price_fn},
+        prompt_loader=StaticPromptLoader("你是一个 Agent..."),
+        tools=ToolConfig(manual={"my_tool": my_tool_fn}),
     )
-    app = AgentApp(agent, AgentAppConfig(name="PriceFinder", port=8101))
+    app = AgentApp(agent, AgentAppConfig(description="..."))
     app.run()
 
     # 主 Agent
-    from agent_sdk import Agent, AgentApp, TemplatePromptLoader, ToolConfig, McpConfig
+    from agent_sdk import Agent, AgentApp, TemplatePromptLoader, ToolConfig
 
     agent = Agent(
         prompt_loader=TemplatePromptLoader(...),
-        tools=ToolConfig(manual={...}, mcp_config=McpConfig(...)),
+        tools=ToolConfig(manual={...}),
         compact_config=CompactConfig(context_window=128000),
-        skill_config=SkillConfig(skill_dirs=["skills/"]),
     )
-    app = AgentApp(agent, AgentAppConfig(name="MainAgent", port=8100))
+    app = AgentApp(agent, AgentAppConfig(description="..."))
     app.run()
 """
 
@@ -30,10 +29,8 @@ from agent_sdk.agent_app import AgentApp
 from agent_sdk.config import (
     AgentAppConfig,
     CompactConfig,
-    McpConfig,
     MemoryConfig,
     ModelConfig,
-    SkillConfig,
     ToolConfig,
     TranscriptConfig,
 )
@@ -51,10 +48,8 @@ __all__ = [
     # Config
     "AgentAppConfig",
     "CompactConfig",
-    "McpConfig",
     "MemoryConfig",
     "ModelConfig",
-    "SkillConfig",
     "ToolConfig",
     "TranscriptConfig",
     # Prompt

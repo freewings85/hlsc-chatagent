@@ -273,7 +273,7 @@ class AgentApp:
         """
         from agent_sdk._agent.deps import AgentDeps
         from agent_sdk._agent.loop import create_agent
-        from agent_sdk._storage.local_backend import FilesystemBackend
+        from agent_sdk.config import create_session_backend
 
         model = self._agent._build_model()
         available_tools, tool_map = self._agent._build_tool_map()
@@ -284,8 +284,7 @@ class AgentApp:
 
         pydantic_agent = create_agent(model, system_prompt=system_prompt)
 
-        session_root = f"{self._agent._memory_config.data_dir}/{user_id}/sessions/{session_id}"
-        backend = FilesystemBackend(root_dir=session_root, virtual_mode=True)
+        backend = create_session_backend(user_id, session_id)
 
         deps = AgentDeps(
             session_id=session_id,

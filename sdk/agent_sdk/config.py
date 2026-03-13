@@ -10,10 +10,37 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Callable, Coroutine
+
+if TYPE_CHECKING:
+    from agent_sdk._common.filesystem_backend import BackendProtocol
 
 # tool 函数类型（与 AgentDeps 中的 ToolFunc 一致）
 ToolFunc = Callable[..., Coroutine[Any, Any, str]]
+
+# ============================================================
+# 全局常量（从环境变量读取，所有代码通过这些常量访问）
+# ============================================================
+
+AGENT_NAME: str = os.getenv("AGENT_NAME", "agent")
+"""Agent 名称（logfire / AgentApp / Agent 共用）"""
+
+USER_FS_DIR: str = os.getenv("USER_FS_DIR", "data")
+"""用户数据目录（会话、记忆、审计日志等）"""
+
+AGENT_FS_DIR: str = os.getenv("AGENT_FS_DIR", ".chatagent")
+"""Agent 工作目录（MCP、Skills 等）"""
+
+MCP_CONFIG_PATH: str = os.path.join(AGENT_FS_DIR, ".mcp.json")
+"""MCP 配置文件路径：{AGENT_FS_DIR}/.mcp.json"""
+
+SKILL_DIRS: list[str] = [os.path.join(AGENT_FS_DIR, "skills")]
+"""Skill 目录列表：{AGENT_FS_DIR}/skills/"""
+
+
+def get_agent_name() -> str:
+    """获取 Agent 名称（兼容动态读取场景）。"""
+    return os.getenv("AGENT_NAME", "agent")
 
 
 @dataclass
@@ -40,24 +67,15 @@ class ModelConfig:
 
 
 @dataclass
-class McpConfig:
-    """MCP 工具加载配置"""
-
-    config_path: str | None = None  # ".mcp.json"
-
-
-@dataclass
 class ToolConfig:
-    """工具配置：支持手动 + MCP + 子集选取
+    """工具配置：支持手动 + 子集选取
 
-    三种用法：
+    两种用法：
     1. 直接传 dict[str, ToolFunc]（最简 / 测试）
-    2. ToolConfig（生产，MCP + 手动 + 子集）
-    3. 组合使用 manual + mcp_config + include/exclude
+    2. ToolConfig（生产，手动 + 子集）
     """
 
     manual: dict[str, ToolFunc] | None = None
-    mcp_config: McpConfig | None = None
     include: list[str] | None = None  # 白名单
     exclude: list[str] | None = None  # 黑名单
 
@@ -67,7 +85,7 @@ class MemoryConfig:
     """消息工作集（messages.jsonl）配置"""
 
     backend: str = field(default_factory=lambda: os.getenv("MEMORY_SERVICE_TYPE", "fs"))
-    data_dir: str = field(default_factory=lambda: os.getenv("USER_FS_DIR", "data"))
+    data_dir: str = field(default_factory=lambda: USER_FS_DIR)
 
 
 @dataclass
@@ -75,7 +93,7 @@ class TranscriptConfig:
     """审计日志（transcript.jsonl）配置"""
 
     enabled: bool = True
-    data_dir: str = field(default_factory=lambda: os.getenv("USER_FS_DIR", "data"))
+    data_dir: str = field(default_factory=lambda: USER_FS_DIR)
 
 
 @dataclass
@@ -89,17 +107,23 @@ class CompactConfig:
 
 
 @dataclass
-class SkillConfig:
-    """Skill 系统配置"""
+class StorageConfig:
+    """存储后端配置
 
-    skill_dirs: list[str] | None = None  # None → 不启用
+    当前支持：
+    - "fs" — FilesystemBackend（本地文件系统）
+
+    将来可扩展 "s3"、"pg" 等。
+    """
+
+    backend: str = field(default_factory=lambda: os.getenv("STORAGE_BACKEND", "fs"))
 
 
 @dataclass
 class AgentAppConfig:
     """AgentApp 部署容器配置"""
 
-    name: str = "Agent"
+    name: str = field(default_factory=get_agent_name)
     description: str = ""
     host: str = field(default_factory=lambda: os.getenv("SERVER_HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: int(os.getenv("SERVER_PORT", "8100")))
@@ -112,3 +136,51 @@ class AgentAppConfig:
     )
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
     a2a_skills: list[Any] | None = None  # list[AgentSkill]
+
+
+# ============================================================
+# Backend 工厂（全局单例）
+# ============================================================
+
+_storage_config: StorageConfig | None = None
+_user_fs_backend: BackendProtocol | None = None
+_agent_fs_backend: BackendProtocol | None = None
+
+
+def get_storage_config() -> StorageConfig:
+    """获取存储配置"""
+    global _storage_config
+    if _storage_config is None:
+        _storage_config = StorageConfig()
+    return _storage_config
+
+
+def _create_backend(root_dir: str) -> BackendProtocol:
+    """根据 StorageConfig 创建 backend 实例"""
+    config = get_storage_config()
+    if config.backend == "fs":
+        from agent_sdk._storage.local_backend import FilesystemBackend
+        return FilesystemBackend(root_dir=root_dir, virtual_mode=True)
+    raise ValueError(f"未知的 storage backend: {config.backend}")
+
+
+def get_user_fs_backend() -> BackendProtocol:
+    """获取用户级存储后端（全局单例，root=USER_FS_DIR）"""
+    global _user_fs_backend
+    if _user_fs_backend is None:
+        _user_fs_backend = _create_backend(USER_FS_DIR)
+    return _user_fs_backend
+
+
+def get_agent_fs_backend() -> BackendProtocol:
+    """获取 Agent 级存储后端（全局单例，root=AGENT_FS_DIR）"""
+    global _agent_fs_backend
+    if _agent_fs_backend is None:
+        _agent_fs_backend = _create_backend(AGENT_FS_DIR)
+    return _agent_fs_backend
+
+
+def create_session_backend(user_id: str, session_id: str) -> BackendProtocol:
+    """为单个会话创建存储后端（非单例，每次新建）"""
+    session_root = f"{USER_FS_DIR}/{user_id}/sessions/{session_id}"
+    return _create_backend(session_root)

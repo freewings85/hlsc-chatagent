@@ -1,41 +1,35 @@
-"""HLSC 主 Agent 工厂：创建配置好的 Agent 实例
+"""HLSC 主 Agent 工厂：创建配置好的 AgentApp 实例
 
-server.py 调用 create_main_agent() 获取 Agent，再包装为 AgentApp 启动。
+server.py 调用 create_agent_app() 获取 AgentApp，直接启动。
 """
 
 from __future__ import annotations
 
-import os
-
-from agent_sdk import Agent, SkillConfig, ToolConfig
-from agent_sdk.config import McpConfig
+from agent_sdk import Agent, AgentApp, AgentAppConfig, ToolConfig
+from agent_sdk._agent.tools import create_default_tool_map
 from src.prompt_loader import create_main_prompt_loader
+from src.tools import create_main_tool_map
 
 
-def create_main_agent() -> Agent:
-    """创建 HLSC 主 Agent"""
-    from agent_sdk._agent.tools import create_default_tool_map
-    from agent_sdk._storage.local_backend import FilesystemBackend
-    from src.tools import create_main_tool_map
+def create_agent_app() -> AgentApp:
+    """创建 HLSC 主 AgentApp"""
+    # 注册业务上下文格式化器
+    from agent_sdk._config.settings import register_context_formatter
+    from src.hlsc_context import hlsc_context_formatter
 
-    user_fs_dir = os.getenv("USER_FS_DIR", "data")
-    user_fs_backend = FilesystemBackend(root_dir=user_fs_dir, virtual_mode=True)
+    register_context_formatter(hlsc_context_formatter)
 
-    prompt_loader = create_main_prompt_loader(user_fs_backend)
+    prompt_loader = create_main_prompt_loader()
     tool_map = {**create_default_tool_map(), **create_main_tool_map()}
 
-    agent_fs_dir = os.getenv("AGENT_FS_DIR", ".chatagent")
-    skill_dirs = [
-        os.path.join(agent_fs_dir, "skills"),
-        "skills",
-    ]
-
-    return Agent(
+    agent = Agent(
         prompt_loader=prompt_loader,
-        tools=ToolConfig(
-            manual=tool_map,
-            mcp_config=McpConfig(config_path=".mcp.json"),
+        tools=ToolConfig(manual=tool_map),
+    )
+
+    return AgentApp(
+        agent,
+        AgentAppConfig(
+            description="汽修场景主 Agent，支持工具调用、文件操作、中断确认",
         ),
-        skill_config=SkillConfig(skill_dirs=skill_dirs),
-        agent_name="main",
     )

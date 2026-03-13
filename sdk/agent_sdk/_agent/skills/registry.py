@@ -247,9 +247,9 @@ def get_default_skill_dirs() -> list[Path]:
 
     两层：bundled（内置）→ project（AGENT_FS_DIR/skills）。
     """
-    from agent_sdk._config.settings import get_agent_fs_config
+    from agent_sdk.config import SKILL_DIRS
 
     return [
         Path(__file__).parent / "bundled",                          # 内置（最低优先级）
-        Path(get_agent_fs_config().agent_fs_dir) / "skills",        # 项目级（最高优先级）
+        *[Path(d) for d in SKILL_DIRS],                             # 项目级（最高优先级）
     ]

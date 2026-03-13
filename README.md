@@ -6,7 +6,7 @@
 sdk/                    # Agent SDK（独立 Python 包：agent_sdk）
 mainagent/              # 话痨说车主 Agent（独立项目）
 subagents/
-  price_finder/         # 比价 Subagent（独立项目）
+  demo_price_finder/    # 比价 Demo Subagent（参考模板）
 web/                    # 公用前端（React + Vite）
 ```
 
@@ -27,10 +27,10 @@ cd mainagent
 uv run python server.py                    # 端口 8100
 ```
 
-### 3. 启动 PriceFinder Subagent
+### 3. 启动 DemoPriceFinder Subagent
 
 ```bash
-cd subagents/price_finder
+cd subagents/demo_price_finder
 uv run python server.py                    # 端口 8101
 ```
 
@@ -55,7 +55,7 @@ VITE_PROXY_TARGET=http://127.0.0.1:8101 VITE_PORT=3101 npm run dev
 
 ## VS Code
 
-F5 启动，选择 **MainAgent** 或 **PriceFinder** 配置。
+F5 启动，选择 **MainAgent** 或 **DemoPriceFinder** 配置。
 
 ## 运行测试
 
@@ -70,4 +70,4 @@ cd mainagent && uv run pytest tests/ -v
 
 - [SDK README](sdk/README.md)
 - [MainAgent README](mainagent/README.md)
-- [PriceFinder README](subagents/price_finder/README.md)
+- [DemoPriceFinder README](subagents/demo_price_finder/README.md)

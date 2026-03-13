@@ -43,27 +43,28 @@ class StaticPromptLoader:
         return PromptResult(system_prompt=self._prompt, context_messages=[])
 
 
+# ── TemplatePromptLoader 约定路径 ──
+_MEMORY_MD_PATH = "/{user_id}/memory.md"
+
+
 class TemplatePromptLoader:
-    """模板目录拼接 + context 文件的 prompt loader（主 agent 用）
+    """模板目录拼接 + context 文件的 prompt loader
+
+    约定：
+    - memory.md 固定在 {USER_FS_DIR}/{user_id}/memory.md（有则注入，无则跳过）
 
     Args:
         template_parts: 模板文件路径列表，按顺序拼接为 system_prompt
-        agent_md_path: agent.md 路径（项目级业务配置），注入为 context_message
-        memory_md_path: memory.md 路径模板（含 {user_id}），从 user_fs_backend 读取
-        user_fs_backend: 用户级文件系统后端（读取 memory.md）
+        agent_md_path: agent.md 路径（项目级业务配置），有则注入为 context_message，None 则跳过
     """
 
     def __init__(
         self,
         template_parts: list[str | Path],
         agent_md_path: str | Path | None = None,
-        memory_md_path: str | None = None,
-        user_fs_backend: object | None = None,
     ) -> None:
         self._template_parts = [Path(p) for p in template_parts]
         self._agent_md_path = Path(agent_md_path) if agent_md_path else None
-        self._memory_md_path = memory_md_path
-        self._user_fs_backend = user_fs_backend
         self._system_prompt_cache: str | None = None
 
     def _load_system_prompt(self) -> str:
@@ -94,28 +95,27 @@ class TemplatePromptLoader:
                     metadata={"is_meta": True, "source": "agent_md"},
                 ))
 
-        # memory.md（需要 user_fs_backend）
-        if self._memory_md_path and self._user_fs_backend is not None:
-            memory_md = await self._read_memory_md(user_id)
-            if memory_md:
-                context_messages.append(ModelRequest(
-                    parts=[UserPromptPart(
-                        content=f"Contents of memory.md (auto-memory, persists across sessions):\n\n{memory_md}",
-                    )],
-                    metadata={"is_meta": True, "source": "memory"},
-                ))
+        # memory.md
+        memory_md = await self._read_memory_md(user_id)
+        if memory_md:
+            context_messages.append(ModelRequest(
+                parts=[UserPromptPart(
+                    content=f"Contents of memory.md (auto-memory, persists across sessions):\n\n{memory_md}",
+                )],
+                metadata={"is_meta": True, "source": "memory"},
+            ))
 
         return PromptResult(system_prompt=system_prompt, context_messages=context_messages)
 
     async def _read_memory_md(self, user_id: str) -> str | None:
         """从 user_fs_backend 读取 memory.md"""
-        if self._memory_md_path is None or self._user_fs_backend is None:
+        from agent_sdk.config import get_user_fs_backend
+
+        backend = get_user_fs_backend()
+        path = _MEMORY_MD_PATH.format(user_id=user_id)
+        if not await backend.aexists(path):
             return None
-        path = self._memory_md_path.format(user_id=user_id)
-        backend = self._user_fs_backend
-        if not await backend.aexists(path):  # type: ignore[union-attr]
-            return None
-        results = await backend.adownload_files([path])  # type: ignore[union-attr]
+        results = await backend.adownload_files([path])
         if results and results[0].content is not None:
             try:
                 return results[0].content.decode("utf-8")

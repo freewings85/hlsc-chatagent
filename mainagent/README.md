@@ -29,7 +29,7 @@ uv run python server.py --port 9000
 | `PROMPTS_DIR` | 提示词目录 | mainagent/prompts |
 | `MEMORY_SERVICE_TYPE` | 存储实现 (fs/sqlite) | sqlite |
 | `TEMPORAL_ENABLED` | Temporal 开关 | true |
-| `PRICE_FINDER_URL` | PriceFinder 地址 | http://localhost:8101 |
+| `DEMO_PRICE_FINDER_URL` | DemoPriceFinder 地址 | http://localhost:8101 |
 
 ## 目录结构
 
@@ -45,7 +45,7 @@ src/                      # 业务代码
   prompt_loader.py        # PromptLoader 实现
   hlsc_context.py         # 业务请求上下文
   hlsc_core.py            # 核心模型（CarInfo 等）
-  tools/                  # 业务工具（call_price_finder 等）
+  tools/                  # 业务工具（call_demo_price_finder 等）
   services/               # 业务服务
 tests/                    # 测试
 ```

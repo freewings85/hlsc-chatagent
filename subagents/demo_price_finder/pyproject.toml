@@ -1,7 +1,7 @@
 [project]
-name = "hlsc-price-finder"
+name = "hlsc-demo-price-finder"
 version = "0.1.0"
-description = "话痨说车比价 Subagent"
+description = "话痨说车比价 Demo Subagent（参考模板）"
 requires-python = ">=3.12"
 dependencies = [
     "agent-sdk",

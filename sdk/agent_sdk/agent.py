@@ -13,18 +13,22 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.models import Model
 
 from agent_sdk.config import (
+    AGENT_FS_DIR,
+    MCP_CONFIG_PATH,
+    SKILL_DIRS,
     CompactConfig as SdkCompactConfig,
     MemoryConfig,
     ModelConfig,
-    SkillConfig,
     ToolConfig,
     TranscriptConfig,
+    get_agent_name,
 )
 from agent_sdk.prompt_loader import PromptLoader, PromptResult
 
@@ -42,16 +46,15 @@ class Agent:
         self,
         # ── 用户直接提供 ──
         prompt_loader: PromptLoader,
-        tools: dict[str, Any] | ToolConfig | None = None,
+        tools: ToolConfig | None = None,
         # ── config 驱动，框架内部构建 service ──
         model: Model | ModelConfig | None = None,
         memory_config: MemoryConfig | None = None,
         transcript_config: TranscriptConfig | None = None,
         compact_config: SdkCompactConfig | None = None,
-        skill_config: SkillConfig | None = None,
         # ── 运行参数 ──
         max_iterations: int = 25,
-        agent_name: str = "main",
+        agent_name: str | None = None,
     ) -> None:
         self._prompt_loader = prompt_loader
         self._tools = tools
@@ -59,9 +62,8 @@ class Agent:
         self._memory_config = memory_config or MemoryConfig()
         self._transcript_config = transcript_config or TranscriptConfig()
         self._compact_config = compact_config or SdkCompactConfig()
-        self._skill_config = skill_config or SkillConfig()
         self._max_iterations = max_iterations
-        self._agent_name = agent_name
+        self._agent_name = agent_name or get_agent_name()
 
         # 延迟构建的内部对象
         self._pydantic_model: Model | None = None
@@ -87,9 +89,6 @@ class Agent:
         """构建 available_tools 和 tool_map"""
         if self._tools is None:
             return [], {}
-        if isinstance(self._tools, dict):
-            return list(self._tools.keys()), dict(self._tools)
-        # ToolConfig
         tool_map: dict[str, Any] = {}
         if self._tools.manual:
             tool_map.update(self._tools.manual)
@@ -107,16 +106,14 @@ class Agent:
         if self._memory_service is not None:
             return self._memory_service
 
-        from agent_sdk._storage.local_backend import FilesystemBackend
-
-        backend = FilesystemBackend(root_dir=self._memory_config.data_dir, virtual_mode=True)
+        from agent_sdk.config import get_user_fs_backend
 
         if self._memory_config.backend == "sqlite":
             from agent_sdk._agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
             self._memory_service = SqliteMemoryMessageService(self._memory_config.data_dir)
         else:
             from agent_sdk._agent.memory.file_memory_message_service import FileMemoryMessageService
-            self._memory_service = FileMemoryMessageService(backend)
+            self._memory_service = FileMemoryMessageService(get_user_fs_backend())
         return self._memory_service
 
     def _build_transcript_service(self) -> Any:
@@ -124,16 +121,10 @@ class Agent:
         if self._transcript_service is not None:
             return self._transcript_service
 
-        if not self._transcript_config.enabled:
-            from agent_sdk._agent.message.transcript_service import TranscriptService
-            from agent_sdk._storage.local_backend import FilesystemBackend
-            backend = FilesystemBackend(root_dir=self._transcript_config.data_dir, virtual_mode=True)
-            self._transcript_service = TranscriptService(backend)
-        else:
-            from agent_sdk._agent.message.transcript_service import TranscriptService
-            from agent_sdk._storage.local_backend import FilesystemBackend
-            backend = FilesystemBackend(root_dir=self._transcript_config.data_dir, virtual_mode=True)
-            self._transcript_service = TranscriptService(backend)
+        from agent_sdk._agent.message.transcript_service import TranscriptService
+        from agent_sdk.config import get_user_fs_backend
+
+        self._transcript_service = TranscriptService(get_user_fs_backend())
         return self._transcript_service
 
     def _build_compact_config(self) -> Any:
@@ -178,7 +169,7 @@ class Agent:
         from agent_sdk._agent.skills.registry import SkillRegistry
         from agent_sdk._agent.skills.tool import invoke_skill
         from agent_sdk._common.session_request_task import SessionRequestTask
-        from agent_sdk._storage.local_backend import FilesystemBackend
+        from agent_sdk.config import create_session_backend, get_user_fs_backend
 
         # 1. 加载 prompt
         prompt_result: PromptResult = await self._prompt_loader.load(user_id, session_id)
@@ -191,8 +182,7 @@ class Agent:
 
         # 4. 构建 deps
         file_state_tracker = FileStateTracker()
-        session_root = f"{self._memory_config.data_dir}/{user_id}/sessions/{session_id}"
-        backend = FilesystemBackend(root_dir=session_root, virtual_mode=True)
+        backend = create_session_backend(user_id, session_id)
 
         deps = AgentDeps(
             session_id=session_id,
@@ -246,12 +236,9 @@ class Agent:
         # 11. Skill 系统
         skill_registry: SkillRegistry | None = None
         invoked_store: InvokedSkillStore | None = None
-        if self._skill_config.skill_dirs:
-            skill_registry = SkillRegistry.load(self._skill_config.skill_dirs)
-            user_fs_backend = FilesystemBackend(
-                root_dir=self._memory_config.data_dir, virtual_mode=True,
-            )
-            invoked_store = InvokedSkillStore(user_fs_backend, user_id, session_id)
+        if any(os.path.isdir(d) for d in SKILL_DIRS):
+            skill_registry = SkillRegistry.load(SKILL_DIRS)
+            invoked_store = InvokedSkillStore(get_user_fs_backend(), user_id, session_id)
             await invoked_store.load()
             if skill_registry.has_skills():
                 deps.skill_registry = skill_registry
@@ -273,11 +260,10 @@ class Agent:
 
         # 13. MCP toolsets
         mcp_toolsets = None
-        if isinstance(self._tools, ToolConfig) and self._tools.mcp_config:
+        if os.path.isfile(MCP_CONFIG_PATH):
             from agent_sdk._agent.mcp.loader import load_mcp_toolsets
-            from agent_sdk._storage.local_backend import FilesystemBackend as FsB
-            agent_fs = FsB(root_dir=".chatagent", virtual_mode=True)
-            mcp_toolsets = await load_mcp_toolsets(agent_fs)
+            from agent_sdk.config import get_agent_fs_backend
+            mcp_toolsets = await load_mcp_toolsets(get_agent_fs_backend())
 
         # 14. 加载历史
         agent_history: list[AgentMessage] = await memory_service.load(user_id, session_id)

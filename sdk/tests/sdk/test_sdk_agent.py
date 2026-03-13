@@ -42,14 +42,14 @@ class TestStaticPromptLoader:
 class TestAgentInit:
     """Agent 初始化测试"""
 
-    def test_init_with_dict_tools(self) -> None:
-        """直接传 dict 工具"""
+    def test_init_with_tool_config_manual(self) -> None:
+        """使用 ToolConfig(manual=...) 传工具"""
         async def dummy_tool(ctx: Any) -> str:
             return "ok"
 
         agent = Agent(
             prompt_loader=StaticPromptLoader("test"),
-            tools={"dummy": dummy_tool},
+            tools=ToolConfig(manual={"dummy": dummy_tool}),
         )
         available, tool_map = agent._build_tool_map()
         assert available == ["dummy"]

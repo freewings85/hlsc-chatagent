@@ -6,10 +6,10 @@ requires-python = ">=3.12"
 dependencies = [
     "agent-sdk",
     "hlsc-mainagent",
-    "hlsc-price-finder",
+    "hlsc-demo-price-finder",
 ]
 
 [tool.uv.sources]
 agent-sdk = { path = "sdk", editable = true }
 hlsc-mainagent = { path = "mainagent", editable = true }
-hlsc-price-finder = { path = "subagents/price_finder", editable = true }
+hlsc-demo-price-finder = { path = "subagents/demo_price_finder", editable = true }
