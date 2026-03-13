@@ -24,9 +24,9 @@ docker run -d --name hlsc-mainagent \
   -p 8100:8100 \
   -e ACTIVE=test \
   -e DEMO_PRICE_FINDER_URL=http://<subagent-host>:8101 \
-  -v $(pwd)/mainagent/.chatagent:/app/mainagent/.chatagent \
-  -v $(pwd)/mainagent/logs:/app/mainagent/logs \
-  -v $(pwd)/mainagent/data:/app/mainagent/data \
+  -v /data/chatagent/mainagent/.chatagent:/app/mainagent/.chatagent \
+  -v /data/chatagent/mainagent/logs:/app/mainagent/logs \
+  -v /data/chatagent/mainagent/data:/app/mainagent/data \
   hlsc-mainagent
 ```
 
@@ -36,9 +36,9 @@ docker run -d --name hlsc-mainagent \
 docker run -d --name hlsc-demo-price-finder \
   -p 8101:8101 \
   -e ACTIVE=test \
-  -v $(pwd)/subagents/demo_price_finder/.chatagent:/app/subagents/demo_price_finder/.chatagent \
-  -v $(pwd)/subagents/demo_price_finder/logs:/app/subagents/demo_price_finder/logs \
-  -v $(pwd)/subagents/demo_price_finder/data:/app/subagents/demo_price_finder/data \
+  -v /data/chatagent/demo_price_finder/.chatagent:/app/subagents/demo_price_finder/.chatagent \
+  -v /data/chatagent/demo_price_finder/logs:/app/subagents/demo_price_finder/logs \
+  -v /data/chatagent/demo_price_finder/data:/app/subagents/demo_price_finder/data \
   hlsc-demo-price-finder
 ```
 
