@@ -1,19 +1,19 @@
 server {
-    listen 3100;
+    listen ${LISTEN_PORT};
     server_name _;
 
     root /usr/share/nginx/html;
     index index.html;
 
-    # API 和 Chat 请求反向代理到 MainAgent
+    # API 和 Chat 请求反向代理到后端 Agent
     location /api/ {
-        proxy_pass http://mainagent:8100;
+        proxy_pass ${BACKEND_URL};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
 
     location /chat/ {
-        proxy_pass http://mainagent:8100;
+        proxy_pass ${BACKEND_URL};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         # SSE 支持
