@@ -1,73 +1,15 @@
 [project]
-name = "chatagent"
+name = "chatagent-workspace"
 version = "0.1.0"
-description = "通用对话 Agent，基于 Pydantic AI"
-readme = "README.md"
+description = "话痨说车对话 Agent（monorepo）"
 requires-python = ">=3.12"
 dependencies = [
-    "pydantic-ai-slim[openai,fastmcp]>=1.66.0",
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.34.0",
-    "python-dotenv>=1.0.0",
-    "logfire>=3.0.0",
-    "wcmatch>=10.1",
-    "anthropic>=0.84.0",
-    "python-multipart>=0.0.22",
-    "nacos-sdk-python==0.1.16",
-    "aiokafka>=0.10.0",
-    "temporalio>=1.23.0",
-    "aiosqlite>=0.22.1",
-    "a2a-sdk[http-server]>=0.3.25",
+    "agent-sdk",
+    "hlsc-mainagent",
+    "hlsc-price-finder",
 ]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-
-[tool.coverage.run]
-source = ["src"]
-omit = [
-    # 占位符/stub 模块
-    "src/storage/pg_backend.py",
-    "src/storage/s3_backend.py",
-    "src/server/app.py",
-    "src/engine/task_worker.py",
-    "src/event/event_sinker_kafka.py",
-    # 纯协议定义
-    "src/common/filesystem_backend.py",
-    # 移植的通用后端代码（非本项目核心业务）
-    "src/storage/local_backend.py",
-    "src/storage/utils.py",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "if TYPE_CHECKING:",
-    "pass",
-    "\\.\\.\\.",
-]
-
-[tool.mypy]
-python_version = "3.12"
-strict = true
-warn_return_any = true
-warn_unused_configs = true
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src"]
-
-[dependency-groups]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
-    "mypy>=1.13.0",
-    "pytest-cov>=7.0.0",
-    "playwright>=1.40",
-    "pytest-playwright>=0.4",
-    "httpx>=0.27",
-]
+[tool.uv.sources]
+agent-sdk = { path = "sdk", editable = true }
+hlsc-mainagent = { path = "mainagent", editable = true }
+hlsc-price-finder = { path = "subagents/price_finder", editable = true }
