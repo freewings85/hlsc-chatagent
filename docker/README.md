@@ -6,13 +6,13 @@
 
 ```bash
 # MainAgent
-docker build -f mainagent/Dockerfile -t hlsc-mainagent .
+docker build -f mainagent/Dockerfile -t ${dockerimage} .
 
 # DemoPriceFinder Subagent
-docker build -f subagents/demo_price_finder/Dockerfile -t hlsc-demo-price-finder .
+docker build -f subagents/demo_price_finder/Dockerfile -t ${dockerimage} .
 
 # Web 前端（所有 Agent 共用同一镜像）
-docker build -t hlsc-web web/
+docker build -t ${dockerimage} web/
 ```
 
 ## 2. 启动容器
@@ -23,11 +23,8 @@ docker build -t hlsc-web web/
 docker run -d --name hlsc-mainagent \
   -p 8100:8100 \
   -e ACTIVE=test \
-  -e DEMO_PRICE_FINDER_URL=http://<subagent-host>:8101 \
-  -v /data/chatagent/mainagent/.chatagent:/app/mainagent/.chatagent \
-  -v /data/chatagent/mainagent/logs:/app/mainagent/logs \
-  -v /data/chatagent/mainagent/data:/app/mainagent/data \
-  hlsc-mainagent
+  -v /data/chatagent/mainagent/.chatagent:/app/mainagent/.chatagent -v /data/chatagent/mainagent/logs:/app/mainagent/logs -v /data/chatagent/mainagent/data:/app/mainagent/data \
+  ${dockerimage}
 ```
 
 ### DemoPriceFinder Subagent
@@ -36,10 +33,8 @@ docker run -d --name hlsc-mainagent \
 docker run -d --name hlsc-demo-price-finder \
   -p 8101:8101 \
   -e ACTIVE=test \
-  -v /data/chatagent/demo_price_finder/.chatagent:/app/subagents/demo_price_finder/.chatagent \
-  -v /data/chatagent/demo_price_finder/logs:/app/subagents/demo_price_finder/logs \
-  -v /data/chatagent/demo_price_finder/data:/app/subagents/demo_price_finder/data \
-  hlsc-demo-price-finder
+  -v /data/chatagent/demo_price_finder/.chatagent:/app/subagents/demo_price_finder/.chatagent -v /data/chatagent/demo_price_finder/logs:/app/subagents/demo_price_finder/logs  -v /data/chatagent/demo_price_finder/data:/app/subagents/demo_price_finder/data \
+  ${dockerimage}
 ```
 
 ### Web 前端
@@ -53,7 +48,8 @@ docker run -d --name hlsc-web-mainagent \
   -p 3100:3100 \
   -e VITE_PROXY_TARGET=http://<mainagent-host>:8100 \
   -e VITE_PORT=3100 \
-  hlsc-web
+  -v /data/chatagent/web-mainagent/logs:/app/logs \
+  ${dockerimage}
 ```
 
 **DemoPriceFinder Web**（subagent 独立调试界面）：
@@ -63,7 +59,8 @@ docker run -d --name hlsc-web-demo-price-finder \
   -p 3101:3101 \
   -e VITE_PROXY_TARGET=http://<subagent-host>:8101 \
   -e VITE_PORT=3101 \
-  hlsc-web
+  -v /data/chatagent/web-demo-price-finder/logs:/app/logs \
+  ${dockerimage}
 ```
 
 > 新增 subagent 时同理：改 `VITE_PROXY_TARGET` 和 `VITE_PORT` 即可。
