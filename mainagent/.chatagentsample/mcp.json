@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "example-server": {
+      "url": "http://localhost:8199/mcp",
+      "headers": {
+        "Authorization": "Bearer your-token-here"
+      }
+    }
+  }
+}

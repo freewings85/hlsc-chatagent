@@ -1,0 +1,29 @@
+[project]
+name = "hlsc-demo-price-finder"
+version = "0.1.0"
+description = "话痨说车比价 Demo Subagent（参考模板）"
+requires-python = ">=3.12"
+dependencies = [
+    "agent-sdk",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.27",
+]
+
+[tool.uv.sources]
+agent-sdk = { path = "../../sdk", editable = true }

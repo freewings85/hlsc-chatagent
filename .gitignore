@@ -12,6 +12,6 @@ build/
 doc/
 iterations/
 
-# 运行时配置（sample 版本入库作为示例）
-.chatagent/skills/
-.chatagent/mcp.json
+# 运行时配置
+**/.chatagent/
+nacos-data/

@@ -168,3 +168,27 @@ export async function probeMcpUrl(url: string): Promise<ProbeResponse> {
   if (!res.ok) throw new Error(`探测失败: ${res.status}`)
   return res.json()
 }
+
+// --------------------------------------------------------------------------- //
+// Agent.md API
+// --------------------------------------------------------------------------- //
+
+export async function getAgentMd(): Promise<string> {
+  const res = await fetch(`${BASE}/api/agent-md`)
+  if (!res.ok) throw new Error(`加载 agent.md 失败: ${res.status}`)
+  const data: { content: string } = await res.json()
+  return data.content
+}
+
+export async function updateAgentMd(content: string): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE}/api/agent-md`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(data.detail || `更新失败: ${res.status}`)
+  }
+  return res.json()
+}

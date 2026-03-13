@@ -2,15 +2,33 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Backend: FastAPI",
+      "name": "MainAgent",
       "type": "debugpy",
       "request": "launch",
       "program": "server.py",
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/mainagent",
       "console": "integratedTerminal",
       "env": {
-        "NO_PROXY": "127.0.0.1,localhost,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8",
-        "no_proxy": "127.0.0.1,localhost,192.168.0.0/16,172.16.0.0/12,10.0.0.0/8"
+        "HTTP_PROXY": "",
+        "HTTPS_PROXY": "",
+        "http_proxy": "",
+        "https_proxy": "",
+        // "ACTIVE": "test"
+      }
+    },
+    {
+      "name": "DemoPriceFinder",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "server.py",
+      "cwd": "${workspaceFolder}/subagents/demo_price_finder",
+      "console": "integratedTerminal",
+      "env": {
+        "HTTP_PROXY": "",
+        "HTTPS_PROXY": "",
+        "http_proxy": "",
+        "https_proxy": "",
+        // "ACTIVE": "test"
       }
     }
   ]

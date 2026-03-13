@@ -1,0 +1,46 @@
+[project]
+name = "agent-sdk"
+version = "0.1.0"
+description = "通用对话 Agent SDK，基于 Pydantic AI"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-ai-slim[openai,fastmcp]>=1.66.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "python-dotenv>=1.0.0",
+    "logfire>=3.0.0",
+    "wcmatch>=10.1",
+    "anthropic>=0.84.0",
+    "python-multipart>=0.0.22",
+    "nacos-sdk-python==0.1.16",
+    "aiokafka>=0.10.0",
+    "temporalio>=1.23.0",
+    "aiosqlite>=0.22.1",
+    "a2a-sdk[http-server]>=0.3.25",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent_sdk"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "mypy>=1.13.0",
+    "pytest-cov>=7.0.0",
+    "httpx>=0.27",
+]

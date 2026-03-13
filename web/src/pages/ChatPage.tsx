@@ -124,7 +124,6 @@ export default function ChatPage() {
     // Add user message + empty assistant placeholder
     const userMsg: ChatMessage = { role: 'user', text, tools: [], interrupts: [], cards: {} }
     const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [], cards: {} }
-    const newTool = (): ToolCall => ({ id: '', name: '', args: '', status: 'pending', subText: '', subTools: [], subInterrupts: [] })
     setMessages(prev => [...prev, userMsg, asstMsg])
 
     let buffer = ''
