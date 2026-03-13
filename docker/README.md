@@ -44,15 +44,15 @@ docker run -d --name hlsc-demo-price-finder \
 
 ### Web 前端
 
-同一个 `hlsc-web` 镜像通过 `BACKEND_URL` 环境变量指向不同后端，启动多个实例。
+同一个 `hlsc-web` 镜像通过环境变量指向不同后端，启动多个实例（Vite dev server 自带 proxy）。
 
 **MainAgent Web**（管理界面 + 对话）：
 
 ```bash
 docker run -d --name hlsc-web-mainagent \
   -p 3100:3100 \
-  -e BACKEND_URL=http://<mainagent-host>:8100 \
-  -e LISTEN_PORT=3100 \
+  -e VITE_PROXY_TARGET=http://<mainagent-host>:8100 \
+  -e VITE_PORT=3100 \
   hlsc-web
 ```
 
@@ -61,12 +61,12 @@ docker run -d --name hlsc-web-mainagent \
 ```bash
 docker run -d --name hlsc-web-demo-price-finder \
   -p 3101:3101 \
-  -e BACKEND_URL=http://<subagent-host>:8101 \
-  -e LISTEN_PORT=3101 \
+  -e VITE_PROXY_TARGET=http://<subagent-host>:8101 \
+  -e VITE_PORT=3101 \
   hlsc-web
 ```
 
-> 新增 subagent 时同理：改 `BACKEND_URL` 和 `LISTEN_PORT` 即可。
+> 新增 subagent 时同理：改 `VITE_PROXY_TARGET` 和 `VITE_PORT` 即可。
 
 ## 3. 环境配置
 
