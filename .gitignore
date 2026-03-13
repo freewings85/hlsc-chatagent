@@ -14,3 +14,4 @@ iterations/
 
 # 运行时配置
 **/.chatagent/
+nacos-data/

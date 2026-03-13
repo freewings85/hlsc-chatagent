@@ -18,6 +18,10 @@ import os
 
 
 def main() -> None:
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+
     # 解析命令行参数（仅 --port/--host，配置加载交给 nacos.py）
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=None)
@@ -34,10 +38,6 @@ def main() -> None:
         os.environ["SERVER_HOST"] = args.host
 
     register_service()
-
-    import logging
-
-    logging.basicConfig(level=logging.INFO)
 
     # Logfire / OTel tracing
     from agent_sdk._config.settings import LogfireConfig

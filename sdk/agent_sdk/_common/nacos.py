@@ -44,6 +44,9 @@ def get_nacos_config():
         return {}
     try:
         config_content = client.get_config(DATA_ID, GROUP)
+        if config_content is None:
+            print(f"Nacos 返回空配置（DATA_ID={DATA_ID}, GROUP={GROUP}），跳过")
+            return {}
         if DATA_ID.endswith('.properties'):
             # 使用 configparser 解析，保持大小写
             config = ConfigParser(strict=False)
