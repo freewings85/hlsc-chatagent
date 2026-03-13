@@ -5,7 +5,7 @@
 
     agent = Agent(
         prompt_loader=StaticPromptLoader("你是一个助手"),
-        tools={"ask_user": ask_user_fn},
+        tools={"my_tool": my_tool_fn},
     )
     result = await agent.run("你好", user_id="u1", session_id="s1", emitter=emitter)
 """

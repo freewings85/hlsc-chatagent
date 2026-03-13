@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"Temporal interrupt worker started (queue={config.interrupt_task_queue})")
     else:
         worker_task = None
-        logger.warning("Temporal disabled, ask_user 工具将不可用")
+        logger.warning("Temporal disabled, interrupt 机制将不可用")
 
     yield
 
@@ -89,7 +89,7 @@ app.include_router(mcp_router)
 
 
 def _get_temporal_client():
-    """获取 Temporal client（None 时 ask_user 报错）。"""
+    """获取 Temporal client（None 时 call_interrupt 报错）。"""
     return _temporal_client
 
 

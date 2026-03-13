@@ -5,7 +5,7 @@ from __future__ import annotations
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
-from agent_sdk._agent.tools.ask_user import ask_user
+from agent_sdk._agent.tools.call_interrupt import call_interrupt
 
 
 async def find_best_price_of_project(
@@ -27,14 +27,15 @@ async def find_best_price_of_project(
     mock_price = 500
     mock_shop = "张江汽修中心"
 
-    question = (
-        f"找到项目「{project_name}」的最低报价：\n"
-        f"门店：{mock_shop}\n"
-        f"价格：{mock_price} 元\n\n"
-        f"确认选择此方案吗？"
-    )
-
-    user_reply = await ask_user(ctx, question)
+    user_reply = await call_interrupt(ctx, {
+        "type": "confirm",
+        "question": (
+            f"找到项目「{project_name}」的最低报价：\n"
+            f"门店：{mock_shop}\n"
+            f"价格：{mock_price} 元\n\n"
+            f"确认选择此方案吗？"
+        ),
+    })
 
     if user_reply in ("确认", "yes", "确定", "ok"):
         return (

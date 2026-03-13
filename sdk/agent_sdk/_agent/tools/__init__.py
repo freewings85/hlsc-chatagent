@@ -9,7 +9,6 @@
     )
 """
 
-from agent_sdk._agent.tools.ask_user import ask_user
 from agent_sdk._agent.tools.bash import bash
 from agent_sdk._agent.file_state import ChangedFile, FileEntry, FileStateTracker
 from agent_sdk._agent.tools.fs import edit, glob, grep, read, write
@@ -20,7 +19,7 @@ __all__ = [
     "FileStateTracker",
     "FileEntry",
     "ChangedFile",
-    # 工具函数
+    # 工具函数（LLM 可调用的 tool）
     "read",
     "edit",
     "write",
@@ -28,14 +27,13 @@ __all__ = [
     "grep",
     "bash",
     "task",
-    "ask_user",
     # 便捷工厂
     "ALL_FS_TOOLS",
     "create_default_tool_map",
 ]
 
 ALL_FS_TOOLS: list[str] = [
-    "read", "edit", "write", "glob", "grep", "bash", "task", "ask_user",
+    "read", "edit", "write", "glob", "grep", "bash", "task",
 ]
 
 
@@ -49,5 +47,4 @@ def create_default_tool_map() -> dict:
         "grep": grep,
         "bash": bash,
         "task": task,
-        "ask_user": ask_user,
     }

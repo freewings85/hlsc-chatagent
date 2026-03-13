@@ -46,5 +46,5 @@ class AgentDeps:
     skill_env: dict[str, str] = field(default_factory=dict)
     # 请求上下文（位置、车辆信息等），工具可通过 ctx.deps.request_context 读取
     request_context: RequestContext | None = None
-    # Temporal client（ask_user interrupt 机制用，必须配置）
+    # Temporal client（call_interrupt 机制用，必须配置）
     temporal_client: TemporalClient | None = None

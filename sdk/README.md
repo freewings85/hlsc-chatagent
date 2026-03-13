@@ -29,7 +29,7 @@ agent_sdk/
 ├── _agent/               # Agent 内部实现
 │   ├── loop.py           # Pydantic AI agent loop
 │   ├── deps.py           # AgentDeps 依赖注入
-│   ├── tools/            # 内置工具（read/edit/bash/ask_user 等）
+│   ├── tools/            # 内置工具（read/edit/bash/call_interrupt 等）
 │   ├── skills/           # Skill 注册和执行
 │   ├── compact/          # 上下文压缩
 │   ├── memory/           # 记忆服务

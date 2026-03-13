@@ -94,7 +94,9 @@ class SubagentSession:
 
         context_id = f"sa-{session_id}-{uuid4().hex[:8]}"
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as client:
+        # 使用自定义 transport 绕过 HTTP_PROXY（A2A 调用都是内网地址）
+        transport = httpx.AsyncHTTPTransport()
+        async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(self._timeout)) as client:
             # 首次 A2A 调用
             result = await _a2a_send(client, self._url, context_id, self._message)
 
@@ -274,7 +276,8 @@ async def _fetch_agent_name(url: str, timeout: float = 10.0) -> str:
         return _agent_card_cache[url]
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as client:
+        transport = httpx.AsyncHTTPTransport()
+        async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(timeout)) as client:
             resp = await client.get(f"{url}/.well-known/agent.json")
             resp.raise_for_status()
             card = resp.json()

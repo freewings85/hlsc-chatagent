@@ -1,7 +1,7 @@
-"""ask_user interrupt 前端 E2E 测试（Playwright）。
+"""interrupt 前端 E2E 测试（Playwright）。
 
 验证完整流程：
-1. 发送消息 → agent 调用 ask_user → 前端出现 interrupt 卡片
+1. 发送消息 → agent 调用 subagent tool → subagent 触发 call_interrupt → 前端出现 interrupt 卡片
 2. 用户点击确认/输入回复 → 调用 /chat/interrupt-reply API
 3. agent 继续执行 → 最终完成
 
@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -32,8 +33,10 @@ for _proxy_var in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
 
 # 端口（避免与其他测试冲突）
 INTERRUPT_TEST_PORT: int = int(os.getenv("INTERRUPT_TEST_PORT", "8198"))
+SUBAGENT_TEST_PORT: int = int(os.getenv("SUBAGENT_TEST_PORT", "8199"))
 MAINAGENT_DIR: Path = Path(__file__).parent.parent.parent
 PROJECT_ROOT: Path = MAINAGENT_DIR.parent
+SUBAGENT_DIR: Path = PROJECT_ROOT / "subagents" / "demo_price_finder"
 TEST_DATA_DIR: Path = MAINAGENT_DIR / "data" / "interrupt_tests"
 
 # 超时
@@ -54,11 +57,52 @@ def _temporal_available() -> bool:
         return False
 
 
+def _no_proxy_client(**kwargs: Any) -> httpx.Client:
+    """创建不使用代理的 httpx Client（WSL 环境 HTTP_PROXY 会干扰本地请求）。"""
+    transport = httpx.HTTPTransport()
+    return httpx.Client(transport=transport, **kwargs)
+
+
+def _wait_for_health(url: str, timeout_secs: int = 30) -> bool:
+    """等待服务启动（health check）。"""
+    for _ in range(timeout_secs):
+        try:
+            with _no_proxy_client(timeout=2) as client:
+                r = client.get(f"{url}/health")
+                if r.status_code == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
+
+
+def _kill_proc(proc: subprocess.Popen) -> None:
+    """安全终止进程。"""
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
 @pytest.fixture(scope="module")
 def interrupt_server_url():
-    """启动带 Temporal 的服务器。"""
+    """启动 mainagent + subagent（带 Temporal）。
+
+    interrupt 流程：mainagent → call_subagent → subagent → call_interrupt → 前端
+    需要两个服务同时运行。
+    """
     if not _temporal_available():
         pytest.skip("Temporal server not available at localhost:7233")
+
+    # 确保测试端口空闲（杀掉可能残留的旧进程）
+    for port in (INTERRUPT_TEST_PORT, SUBAGENT_TEST_PORT):
+        subprocess.run(
+            f"lsof -ti:{port} | xargs kill -9",
+            shell=True, capture_output=True,
+        )
+    time.sleep(1)
 
     TEST_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -73,53 +117,77 @@ def interrupt_server_url():
             timeout=60,
         )
 
-    clean_env = {k: v for k, v in os.environ.items()
-                 if k.lower() not in ("http_proxy", "https_proxy")}
-    env = {
-        **clean_env,
-        "SERVER_PORT": str(INTERRUPT_TEST_PORT),
-        "DATA_DIR": str(TEST_DATA_DIR),
-        "USE_NACOS": "FALSE",
+    # 注意：保留 HTTP_PROXY 等代理变量，WSL 环境需要代理才能访问 Azure OpenAI。
+    # 本地 httpx 调用使用 _no_proxy_client() 绕过代理。
+    clean_env = dict(os.environ)
+    interrupt_queue = f"test-interrupt-e2e-{os.getpid()}"
+
+    # 共享的 Temporal 配置
+    temporal_env = {
         "TEMPORAL_ENABLED": "true",
         "TEMPORAL_HOST": "localhost:7233",
-        "TEMPORAL_INTERRUPT_QUEUE": f"test-interrupt-e2e-{os.getpid()}",
+        "TEMPORAL_INTERRUPT_QUEUE": interrupt_queue,
+        "USE_NACOS": "FALSE",
     }
 
-    env.update({
+    # 1. 启动 subagent（demo_price_finder）
+    subagent_data_dir = TEST_DATA_DIR / "subagent"
+    subagent_data_dir.mkdir(parents=True, exist_ok=True)
+    subagent_env = {
+        **clean_env,
+        **temporal_env,
+        "SERVER_PORT": str(SUBAGENT_TEST_PORT),
+        "DATA_DIR": str(subagent_data_dir),
+        "USER_FS_DIR": str(subagent_data_dir),
+        "AGENT_FS_DIR": str(SUBAGENT_DIR / ".chatagent"),
+        "LOG_DIR": str(subagent_data_dir / "logs"),
+        "PROMPTS_DIR": str(SUBAGENT_DIR / "prompts"),
+    }
+
+    subagent_proc = subprocess.Popen(
+        [sys.executable, "server.py", "--port", str(SUBAGENT_TEST_PORT)],
+        env=subagent_env,
+        cwd=str(SUBAGENT_DIR),
+        stdout=open("/tmp/e2e_subagent.log", "w"),
+        stderr=subprocess.STDOUT,
+    )
+
+    subagent_url = f"http://127.0.0.1:{SUBAGENT_TEST_PORT}"
+    if not _wait_for_health(subagent_url):
+        _kill_proc(subagent_proc)
+        pytest.fail(f"Subagent failed to start on port {SUBAGENT_TEST_PORT}")
+
+    # 2. 启动 mainagent（指向 subagent）
+    mainagent_env = {
+        **clean_env,
+        **temporal_env,
+        "SERVER_PORT": str(INTERRUPT_TEST_PORT),
+        "DATA_DIR": str(TEST_DATA_DIR),
         "USER_FS_DIR": str(TEST_DATA_DIR),
         "AGENT_FS_DIR": str(MAINAGENT_DIR / ".chatagent"),
         "LOG_DIR": str(TEST_DATA_DIR / "logs"),
         "PROMPTS_DIR": str(MAINAGENT_DIR / "prompts"),
-    })
+        "DEMO_PRICE_FINDER_URL": subagent_url,
+    }
 
-    proc = subprocess.Popen(
-        [sys.executable, "server.py",
-         "--port", str(INTERRUPT_TEST_PORT)],
-        env=env,
+    mainagent_proc = subprocess.Popen(
+        [sys.executable, "server.py", "--port", str(INTERRUPT_TEST_PORT)],
+        env=mainagent_env,
         cwd=str(MAINAGENT_DIR),
+        stdout=open("/tmp/e2e_mainagent.log", "w"),
+        stderr=subprocess.STDOUT,
     )
 
-    url = f"http://127.0.0.1:{INTERRUPT_TEST_PORT}"
+    mainagent_url = f"http://127.0.0.1:{INTERRUPT_TEST_PORT}"
+    if not _wait_for_health(mainagent_url):
+        _kill_proc(mainagent_proc)
+        _kill_proc(subagent_proc)
+        pytest.fail(f"Mainagent failed to start on port {INTERRUPT_TEST_PORT}")
 
-    for i in range(30):
-        try:
-            r = httpx.get(f"{url}/health", timeout=2)
-            if r.status_code == 200:
-                break
-        except Exception:
-            pass
-        time.sleep(1)
-    else:
-        proc.terminate()
-        pytest.fail(f"Server failed to start on port {INTERRUPT_TEST_PORT}")
+    yield mainagent_url
 
-    yield url
-
-    proc.terminate()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    _kill_proc(mainagent_proc)
+    _kill_proc(subagent_proc)
 
 
 @pytest.fixture(autouse=True)
@@ -146,16 +214,16 @@ class TestInterruptUIFlow:
     """Playwright 测试：interrupt 卡片 UI 交互"""
 
     def test_interrupt_card_appears_and_reply(self, chat_page: Page) -> None:
-        """发送会触发 ask_user 的消息 → interrupt 卡片出现 → 点击确认 → agent 继续。
+        """发送询价消息 → subagent 触发 interrupt → interrupt 卡片出现 → 点击确认 → agent 继续。
 
-        注意：此测试需要 LLM 能理解请求并调用 ask_user 工具。
-        如果 LLM 不可用或行为不确定，测试可能跳过。
+        注意：此测试需要 LLM 能理解请求并调用 call_demo_price_finder 工具，
+        subagent 会调用 call_interrupt 触发前端 interrupt 卡片。
         """
         page = chat_page
 
-        # 发送消息（需要 LLM 触发 ask_user）
+        # 发送消息（触发 call_demo_price_finder → subagent → call_interrupt）
         input_box = page.locator("#input-box")
-        input_box.fill("请使用 ask_user 工具向我确认是否继续操作，type 用 confirm")
+        input_box.fill("帮我查一下更换刹车片最便宜的价格")
         page.locator("#send-btn").click()
 
         # 等待 interrupt 卡片出现
@@ -163,9 +231,9 @@ class TestInterruptUIFlow:
             interrupt_block = page.locator(".interrupt-block")
             interrupt_block.first.wait_for(timeout=INTERRUPT_APPEAR_MS)
         except Exception:
-            # LLM 可能没触发 ask_user，检查是否有文本回复
+            # LLM 可能没触发相关工具，检查是否有文本回复
             if page.locator(".text-segment").count() > 0:
-                pytest.skip("LLM did not trigger ask_user tool")
+                pytest.skip("LLM did not trigger interrupt flow")
             raise
 
         # 验证卡片内容
@@ -207,13 +275,13 @@ class TestInterruptAPIFlow:
         def read_sse():
             """在线程中读取 SSE 流。"""
             try:
-                with httpx.Client(timeout=120, proxy=None) as client:
+                with _no_proxy_client(timeout=120) as client:
                     with client.stream(
                         "POST",
                         f"{interrupt_server_url}/chat/stream",
                         json={
                             "session_id": session_id,
-                            "message": "请使用 ask_user 工具问我一个确认问题，type 用 confirm，问题是'是否继续？'",
+                            "message": "帮我查一下更换刹车片最低价格",
                             "user_id": "test-user",
                         },
                     ) as resp:
@@ -248,17 +316,17 @@ class TestInterruptAPIFlow:
         if not interrupt_key_holder:
             stream_done.wait(timeout=10)
             event_types = [e["type"] for e in all_events]
-            # 如果 LLM 没触发 ask_user，跳过
-            if "tool_call_start" not in event_types or "interrupt" not in event_types:
+            # 如果 LLM 没触发相关工具，跳过
+            if "interrupt" not in event_types:
                 pytest.skip(
-                    f"LLM did not trigger ask_user. Events: {event_types}"
+                    f"LLM did not trigger interrupt flow. Events: {event_types}"
                 )
             pytest.fail(f"没有收到 interrupt_key. Events: {event_types}")
 
         key = interrupt_key_holder[0]
 
         # 发送 interrupt-reply
-        with httpx.Client(timeout=10, proxy=None) as client:
+        with _no_proxy_client(timeout=10) as client:
             resp = client.post(
                 f"{interrupt_server_url}/chat/interrupt-reply",
                 json={"interrupt_key": key, "reply": "确认"},
@@ -274,7 +342,7 @@ class TestInterruptAPIFlow:
             f"SSE 流未正常结束. Events: {event_types}"
         )
 
-        # interrupt 后应有 tool_result（ask_user 返回值）
+        # interrupt 后应有 tool_result（call_interrupt 返回值通过 subagent 传回）
         assert "tool_result" in event_types
 
         # 应有文本内容（agent 继续生成）
@@ -291,9 +359,7 @@ class TestInterruptAPIFlow:
         使用临时无 Temporal 的服务器（直接测 app 逻辑）。
         """
         from fastapi.testclient import TestClient
-        from unittest.mock import patch
 
-        # 临时 patch _temporal_client 为 None
         import agent_sdk._server.app as app_mod
         original = app_mod._temporal_client
         app_mod._temporal_client = None
