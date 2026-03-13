@@ -31,8 +31,8 @@ USER_FS_DIR: str = os.getenv("USER_FS_DIR", "data")
 AGENT_FS_DIR: str = os.getenv("AGENT_FS_DIR", ".chatagent")
 """Agent 工作目录（MCP、Skills 等）"""
 
-MCP_CONFIG_PATH: str = os.path.join(AGENT_FS_DIR, ".mcp.json")
-"""MCP 配置文件路径：{AGENT_FS_DIR}/.mcp.json"""
+MCP_CONFIG_PATH: str = os.path.join(AGENT_FS_DIR, "mcp.json")
+"""MCP 配置文件路径：{AGENT_FS_DIR}/mcp.json"""
 
 SKILL_DIRS: list[str] = [os.path.join(AGENT_FS_DIR, "skills")]
 """Skill 目录列表：{AGENT_FS_DIR}/skills/"""
