@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import json
-
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
-from agent_sdk._agent.interrupt import interrupt as _do_interrupt
-from agent_sdk._config.settings import get_temporal_config
-from agent_sdk._event.event_model import EventModel
-from agent_sdk._event.event_type import EventType
+from agent_sdk._agent.tools.ask_user import ask_user
 
 
 async def find_best_price_of_project(
@@ -28,18 +23,9 @@ async def find_best_price_of_project(
     Returns:
         The best price result as a string.
     """
-    emitter = ctx.deps.emitter
-    session_id = ctx.deps.session_id
-    temporal_client = ctx.deps.temporal_client
-
     # 模拟：查找到最低价
     mock_price = 500
     mock_shop = "张江汽修中心"
-
-    # 通过 interrupt 让用户确认
-    import uuid
-
-    interrupt_key = f"interrupt-{session_id}-{uuid.uuid4().hex[:8]}"
 
     question = (
         f"找到项目「{project_name}」的最低报价：\n"
@@ -48,30 +34,8 @@ async def find_best_price_of_project(
         f"确认选择此方案吗？"
     )
 
-    async def _emit_interrupt(callback_data: dict, interrupt_id: str) -> None:
-        if emitter is not None:
-            await emitter.emit(EventModel(
-                session_id=session_id,
-                request_id="",
-                type=EventType.INTERRUPT,
-                data={
-                    "type": "confirm",
-                    "question": question,
-                    "interrupt_id": interrupt_id,
-                    "interrupt_key": interrupt_key,
-                },
-            ))
+    user_reply = await ask_user(ctx, question)
 
-    config = get_temporal_config()
-    response = await _do_interrupt(
-        temporal_client,
-        key=interrupt_key,
-        callback=_emit_interrupt,
-        data={"question": question, "type": "confirm"},
-        task_queue=config.interrupt_task_queue,
-    )
-
-    user_reply = response.get("reply", "")
     if user_reply in ("确认", "yes", "确定", "ok"):
         return (
             f"用户已确认。项目「{project_name}」最优方案：\n"
