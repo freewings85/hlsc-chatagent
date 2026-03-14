@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: code-executor
+  namespace: default
+  labels:
+    app: code-executor
+spec:
+  containers:
+    - name: executor
+      image: python:3.12-slim
+      command: ["sleep", "infinity"]
+      env:
+        - name: PYTHONIOENCODING
+          value: "utf-8"
+      volumeMounts:
+        - name: chatagent-root
+          mountPath: /workspace
+          readOnly: true
+        - name: tmp-code
+          mountPath: /tmp/code_agent
+      resources:
+        limits:
+          memory: "512Mi"
+          cpu: "500m"
+  volumes:
+    - name: chatagent-root
+      hostPath:
+        path: /mnt/e/Documents/github/com.celiang.hlsc.service.ai.chatagent
+        type: Directory
+    - name: tmp-code
+      emptyDir: {}
+  restartPolicy: Always

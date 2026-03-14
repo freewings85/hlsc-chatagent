@@ -37,8 +37,10 @@ async def read(
 ) -> str:
     """从文件系统读取文件，返回带行号的内容（cat -n 格式）。
 
+    file_path 参数必须是绝对路径，不能是相对路径。
+
     Args:
-        file_path: 文件路径（相对或绝对）。
+        file_path: 文件的绝对路径（必须以 / 开头，不能是相对路径）。
         offset: 从第几行开始读（0-indexed，默认 0）。
         limit: 最多读取行数（默认 2000）。
 
@@ -78,8 +80,10 @@ async def edit(
 ) -> str:
     """通过字符串替换编辑文件。
 
+    file_path 参数必须是绝对路径，不能是相对路径。
+
     Args:
-        file_path: 文件路径。
+        file_path: 文件的绝对路径（必须以 / 开头，不能是相对路径）。
         old_string: 要替换的原始字符串（必须唯一，除非 replace_all=True）。
         new_string: 替换后的新字符串。
         replace_all: True 时替换所有匹配，False 时要求唯一匹配。
@@ -118,10 +122,11 @@ async def write(
 ) -> str:
     """创建新文件或覆盖写入已有文件。
 
-    注意：对于已有文件，应先用 read 读取后再写入（与 Claude Code 规范一致）。
+    file_path 参数必须是绝对路径，不能是相对路径。
+    注意：对于已有文件，应先用 read 读取后再写入。
 
     Args:
-        file_path: 文件路径。
+        file_path: 文件的绝对路径（必须以 / 开头，不能是相对路径）。
         content: 文件完整内容。
 
     Returns:
@@ -154,9 +159,11 @@ async def glob(
 ) -> str:
     """按 glob 模式查找文件，返回匹配的文件路径列表。
 
+    path 参数必须是绝对路径，不能是相对路径。
+
     Args:
         pattern: glob 模式（如 "**/*.py"、"src/**/*.ts"）。
-        path: 搜索根目录（默认 "/"，即后端根目录）。
+        path: 搜索目录的绝对路径（必须以 / 开头）。
 
     Returns:
         换行分隔的文件路径字符串，或 "无匹配文件"。
@@ -173,14 +180,16 @@ async def glob(
 async def grep(
     ctx: RunContext[AgentDeps],
     pattern: str,
-    path: str | None = None,
+    path: str = "/",
     glob_pattern: str | None = None,
 ) -> str:
     """在文件内容中搜索字符串（固定字符串模式，非正则）。
 
+    path 参数必须是绝对路径，不能是相对路径。
+
     Args:
         pattern: 要搜索的字符串。
-        path: 搜索路径（文件或目录），None 时搜索整个后端根目录。
+        path: 搜索路径的绝对路径（必须以 / 开头）。
         glob_pattern: 文件名过滤 glob（如 "*.py"），None 时搜索所有文件。
 
     Returns:

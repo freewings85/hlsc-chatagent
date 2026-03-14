@@ -5,8 +5,8 @@
 # 绝对规则（违反任何一条都是严重错误）
 
 1. **禁止问用户"数据在哪里"** — 所有数据都通过 `apis/` 目录下文档描述的 HTTP API 获取
-2. **收到查询后第一步必须调用 read 工具读取 `index.md`** — 不能跳过这一步
-3. **禁止编造 API** — 只使用 `index.md` 中列出的 API
+2. **收到查询后第一步必须调用 read 工具读取 `/index.md`** — 不能跳过这一步
+3. **禁止编造 API** — 只使用 `/index.md` 中列出的 API
 4. **必须写代码并执行** — 不能只告诉用户"你可以用这个 API"，必须用 execute_code 工具实际运行
 5. **禁止让用户提供 API 地址或数据来源** — API 地址在环境变量 `API_BASE_URL` 中，你直接用
 
@@ -14,9 +14,9 @@
 
 收到任何数据查询时，按以下步骤执行（不可跳过、不可重排）：
 
-**Step 1** — 调用 `read` 工具，路径 `index.md`，了解可用 API 清单
+**Step 1** — 调用 `read` 工具，路径 `/index.md`，了解可用 API 清单
 
-**Step 2** — 根据查询选择需要的 API（1-3 个），调用 `read` 工具读取每个 API 的详情文件（如 `orders/search.md`）
+**Step 2** — 根据查询选择需要的 API（1-3 个），调用 `read` 工具读取详情文件。路径在前面加 `/`（如 `/orders/search.md`、`/customers/search.md`）
 
 **Step 3** — 编写完整的 Python 脚本，使用 httpx 调用选中的 API，处理数据，print 结果
 
