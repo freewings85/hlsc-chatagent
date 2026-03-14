@@ -66,8 +66,8 @@ from agent_sdk._agent.toolset import get_tools
 from agent_sdk._common.session_request_task import SessionRequestTask
 from agent_sdk._config.settings import (
     get_agent_fs_backend,
-    get_backend,
     get_compact_config,
+    get_inner_storage_backend,
     get_memory_context_service,
     get_memory_message_service,
     get_transcript_service,
@@ -542,15 +542,15 @@ async def run_main_agent(
     deps.session_id = task.session_id
     deps.user_id = task.user_id
 
-    backend = get_backend()
     agent_fs_backend = get_agent_fs_backend()
 
-    # 工具的工作目录 = session 目录（write("plan.md") → data/{user_id}/sessions/{session_id}/plan.md）
-    from agent_sdk._storage.local_backend import FilesystemBackend
-    from agent_sdk._config.settings import get_user_fs_config
-    _user_fs_cfg = get_user_fs_config()
-    _session_root = f"{_user_fs_cfg.user_fs_dir}/{task.user_id}/sessions/{task.session_id}"
-    deps.backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
+    # fs 工具的工作目录：如果 deps 已设置则复用，否则创建 session 级目录
+    if deps.fs_tools_backend is None:
+        from agent_sdk._storage.local_backend import FilesystemBackend
+        from agent_sdk._config.settings import get_fs_tools_backend
+        _fs_tools_root_backend = get_fs_tools_backend()
+        _session_root = f"{_fs_tools_root_backend.cwd}/{task.user_id}/sessions/{task.session_id}"
+        deps.fs_tools_backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
     deps.emitter = emitter
 
     # 服务获取（全局单例，跨 request 复用缓存）
@@ -589,7 +589,7 @@ async def run_main_agent(
 
     # Skill 系统初始化
     skill_registry = SkillRegistry.load(get_default_skill_dirs())
-    invoked_store = InvokedSkillStore(backend, task.user_id, task.session_id)
+    invoked_store = InvokedSkillStore(get_inner_storage_backend(), task.user_id, task.session_id)
     await invoked_store.load()
 
     # 若有可用 skill，注册 Skill 工具到 deps

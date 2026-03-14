@@ -34,9 +34,9 @@ async def bash(
     """
     effective_timeout = min(timeout, MAX_TIMEOUT_SECONDS)
 
-    # bash 在 backend 根目录下执行，与 write/read/edit 保持一致
+    # bash 在 fs_tools_backend 根目录下执行，与 read/write/edit 保持一致
     cwd: str | None = None
-    backend = ctx.deps.backend
+    backend = ctx.deps.fs_tools_backend
     if backend is not None and hasattr(backend, "cwd"):
         from pathlib import Path
         cwd_path = Path(backend.cwd)

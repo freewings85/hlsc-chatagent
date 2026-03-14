@@ -83,9 +83,9 @@ class SqliteMemoryMessageService(MemoryMessageService):
 
         # 加载时修复
         if messages and find_missing_tool_call_ids(messages):
-            from agent_sdk._config.settings import get_user_fs_backend
+            from agent_sdk._config.settings import get_inner_storage_backend
 
-            backend = get_user_fs_backend()
+            backend = get_inner_storage_backend()
             transcript = await load_transcript(backend, user_id, session_id)
             repaired = repair_messages(messages, transcript)
             if repaired is not messages:

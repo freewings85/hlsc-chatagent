@@ -33,8 +33,13 @@ class AgentDeps:
     # tool 执行过程中可修改的状态
     tool_call_count: int = 0
     last_tool_result: str = ""
-    # 文件系统后端（None 时工具内部 fallback 到 get_backend()）
-    backend: BackendProtocol | None = None
+    # SDK 内部存储（消息、transcript、memory、skill store）
+    # root: data/inner/{user}/sessions/{session}/
+    inner_storage_backend: BackendProtocol | None = None
+    # fs 工具（read/write/edit/bash/glob/grep）用的后端
+    # mainagent: data/fstools/{user}/sessions/{session}/（用户隔离）
+    # subagent: .（项目目录，可读 apis/ 等）
+    fs_tools_backend: BackendProtocol | None = None
     # 文件读写状态追踪（用于 changed_files attachment）
     file_state_tracker: FileStateTracker = field(default_factory=FileStateTracker)
     # Skill 系统（None 时 Skill 工具不可用）

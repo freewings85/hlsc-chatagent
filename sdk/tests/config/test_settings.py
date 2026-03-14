@@ -2,7 +2,7 @@
 
 from agent_sdk._agent.compact.config import CompactConfig
 from agent_sdk._config import settings
-from agent_sdk._config.settings import LLMConfig, UserFsConfig, AgentFsConfig, ServerConfig
+from agent_sdk._config.settings import LLMConfig, DataDirConfig, AgentFsConfig, ServerConfig
 
 
 class TestLLMConfig:
@@ -13,13 +13,15 @@ class TestLLMConfig:
 
 class TestUserFsConfig:
     def test_default(self) -> None:
-        config = UserFsConfig()
-        assert "sessions" in config.sessions_dir
+        config = DataDirConfig()
+        assert "inner" in config.inner_dir
+        assert "fstools" in config.fstools_dir
 
-    def test_user_fs_dir(self) -> None:
-        config = UserFsConfig(user_fs_dir="/tmp/test-data")
-        assert config.user_fs_dir == "/tmp/test-data"
-        assert config.sessions_dir == "/tmp/test-data/sessions"
+    def test_data_dir(self) -> None:
+        config = DataDirConfig(data_dir="/tmp/test-data")
+        assert config.data_dir == "/tmp/test-data"
+        assert config.inner_dir == "/tmp/test-data/inner"
+        assert config.fstools_dir == "/tmp/test-data/fstools"
 
 
 class TestAgentFsConfig:
@@ -97,7 +99,7 @@ class TestSingletonsEdgeCases:
 
     def test_backward_compat_aliases(self) -> None:
         """get_backend / get_storage_config 是向后兼容别名"""
-        assert settings.get_backend is settings.get_user_fs_backend
+        assert settings.get_backend is settings.get_fs_tools_backend
         assert settings.get_storage_config is settings.get_user_fs_config
 
 

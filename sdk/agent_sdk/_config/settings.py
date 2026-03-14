@@ -44,14 +44,22 @@ class LLMConfig:
 
 
 @dataclass
-class UserFsConfig:
-    """用户级存储配置（session 数据、对话历史等按用户隔离的文件）"""
+class DataDirConfig:
+    """基础数据目录配置（inner/ 和 fstools/ 的父目录）"""
 
-    user_fs_dir: str = field(default_factory=lambda: os.getenv("USER_FS_DIR", "data"))
+    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", os.getenv("USER_FS_DIR", "data")))
 
     @property
-    def sessions_dir(self) -> str:
-        return os.path.join(self.user_fs_dir, "sessions")
+    def inner_dir(self) -> str:
+        return os.path.join(self.data_dir, "inner")
+
+    @property
+    def fstools_dir(self) -> str:
+        return os.path.join(self.data_dir, "fstools")
+
+
+# 向后兼容别名
+UserFsConfig = DataDirConfig
 
 
 @dataclass
@@ -112,7 +120,9 @@ _server_config: Optional[ServerConfig] = None
 _temporal_config: Optional[TemporalConfig] = None
 _kafka_config: Optional[KafkaConfig] = None
 _compact_config: Optional["CompactConfig"] = None
-_user_fs_backend: Optional["BackendProtocol"] = None
+_user_fs_backend: Optional["BackendProtocol"] = None  # 向后兼容
+_inner_storage_backend: Optional["BackendProtocol"] = None
+_fs_tools_backend: Optional["BackendProtocol"] = None
 _agent_fs_backend: Optional["BackendProtocol"] = None
 _memory_service_type: str = os.getenv("MEMORY_SERVICE_TYPE", "fs")  # "fs" | "sqlite"
 _memory_message_service: Optional["MemoryMessageService"] = None
@@ -135,12 +145,16 @@ def get_llm_config() -> LLMConfig:
     return _llm_config
 
 
-def get_user_fs_config() -> UserFsConfig:
-    """获取用户级存储配置"""
+def get_data_dir_config() -> DataDirConfig:
+    """获取基础数据目录配置"""
     global _user_fs_config
     if _user_fs_config is None:
-        _user_fs_config = UserFsConfig()
+        _user_fs_config = DataDirConfig()
     return _user_fs_config
+
+
+# 向后兼容
+get_user_fs_config = get_data_dir_config
 
 
 def get_agent_fs_config() -> AgentFsConfig:
@@ -186,18 +200,48 @@ def get_compact_config() -> "CompactConfig":
 
 
 def get_user_fs_backend() -> "BackendProtocol":
-    """获取用户级文件系统后端（全局单例，root=USER_FS_DIR，用于 session 数据）"""
+    """向后兼容，新代码请用 get_inner_storage_backend() 或 get_fs_tools_backend()。"""
     global _user_fs_backend
     if _user_fs_backend is None:
         from agent_sdk._storage.local_backend import FilesystemBackend
 
-        config = get_user_fs_config()
-        _user_fs_backend = FilesystemBackend(root_dir=config.user_fs_dir, virtual_mode=True)
+        config = get_data_dir_config()
+        _user_fs_backend = FilesystemBackend(root_dir=config.data_dir, virtual_mode=True)
     return _user_fs_backend
 
 
+def get_inner_storage_backend() -> "BackendProtocol":
+    """SDK 内部存储后端（消息、transcript、memory、skill store）。
+
+    root: {DATA_DIR}/inner/（如 data/inner/）
+    """
+    global _inner_storage_backend
+    if _inner_storage_backend is None:
+        from agent_sdk._storage.local_backend import FilesystemBackend
+
+        config = get_data_dir_config()
+        _inner_storage_backend = FilesystemBackend(root_dir=config.inner_dir, virtual_mode=True)
+    return _inner_storage_backend
+
+
+def get_fs_tools_backend() -> "BackendProtocol":
+    """fs 工具后端（read/write/edit/bash/glob/grep）。
+
+    root: FS_TOOLS_DIR 环境变量（默认 {DATA_DIR}/fstools/，如 data/fstools/）
+    subagent 可设 FS_TOOLS_DIR=. 让工具直接读写项目目录。
+    """
+    global _fs_tools_backend
+    if _fs_tools_backend is None:
+        from agent_sdk._storage.local_backend import FilesystemBackend
+
+        config = get_data_dir_config()
+        root = os.getenv("FS_TOOLS_DIR", config.fstools_dir)
+        _fs_tools_backend = FilesystemBackend(root_dir=root, virtual_mode=True)
+    return _fs_tools_backend
+
+
 # 向后兼容别名
-get_backend = get_user_fs_backend
+get_backend = get_fs_tools_backend
 get_storage_config = get_user_fs_config
 
 
@@ -228,12 +272,12 @@ def get_memory_message_service() -> "MemoryMessageService":
             from agent_sdk._agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
 
             _memory_message_service = SqliteMemoryMessageService(
-                get_user_fs_config().user_fs_dir,
+                get_data_dir_config().inner_dir,
             )
         else:
             from agent_sdk._agent.memory.file_memory_message_service import FileMemoryMessageService
 
-            _memory_message_service = FileMemoryMessageService(get_user_fs_backend())
+            _memory_message_service = FileMemoryMessageService(get_inner_storage_backend())
     return _memory_message_service
 
 
@@ -255,5 +299,5 @@ def get_transcript_service() -> "TranscriptService":
     if _transcript_service is None:
         from agent_sdk._agent.message.transcript_service import TranscriptService
 
-        _transcript_service = TranscriptService(get_user_fs_backend())
+        _transcript_service = TranscriptService(get_inner_storage_backend())
     return _transcript_service

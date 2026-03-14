@@ -109,10 +109,10 @@ class TemplatePromptLoader:
         return PromptResult(system_prompt=system_prompt, context_messages=context_messages)
 
     async def _read_memory_md(self, user_id: str) -> str | None:
-        """从 user_fs_backend 读取 MEMORY.md"""
-        from agent_sdk.config import get_user_fs_backend
+        """从 inner_storage_backend 读取 MEMORY.md"""
+        from agent_sdk._config.settings import get_inner_storage_backend
 
-        backend = get_user_fs_backend()
+        backend = get_inner_storage_backend()
         path = _MEMORY_MD_PATH.format(user_id=user_id)
         if not await backend.aexists(path):
             return None

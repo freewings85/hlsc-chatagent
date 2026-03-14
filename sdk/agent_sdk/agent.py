@@ -106,14 +106,14 @@ class Agent:
         if self._memory_service is not None:
             return self._memory_service
 
-        from agent_sdk.config import get_user_fs_backend
+        from agent_sdk._config.settings import get_inner_storage_backend
 
         if self._memory_config.backend == "sqlite":
             from agent_sdk._agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
             self._memory_service = SqliteMemoryMessageService(self._memory_config.data_dir)
         else:
             from agent_sdk._agent.memory.file_memory_message_service import FileMemoryMessageService
-            self._memory_service = FileMemoryMessageService(get_user_fs_backend())
+            self._memory_service = FileMemoryMessageService(get_inner_storage_backend())
         return self._memory_service
 
     def _build_transcript_service(self) -> Any:
@@ -122,9 +122,9 @@ class Agent:
             return self._transcript_service
 
         from agent_sdk._agent.message.transcript_service import TranscriptService
-        from agent_sdk.config import get_user_fs_backend
+        from agent_sdk._config.settings import get_inner_storage_backend
 
-        self._transcript_service = TranscriptService(get_user_fs_backend())
+        self._transcript_service = TranscriptService(get_inner_storage_backend())
         return self._transcript_service
 
     def _build_compact_config(self) -> Any:
@@ -169,7 +169,8 @@ class Agent:
         from agent_sdk._agent.skills.registry import SkillRegistry
         from agent_sdk._agent.skills.tool import invoke_skill
         from agent_sdk._common.session_request_task import SessionRequestTask
-        from agent_sdk.config import create_session_backend, get_user_fs_backend
+        from agent_sdk.config import create_session_backend
+        from agent_sdk._config.settings import get_inner_storage_backend
 
         # 1. 加载 prompt
         prompt_result: PromptResult = await self._prompt_loader.load(user_id, session_id)
@@ -182,14 +183,15 @@ class Agent:
 
         # 4. 构建 deps
         file_state_tracker = FileStateTracker()
-        backend = create_session_backend(user_id, session_id)
+        fs_tools_backend = create_session_backend(user_id, session_id)
 
         deps = AgentDeps(
             session_id=session_id,
             user_id=user_id,
             available_tools=available_tools,
             tool_map=tool_map,
-            backend=backend,
+            inner_storage_backend=get_inner_storage_backend(),
+            fs_tools_backend=fs_tools_backend,
             file_state_tracker=file_state_tracker,
             emitter=emitter,
             temporal_client=temporal_client,
@@ -238,7 +240,7 @@ class Agent:
         invoked_store: InvokedSkillStore | None = None
         if any(os.path.isdir(d) for d in SKILL_DIRS):
             skill_registry = SkillRegistry.load(SKILL_DIRS)
-            invoked_store = InvokedSkillStore(get_user_fs_backend(), user_id, session_id)
+            invoked_store = InvokedSkillStore(get_inner_storage_backend(), user_id, session_id)
             await invoked_store.load()
             if skill_registry.has_skills():
                 deps.skill_registry = skill_registry

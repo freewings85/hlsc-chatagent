@@ -193,7 +193,7 @@ async def _run_sub_agent(
     from agent_sdk._agent.message.pre_model_call_service import PreModelCallMessageService
     from agent_sdk._agent.message.transcript_service import TranscriptService
     from agent_sdk._common.session_request_task import SessionRequestTask
-    from agent_sdk._config.settings import get_backend, get_compact_config
+    from agent_sdk._config.settings import get_inner_storage_backend, get_compact_config
     from agent_sdk._event.event_emitter import EventEmitter
 
     parent_deps = ctx.deps
@@ -216,13 +216,13 @@ async def _run_sub_agent(
         toolsets=[DynamicToolset(sub_get_tools, per_run_step=True)],
     )
 
-    # ── 3. 子 agent deps（共享 backend 和 file_state_tracker）──
+    # ── 3. 子 agent deps（共享 fs_tools_backend 和 file_state_tracker）──
     sub_deps = AgentDeps(
         session_id=parent_deps.session_id,
         user_id=parent_deps.user_id,
         available_tools=tool_names,
         tool_map=parent_deps.tool_map,
-        backend=parent_deps.backend,
+        fs_tools_backend=parent_deps.fs_tools_backend,
         file_state_tracker=parent_deps.file_state_tracker,
         emitter=parent_deps.emitter,  # 共享父 emitter（事件推送）
         temporal_client=parent_deps.temporal_client,  # 共享 Temporal client
@@ -246,14 +246,14 @@ async def _run_sub_agent(
         sinker=_NoOpSinker(),  # type: ignore[arg-type]
     )
 
-    # ── 5. 构建精简 services ──
-    backend = get_backend()
+    # ── 5. 构建精简 services（内部存储用 inner_storage_backend）──
+    storage_backend = get_inner_storage_backend()
 
     # FileMemoryMessageService — fresh（不加载历史）
-    memory_service = FileMemoryMessageService(backend)
+    memory_service = FileMemoryMessageService(storage_backend)
 
     # TranscriptService — 路径为 subagents/{agent_id}/
-    transcript_service = TranscriptService(backend)
+    transcript_service = TranscriptService(storage_backend)
 
     # AttachmentCollector — 共享 file_state_tracker
     attachment_collector = AttachmentCollector(parent_deps.file_state_tracker)

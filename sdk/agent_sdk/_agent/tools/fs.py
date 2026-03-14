@@ -10,7 +10,7 @@
 - Glob：调用 backend.aglob_info()，返回匹配路径列表
 - Grep：调用 backend.agrep_raw()，返回 path:line: text 格式
 
-backend 优先使用 ctx.deps.backend，为 None 时 fallback 到 get_backend()（全局单例）。
+backend 优先使用 ctx.deps.fs_tools_backend，为 None 时 fallback 到 get_fs_tools_backend()。
 """
 
 from pathlib import Path
@@ -19,14 +19,14 @@ from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps  # noqa: F401 (needed for RunContext type)
 from agent_sdk._common.filesystem_backend import BackendProtocol
-from agent_sdk._config.settings import get_backend as _get_backend
+from agent_sdk._config.settings import get_fs_tools_backend as _get_fs_tools_backend
 
 # Read 工具：默认不限制 offset/limit（整个文件读取）时的"无限制"标志
 _DEFAULT_LIMIT = 2000
 
 
 def _backend(ctx: RunContext[AgentDeps]) -> BackendProtocol:
-    return ctx.deps.backend or _get_backend()
+    return ctx.deps.fs_tools_backend or _get_fs_tools_backend()
 
 
 async def read(

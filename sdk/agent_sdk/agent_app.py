@@ -281,26 +281,28 @@ class AgentApp:
         """
         from agent_sdk._agent.deps import AgentDeps
         from agent_sdk._agent.loop import create_agent
-        from agent_sdk.config import create_session_backend
 
         model = self._agent._build_model()
         available_tools, tool_map = self._agent._build_tool_map()
 
-        # 需要同步获取 system_prompt，从 prompt_loader 缓存
-        # 对于 StaticPromptLoader 场景，直接用缓存的 prompt
-        system_prompt = getattr(self._agent._prompt_loader, '_prompt', None)
+        # 同步获取 system_prompt：StaticPromptLoader._prompt 或 TemplatePromptLoader 缓存
+        loader = self._agent._prompt_loader
+        system_prompt = getattr(loader, '_prompt', None)
+        if system_prompt is None:
+            load_fn = getattr(loader, '_load_system_prompt', None)
+            if load_fn:
+                system_prompt = load_fn()
 
         pydantic_agent = create_agent(model, system_prompt=system_prompt)
 
-        backend = create_session_backend(user_id, session_id)
-
+        # A2A 请求：fs_tools_backend 留 None，由 run_main_agent 根据配置创建
+        # inner_storage_backend 留 None，由 service 工厂（get_inner_storage_backend）提供
         deps = AgentDeps(
             session_id=session_id,
             user_id=user_id,
             available_tools=available_tools,
             tool_map=tool_map,
             temporal_client=temporal_client,
-            backend=backend,
         )
 
         return model, pydantic_agent, deps

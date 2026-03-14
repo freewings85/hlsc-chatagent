@@ -25,8 +25,11 @@ ToolFunc = Callable[..., Coroutine[Any, Any, str]]
 AGENT_NAME: str = os.getenv("AGENT_NAME", "agent")
 """Agent 名称（logfire / AgentApp / Agent 共用）"""
 
-USER_FS_DIR: str = os.getenv("USER_FS_DIR", "data")
-"""用户数据目录（会话、记忆、审计日志等）"""
+DATA_DIR: str = os.getenv("DATA_DIR", "data")
+"""基础数据目录（inner/ 存 SDK 内部数据，fstools/ 存 fs 工具文件）"""
+
+# 向后兼容
+USER_FS_DIR: str = DATA_DIR
 
 AGENT_FS_DIR: str = os.getenv("AGENT_FS_DIR", ".chatagent")
 """Agent 工作目录（MCP、Skills 等）"""
@@ -181,6 +184,9 @@ def get_agent_fs_backend() -> BackendProtocol:
 
 
 def create_session_backend(user_id: str, session_id: str) -> BackendProtocol:
-    """为单个会话创建存储后端（非单例，每次新建）"""
-    session_root = f"{USER_FS_DIR}/{user_id}/sessions/{session_id}"
+    """为单个会话创建 fs_tools 后端（非单例，每次新建）
+
+    路径：{DATA_DIR}/fstools/{user_id}/sessions/{session_id}/
+    """
+    session_root = f"{DATA_DIR}/fstools/{user_id}/sessions/{session_id}"
     return _create_backend(session_root)

@@ -75,7 +75,7 @@ def _make_ctx_no_resolve(
         read_content=read_content,
         grep_result=grep_result,
     )
-    deps: AgentDeps = AgentDeps(backend=backend, file_state_tracker=FileStateTracker())
+    deps: AgentDeps = AgentDeps(fs_tools_backend=backend, file_state_tracker=FileStateTracker())
     ctx: Any = MagicMock()
     ctx.deps = deps
     return ctx
@@ -85,7 +85,7 @@ def make_ctx(tmp_path: Path) -> Any:
     """创建携带 FilesystemBackend 的 mock RunContext。"""
     backend = FilesystemBackend(root_dir=tmp_path, virtual_mode=False)
     deps = AgentDeps(
-        backend=backend,
+        fs_tools_backend=backend,
         file_state_tracker=FileStateTracker(),
     )
     ctx = MagicMock()
