@@ -75,22 +75,17 @@ class TestBashTool:
         assert "permission denied" in result
 
     @pytest.mark.asyncio
-    async def test_process_lookup_error_on_kill(self) -> None:
-        """超时后 proc.kill() 抛出 ProcessLookupError 时正常返回超时信息（覆盖 bash.py 52 行）"""
+    async def test_timeout_returns_timeout_message(self) -> None:
+        """超时时 executor 返回超时信息"""
+        from agent_sdk._agent.executor import ExecuteResult
+
         ctx: MagicMock = make_ctx()
 
-        mock_proc: MagicMock = MagicMock()
-        mock_proc.kill.side_effect = ProcessLookupError()
+        async def mock_execute(command, *, timeout=120, cwd=None, env=None):
+            return ExecuteResult(stdout="", stderr="命令超时（1s）", exit_code=124)
 
-        async def _fake_create(*args: object, **kwargs: object) -> MagicMock:
-            return mock_proc
-
-        async def _fake_wait_for(coro: object, *, timeout: float) -> None:
-            raise asyncio.TimeoutError()
-
-        with patch("asyncio.create_subprocess_shell", new=_fake_create):
-            with patch("asyncio.wait_for", new=_fake_wait_for):
-                result: str = await bash(ctx, "sleep 100", timeout=1)
+        with patch("agent_sdk._agent.executor.get_executor") as mock_get:
+            mock_get.return_value.execute = mock_execute
+            result: str = await bash(ctx, "sleep 100", timeout=1)
 
         assert "超时" in result
-        mock_proc.kill.assert_called_once()
