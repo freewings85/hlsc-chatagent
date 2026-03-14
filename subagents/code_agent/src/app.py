@@ -15,12 +15,11 @@ def create_agent_app() -> AgentApp:
     """创建 CodeAgent AgentApp"""
     prompt_loader = create_code_agent_prompt_loader()
 
-    # SDK 默认工具（read/edit/write/glob/grep/bash/task）+ 业务工具（execute_code）
     tool_map = {**create_default_tool_map(), **create_code_agent_tool_map()}
 
     agent = Agent(
         prompt_loader=prompt_loader,
-        tools=ToolConfig(manual=tool_map),
+        tools=ToolConfig(manual=tool_map, exclude=["task"]),
     )
 
     return AgentApp(
