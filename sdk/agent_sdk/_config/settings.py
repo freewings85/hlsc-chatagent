@@ -43,19 +43,26 @@ class LLMConfig:
     max_retries: int = field(default_factory=lambda: int(os.getenv("LLM_MAX_RETRIES", "2")))
 
 
+INNER_STORAGE_SUBDIR = "inner"
+"""SDK 内部存储子目录名（消息、transcript、memory、skill store）"""
+
+FS_TOOLS_SUBDIR = "fstools"
+"""fs 工具子目录名（read/write/edit/bash/glob/grep 的默认根）"""
+
+
 @dataclass
 class DataDirConfig:
-    """基础数据目录配置（inner/ 和 fstools/ 的父目录）"""
+    """基础数据目录配置"""
 
     data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "data"))
 
     @property
     def inner_dir(self) -> str:
-        return os.path.join(self.data_dir, "inner")
+        return os.path.join(self.data_dir, INNER_STORAGE_SUBDIR)
 
     @property
     def fstools_dir(self) -> str:
-        return os.path.join(self.data_dir, "fstools")
+        return os.path.join(self.data_dir, FS_TOOLS_SUBDIR)
 
 
 

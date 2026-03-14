@@ -85,7 +85,7 @@ class MemoryConfig:
     """消息工作集（messages.jsonl）配置"""
 
     backend: str = field(default_factory=lambda: os.getenv("MEMORY_SERVICE_TYPE", "fs"))
-    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, "inner"))
+    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, _inner_subdir()))
 
 
 @dataclass
@@ -93,7 +93,12 @@ class TranscriptConfig:
     """审计日志（transcript.jsonl）配置"""
 
     enabled: bool = True
-    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, "inner"))
+    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, _inner_subdir()))
+
+
+def _inner_subdir() -> str:
+    from agent_sdk._config.settings import INNER_STORAGE_SUBDIR
+    return INNER_STORAGE_SUBDIR
 
 
 @dataclass
@@ -173,9 +178,7 @@ def get_agent_fs_backend() -> BackendProtocol:
 
 
 def create_session_backend(user_id: str, session_id: str) -> BackendProtocol:
-    """为单个会话创建 fs_tools 后端（非单例，每次新建）
-
-    路径：{DATA_DIR}/fstools/{user_id}/sessions/{session_id}/
-    """
-    session_root = f"{DATA_DIR}/fstools/{user_id}/sessions/{session_id}"
+    """为单个会话创建 fs_tools 后端（非单例，每次新建）"""
+    from agent_sdk._config.settings import FS_TOOLS_SUBDIR
+    session_root = f"{DATA_DIR}/{FS_TOOLS_SUBDIR}/{user_id}/sessions/{session_id}"
     return _create_backend(session_root)
