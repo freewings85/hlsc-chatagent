@@ -262,50 +262,15 @@ class AgentApp:
             config = self._config
             mount_a2a(
                 fastapi_app,
+                agent=self._agent,
                 base_url=f"http://localhost:{config.port}",
                 temporal_client_getter=lambda: self._temporal_client,
-                agent_factory=self._a2a_agent_factory,
                 agent_card_name=config.name,
                 agent_card_description=config.description,
                 agent_card_skills=config.a2a_skills,
             )
         except ImportError:
             logger.warning("A2A adapter not available, skipping A2A endpoints")
-
-    def _a2a_agent_factory(
-        self, session_id: str, user_id: str, temporal_client: Any
-    ) -> tuple[Any, Any, Any]:
-        """A2A 执行器用的 agent/deps 工厂
-
-        复用 SDK Agent 的配置，为每个 A2A 请求创建新的 pydantic_ai Agent + deps。
-        """
-        from agent_sdk._agent.deps import AgentDeps
-        from agent_sdk._agent.loop import create_agent
-
-        model = self._agent._build_model()
-        available_tools, tool_map = self._agent._build_tool_map()
-
-        # 同步获取 system_prompt：StaticPromptLoader._prompt 或 TemplatePromptLoader 缓存
-        loader = self._agent._prompt_loader
-        system_prompt = getattr(loader, '_prompt', None)
-        if system_prompt is None:
-            load_fn = getattr(loader, '_load_system_prompt', None)
-            if load_fn:
-                system_prompt = load_fn()
-
-        pydantic_agent = create_agent(model, system_prompt=system_prompt)
-
-        # A2A 请求：fs_tools_backend 留 None，由 run_main_agent 根据配置创建
-        # inner_storage_backend 留 None，由 service 工厂（get_inner_storage_backend）提供
-        deps = AgentDeps(
-            session_id=session_id,
-            user_id=user_id,
-            available_tools=available_tools,
-            tool_map=tool_map,
-            temporal_client=temporal_client,
-        )
-
-        return model, pydantic_agent, deps
 
     def run(self) -> None:
         """启动服务（CLI 入口）"""

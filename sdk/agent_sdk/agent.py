@@ -144,8 +144,12 @@ class Agent:
         *,
         temporal_client: Any = None,
         request_context: Any = None,
+        fs_tools_backend: Any = None,
+        is_sub_agent: bool = False,
+        message_history: list | None = None,
+        transcript_session_id: str | None = None,
     ) -> str | None:
-        """执行一轮对话，内部调用 agent loop。
+        """执行一轮对话（唯一入口，所有场景统一使用）。
 
         Args:
             message: 用户消息
@@ -154,6 +158,9 @@ class Agent:
             emitter: EventEmitter 实例
             temporal_client: Temporal 客户端（interrupt 用）
             request_context: 请求上下文（位置、车辆等）
+            fs_tools_backend: fs 工具后端（None 时自动创建 session 级）
+            is_sub_agent: 是否子 agent（子 agent 不管理 CHAT_REQUEST_END 等）
+            message_history: 消息历史（None 时从持久化加载，[] 表示无历史）
 
         Returns:
             最终响应文本，或 None
@@ -169,8 +176,11 @@ class Agent:
         from agent_sdk._agent.skills.registry import SkillRegistry
         from agent_sdk._agent.skills.tool import invoke_skill
         from agent_sdk._common.session_request_task import SessionRequestTask
-        from agent_sdk.config import create_session_backend
-        from agent_sdk._config.settings import get_inner_storage_backend
+        from agent_sdk._config.settings import (
+            get_fs_config,
+            get_fs_tools_backend,
+            get_inner_storage_backend,
+        )
 
         # 1. 加载 prompt
         prompt_result: PromptResult = await self._prompt_loader.load(user_id, session_id)
@@ -181,10 +191,14 @@ class Agent:
         # 3. 构建工具
         available_tools, tool_map = self._build_tool_map()
 
-        # 4. 构建 deps
-        file_state_tracker = FileStateTracker()
-        fs_tools_backend = create_session_backend(user_id, session_id)
+        # 4. 构建 fs_tools_backend
+        if fs_tools_backend is None:
+            # 默认：session 级隔离（mainagent 场景）
+            from agent_sdk.config import create_session_backend
+            fs_tools_backend = create_session_backend(user_id, session_id)
 
+        # 5. 构建 deps
+        file_state_tracker = FileStateTracker()
         deps = AgentDeps(
             session_id=session_id,
             user_id=user_id,
@@ -198,18 +212,18 @@ class Agent:
             request_context=request_context,
         )
 
-        # 5. 构建服务
+        # 6. 构建服务
         memory_service = self._build_memory_service()
         transcript_service = self._build_transcript_service()
         internal_compact_config = self._build_compact_config()
 
-        # 6. 创建 pydantic_ai Agent
+        # 7. 创建 pydantic_ai Agent
         pydantic_agent = create_agent(
             model,
             system_prompt=prompt_result.system_prompt if prompt_result.system_prompt else None,
         )
 
-        # 7. 构建 Compactor
+        # 8. 构建 Compactor
         compactor = Compactor(
             config=internal_compact_config,
             user_id=user_id,
@@ -217,10 +231,10 @@ class Agent:
             summarize_fn=_make_summarize_fn(pydantic_agent),
         )
 
-        # 8. Context messages（来自 prompt_loader）
+        # 9. Context messages（来自 prompt_loader）
         context_messages: list[ModelRequest] = list(prompt_result.context_messages)
 
-        # 9. 请求上下文 diff
+        # 10. 请求上下文 diff
         if request_context is not None and self._context_service is not None:
             changed = await self._context_service.diff(user_id, session_id, request_context)
             if changed:
@@ -232,10 +246,10 @@ class Agent:
             await self._context_service.set(user_id, session_id, request_context)
             deps.request_context = request_context
 
-        # 10. Attachment collector
+        # 11. Attachment collector
         attachment_collector = AttachmentCollector(file_state_tracker)
 
-        # 11. Skill 系统
+        # 12. Skill 系统
         skill_registry: SkillRegistry | None = None
         invoked_store: InvokedSkillStore | None = None
         if any(os.path.isdir(d) for d in SKILL_DIRS):
@@ -250,7 +264,7 @@ class Agent:
                 ] + ["Skill"]
                 deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
 
-        # 12. PreModelCallMessageService
+        # 13. PreModelCallMessageService
         pre_call_service = PreModelCallMessageService(
             compactor=compactor,
             context_messages=context_messages,
@@ -260,17 +274,21 @@ class Agent:
             system_prompt=prompt_result.system_prompt,
         )
 
-        # 13. MCP toolsets
+        # 14. MCP toolsets
         mcp_toolsets = None
         if os.path.isfile(MCP_CONFIG_PATH):
             from agent_sdk._agent.mcp.loader import load_mcp_toolsets
             from agent_sdk.config import get_agent_fs_backend
             mcp_toolsets = await load_mcp_toolsets(get_agent_fs_backend())
 
-        # 14. 加载历史
-        agent_history: list[AgentMessage] = await memory_service.load(user_id, session_id)
+        # 15. 加载历史
+        agent_history: list[AgentMessage] = []
+        if message_history is not None:
+            agent_history = from_model_messages(message_history)
+        else:
+            agent_history = await memory_service.load(user_id, session_id)
 
-        # 15. 创建 task
+        # 16. 创建 task
         task = SessionRequestTask(
             session_id=session_id,
             message=message,
@@ -279,7 +297,7 @@ class Agent:
             context=request_context,
         )
 
-        # 16. 组装 LoopContext 并运行
+        # 17. 组装 LoopContext 并运行
         ctx = LoopContext(
             agent=pydantic_agent,
             deps=deps,
@@ -291,7 +309,9 @@ class Agent:
             agent_history=agent_history,
             mcp_toolsets=mcp_toolsets if mcp_toolsets else None,
             max_iterations=self._max_iterations,
-            agent_name=self._agent_name,
+            agent_name=self._agent_name or "main",
+            is_sub_agent=is_sub_agent,
+            transcript_session_id=transcript_session_id,
         )
 
         return await run_agent_loop(ctx)

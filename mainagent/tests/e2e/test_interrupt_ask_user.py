@@ -63,7 +63,7 @@ def _no_proxy_client(**kwargs: Any) -> httpx.Client:
     return httpx.Client(transport=transport, **kwargs)
 
 
-def _wait_for_health(url: str, timeout_secs: int = 60) -> bool:
+def _wait_for_health(url: str, timeout_secs: int = 90) -> bool:
     """等待服务启动（health check）。"""
     for _ in range(timeout_secs):
         try:

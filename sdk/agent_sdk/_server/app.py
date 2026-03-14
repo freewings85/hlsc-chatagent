@@ -26,6 +26,28 @@ _running_tasks: dict[str, tuple[object, asyncio.Task[None]]] = {}
 _temporal_client = None
 _interrupt_worker = None
 
+# Lazy Agent 实例（standalone app 场景，使用默认工具集）
+_agent_instance = None
+
+
+def _get_agent():
+    """获取默认 Agent 实例（lazy 创建）"""
+    global _agent_instance
+    if _agent_instance is None:
+        from agent_sdk import Agent, ToolConfig
+        from agent_sdk._agent.tools import create_default_tool_map
+        from agent_sdk.prompt_loader import StaticPromptLoader
+
+        _agent_instance = Agent(
+            prompt_loader=StaticPromptLoader("You are a helpful assistant."),
+            tools=ToolConfig(manual=create_default_tool_map()),
+        )
+    return _agent_instance
+
+
+def _get_temporal_client():
+    return _temporal_client
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -149,46 +171,28 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     事件类型：text / tool_call_start / tool_call_args / tool_result /
               interrupt / error / chat_request_end
     """
-    from agent_sdk._agent.deps import AgentDeps
-    from agent_sdk._agent.loop import create_agent, run_main_agent
-    from agent_sdk._agent.model import create_model
-    from agent_sdk._agent.tools import ALL_FS_TOOLS, create_default_tool_map
-    from agent_sdk._common.session_request_task import SessionRequestTask
     from agent_sdk._event.event_emitter import EventEmitter
     from agent_sdk._event.event_model import EventModel
-    from agent_sdk._event.event_sinker_sse import SseSinker
     from agent_sdk._event.event_type import EventType
 
-    # Emitter 和 SSE generator 共享同一个 queue：
-    # run_agent_loop → emitter.emit() → queue → SSE generator
     queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
     emitter: EventEmitter = EventEmitter(queue)
-    sinker: SseSinker = SseSinker(queue)  # 供 SessionRequestTask 要求，实际不被 loop 调用
 
-    task: SessionRequestTask = SessionRequestTask(
-        session_id=request.session_id,
-        message=request.message,
-        user_id=request.user_id,
-        sinker=sinker,
-        context=request.context,
-    )
+    agent = _get_agent()
+    task_id = f"{request.session_id}-{id(request)}"
 
-    model = create_model()
-    agent = create_agent(model)
-    deps: AgentDeps = AgentDeps(
-        session_id=request.session_id,
-        user_id=request.user_id,
-        available_tools=list(ALL_FS_TOOLS),
-        tool_map=create_default_tool_map(),
-        temporal_client=_get_temporal_client(),
-    )
-
-    # 后台运行 Agent Loop，前台 SSE generator 消费事件
     loop_task: asyncio.Task[None] = asyncio.create_task(
-        run_main_agent(emitter, task, agent, deps),
-        name=f"agent-loop-{task.task_id}",
+        agent.run(
+            message=request.message,
+            user_id=request.user_id,
+            session_id=request.session_id,
+            emitter=emitter,
+            temporal_client=_get_temporal_client(),
+            request_context=request.context,
+        ),
+        name=f"agent-loop-{task_id}",
     )
-    _running_tasks[task.task_id] = (task, loop_task)
+    _running_tasks[task_id] = (None, loop_task)
 
     # loop_task 完成（正常或被取消）后确保 queue 有 sentinel，
     # 否则 SSE generator 会永远阻塞在 queue.get()
@@ -294,11 +298,6 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
 
     需要 KAFKA_ENABLED=true 才可用。
     """
-    from agent_sdk._agent.deps import AgentDeps
-    from agent_sdk._agent.loop import create_agent, run_main_agent
-    from agent_sdk._agent.model import create_model
-    from agent_sdk._agent.tools import ALL_FS_TOOLS, create_default_tool_map
-    from agent_sdk._common.session_request_task import SessionRequestTask
     from agent_sdk._config.settings import get_kafka_config
     from agent_sdk._event.event_emitter import EventEmitter
     from agent_sdk._event.event_model import EventModel
@@ -317,29 +316,21 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
     queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
     emitter = EventEmitter(queue)
 
-    task = SessionRequestTask(
-        session_id=request.session_id,
-        message=request.message,
-        user_id=request.user_id,
-        sinker=sinker,
-        context=request.context,
-    )
-
-    model = create_model()
-    agent = create_agent(model)
-    deps = AgentDeps(
-        session_id=request.session_id,
-        user_id=request.user_id,
-        available_tools=list(ALL_FS_TOOLS),
-        tool_map=create_default_tool_map(),
-        temporal_client=_get_temporal_client(),
-    )
+    agent = _get_agent()
+    task_id = f"{request.session_id}-async-{id(request)}"
 
     loop_task = asyncio.create_task(
-        run_main_agent(emitter, task, agent, deps),
-        name=f"agent-loop-async-{task.task_id}",
+        agent.run(
+            message=request.message,
+            user_id=request.user_id,
+            session_id=request.session_id,
+            emitter=emitter,
+            temporal_client=_get_temporal_client(),
+            request_context=request.context,
+        ),
+        name=f"agent-loop-async-{task_id}",
     )
-    _running_tasks[task.task_id] = (task, loop_task)
+    _running_tasks[task_id] = (None, loop_task)
 
     # 后台转发：从 emitter queue 读事件，通过 KafkaSinker 发到 Kafka
     async def _forward_to_kafka() -> None:

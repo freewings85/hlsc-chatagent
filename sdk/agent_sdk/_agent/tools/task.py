@@ -184,129 +184,49 @@ async def _run_sub_agent(
     prompt: str,
     subagent_type: str,
 ) -> str:
-    """构建子 agent 的 LoopContext 并通过 run_agent_loop 引擎运行。"""
-    from agent_sdk._agent.compact.compactor import Compactor
-    from agent_sdk._agent.file_state import FileStateTracker
-    from agent_sdk._agent.loop import LoopContext, _make_summarize_fn, run_agent_loop
-    from agent_sdk._agent.message.attachment_collector import AttachmentCollector
-    from agent_sdk._agent.memory.file_memory_message_service import FileMemoryMessageService
-    from agent_sdk._agent.message.pre_model_call_service import PreModelCallMessageService
-    from agent_sdk._agent.message.transcript_service import TranscriptService
-    from agent_sdk._common.session_request_task import SessionRequestTask
-    from agent_sdk._config.settings import get_inner_storage_backend, get_compact_config
-    from agent_sdk._event.event_emitter import EventEmitter
+    """创建子 Agent 实例并通过 Agent.run() 运行。"""
+    from agent_sdk import Agent as SdkAgent, ToolConfig
+    from agent_sdk.prompt_loader import StaticPromptLoader
 
     parent_deps = ctx.deps
 
-    # ── 1. 子 agent 唯一标识 ──
-    agent_id = f"{subagent_type}-{_uuid.uuid4().hex[:8]}"
-    # transcript 路径：subagents/{agent_id}/ 下，复用 session_id 机制
-    sub_session_id = f"{parent_deps.session_id}/subagents/{agent_id}"
-
-    # ── 2. 构建子 agent 实例 ──
-    system_prompt = _SUBAGENT_PROMPTS[subagent_type]
+    # 1. 构建子 agent 的工具集（从父 agent 继承，按 subagent_type 过滤）
     tool_names = _resolve_subagent_tools(parent_deps, subagent_type)
-    sub_get_tools = _build_subagent_get_tools(tool_names, parent_deps)
+    sub_tool_map = {name: parent_deps.tool_map[name] for name in tool_names if name in parent_deps.tool_map}
 
+    # 2. 创建 SDK Agent 实例（使用 create_model 以支持测试 mock）
+    system_prompt = _SUBAGENT_PROMPTS[subagent_type]
     model = create_model()
-    sub_agent: Agent[AgentDeps, str] = Agent(
-        model,
-        deps_type=AgentDeps,
-        system_prompt=system_prompt,
-        toolsets=[DynamicToolset(sub_get_tools, per_run_step=True)],
+    sub_agent = SdkAgent(
+        prompt_loader=StaticPromptLoader(system_prompt),
+        tools=ToolConfig(manual=sub_tool_map),
+        model=model,
+        agent_name=subagent_type,
+        max_iterations=_SUBAGENT_MAX_TURNS.get(subagent_type, 25),
     )
 
-    # ── 3. 子 agent deps（共享 fs_tools_backend 和 file_state_tracker）──
-    sub_deps = AgentDeps(
-        session_id=parent_deps.session_id,
-        user_id=parent_deps.user_id,
-        available_tools=tool_names,
-        tool_map=parent_deps.tool_map,
-        fs_tools_backend=parent_deps.fs_tools_backend,
-        file_state_tracker=parent_deps.file_state_tracker,
-        emitter=parent_deps.emitter,  # 共享父 emitter（事件推送）
-        temporal_client=parent_deps.temporal_client,  # 共享 Temporal client
-    )
-
-    # ── 4. 子 agent 的 SessionRequestTask ──
-    # 共享父 session_id（事件路由），但有自己的 task_id/request_id
-    from agent_sdk._common.event_sinker import EventSinker
-
-    class _NoOpSinker:
-        """子 agent 不需要 sinker（事件通过 emitter 推送）。"""
-        async def send(self, event: object) -> None:
-            pass
-        async def close(self) -> None:
-            pass
-
-    sub_task = SessionRequestTask(
-        session_id=parent_deps.session_id,  # 同一 session，前端用 agent_name 区分
-        message=prompt,
-        user_id=parent_deps.user_id,
-        sinker=_NoOpSinker(),  # type: ignore[arg-type]
-    )
-
-    # ── 5. 构建精简 services（内部存储用 inner_storage_backend）──
-    storage_backend = get_inner_storage_backend()
-
-    # FileMemoryMessageService — fresh（不加载历史）
-    memory_service = FileMemoryMessageService(storage_backend)
-
-    # TranscriptService — 路径为 subagents/{agent_id}/
-    transcript_service = TranscriptService(storage_backend)
-
-    # AttachmentCollector — 共享 file_state_tracker
-    attachment_collector = AttachmentCollector(parent_deps.file_state_tracker)
-
-    # Compactor — 复用配置，但子 agent 短生命周期基本不会触发
-    compactor = Compactor(
-        config=get_compact_config(),
-        user_id=parent_deps.user_id,
-        session_id=sub_session_id,
-        summarize_fn=_make_summarize_fn(sub_agent),
-    )
-
-    # PreModelCallMessageService — 精简版（无 skill listing，有 compact + attachment）
-    pre_call_service = PreModelCallMessageService(
-        compactor=compactor,
-        context_messages=[],  # 子 agent 无 context injection（AGENTS.md/MEMORY.md）
-        attachment_collector=attachment_collector,
-        skill_registry=None,  # 子 agent 不注入 skill listing
-        invoked_skill_store=None,
-        system_prompt=system_prompt,
-    )
-
-    # ── 6. Emitter：共享父 emitter ──
-    # 子 agent 事件通过同一个 emitter 推送，agent_name 字段区分
-    # 若父 emitter 不可用，创建一个丢弃事件的 dummy emitter
+    # 3. 共享父 emitter（子 agent 事件通过同一个 emitter 推送）
     import asyncio
     if parent_deps.emitter is not None:
         emitter = parent_deps.emitter
     else:
-        # Fallback: dummy emitter（事件丢弃）
-        dummy_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+        from agent_sdk._event.event_emitter import EventEmitter
+        dummy_queue: asyncio.Queue = asyncio.Queue()
         emitter = EventEmitter(dummy_queue)
 
-    # ── 7. 组装 LoopContext ──
-    max_turns = _SUBAGENT_MAX_TURNS.get(subagent_type, 25)
+    # 4. 运行子 agent
+    # session_id 用父级（事件路由用），transcript 路径隔离到 subagents/ 子目录
+    agent_id = f"{subagent_type}-{_uuid.uuid4().hex[:8]}"
 
-    loop_ctx = LoopContext(
-        agent=sub_agent,
-        deps=sub_deps,
+    result = await sub_agent.run(
+        message=prompt,
+        user_id=parent_deps.user_id,
+        session_id=parent_deps.session_id,
         emitter=emitter,
-        task=sub_task,
-        pre_call_service=pre_call_service,
-        memory_service=memory_service,
-        transcript_service=transcript_service,
-        agent_history=[],  # fresh context
-        mcp_toolsets=None,  # 子 agent 暂不加载 MCP
-        max_iterations=max_turns,
-        agent_name=subagent_type,
+        temporal_client=parent_deps.temporal_client,
+        fs_tools_backend=parent_deps.fs_tools_backend,
         is_sub_agent=True,
-        transcript_session_id=sub_session_id,  # transcript 路径隔离
+        message_history=[],  # fresh context，不加载历史
+        transcript_session_id=f"{parent_deps.session_id}/subagents/{agent_id}",
     )
-
-    # ── 8. 运行子 agent ──
-    from agent_sdk._event.event_model import EventModel
-    final_response = await run_agent_loop(loop_ctx)
-    return final_response or ""
+    return result or ""

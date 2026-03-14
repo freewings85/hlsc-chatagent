@@ -74,25 +74,22 @@ class TaskWorker:
                     break
                 await handler.handle(event)
 
-        from agent_sdk._agent.deps import AgentDeps
-        from agent_sdk._agent.loop import create_agent, run_main_agent
-        from agent_sdk._agent.model import create_model
-        from agent_sdk._agent.tools import ALL_FS_TOOLS, create_default_tool_map
         from agent_sdk._event.event_model import EventModel
         from agent_sdk._event.event_type import EventType
 
-        model = create_model()
-        agent = create_agent(model)
-        deps: AgentDeps = AgentDeps(
-            session_id=task.session_id,
-            user_id=task.user_id,
-            available_tools=list(ALL_FS_TOOLS),
-            tool_map=create_default_tool_map(),
-        )
+        # 使用 lazy Agent（与 _server/app.py 共享逻辑）
+        from agent_sdk._server.app import _get_agent
+
+        agent = _get_agent()
 
         try:
             await asyncio.gather(
-                run_main_agent(emitter, task, agent, deps),
+                agent.run(
+                    message=task.message,
+                    user_id=task.user_id,
+                    session_id=task.session_id,
+                    emitter=emitter,
+                ),
                 _consume_events(),
             )
         except Exception:

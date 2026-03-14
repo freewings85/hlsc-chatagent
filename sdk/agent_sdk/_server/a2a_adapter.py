@@ -50,7 +50,7 @@ class _ActiveLoop:
 
 
 class ChatAgentExecutor(AgentExecutor):
-    """将现有 agent loop 包装为 A2A AgentExecutor。
+    """将 Agent 包装为 A2A AgentExecutor。
 
     有状态：interrupt 时保持 agent loop 存活，下次 execute() 恢复。
     通过 context_id 跟踪活跃的 loop。
@@ -58,10 +58,13 @@ class ChatAgentExecutor(AgentExecutor):
 
     def __init__(
         self,
+        agent: Any = None,
         temporal_client_getter: Callable[[], Any] | None = None,
+        # 向后兼容（将废弃）
         agent_factory: Callable[..., Any] | None = None,
         deps_factory: Callable[..., Any] | None = None,
     ) -> None:
+        self._agent = agent
         self._temporal_client_getter = temporal_client_getter
         self._agent_factory = agent_factory
         self._deps_factory = deps_factory
@@ -111,10 +114,7 @@ class ChatAgentExecutor(AgentExecutor):
 
         internal_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
 
-        from agent_sdk._agent.deps import AgentDeps
-        from agent_sdk._agent.loop import create_agent, run_main_agent
-        from agent_sdk._agent.model import create_model
-        from agent_sdk._common.session_request_task import SessionRequestTask
+        from agent_sdk._config.settings import get_fs_tools_backend
         from agent_sdk._event.event_emitter import EventEmitter
 
         emitter = EventEmitter(internal_queue)
@@ -123,35 +123,23 @@ class ChatAgentExecutor(AgentExecutor):
         if self._temporal_client_getter:
             temporal_client = self._temporal_client_getter()
 
-        # 支持自定义 agent/deps 工厂（subagent 可以注入不同的 tools/prompt）
-        if self._agent_factory:
-            model, agent, deps = self._agent_factory(
-                session_id=session_id,
-                user_id=user_id,
-                temporal_client=temporal_client,
-            )
-        else:
-            from agent_sdk._agent.tools import ALL_FS_TOOLS, create_default_tool_map
+        # 使用 Agent.run() 统一入口
+        agent = self._agent
+        if agent is None:
+            raise RuntimeError("ChatAgentExecutor: agent not set")
 
-            model = create_model()
-            agent = create_agent(model)
-            deps = AgentDeps(
-                session_id=session_id,
-                user_id=user_id,
-                available_tools=list(ALL_FS_TOOLS),
-                tool_map=create_default_tool_map(),
-                temporal_client=temporal_client,
-            )
-
-        task = SessionRequestTask(
-            session_id=session_id,
-            message=user_input,
-            user_id=user_id,
-            sinker=None,  # type: ignore[arg-type]
-        )
+        # A2A 场景：fs_tools_backend 用全局配置（不加 session 隔离）
+        fs_tools_backend = get_fs_tools_backend()
 
         loop_task = asyncio.create_task(
-            run_main_agent(emitter, task, agent, deps),
+            agent.run(
+                message=user_input,
+                user_id=user_id,
+                session_id=session_id,
+                emitter=emitter,
+                temporal_client=temporal_client,
+                fs_tools_backend=fs_tools_backend,
+            ),
             name=f"a2a-agent-{context.task_id}",
         )
 
@@ -341,31 +329,18 @@ def _build_agent_card(
 def mount_a2a(
     app: FastAPI,
     *,
+    agent: Any = None,
     base_url: str = "http://localhost:8100",
     temporal_client_getter: Callable[[], Any] | None = None,
-    agent_factory: Callable[..., Any] | None = None,
-    deps_factory: Callable[..., Any] | None = None,
     agent_card_name: str = "ChatAgent",
     agent_card_description: str = "通用对话 Agent，支持工具调用、文件操作、中断确认等",
     agent_card_skills: list[AgentSkill] | None = None,
     rpc_url: str = "/a2a",
+    # 向后兼容（将废弃）
+    agent_factory: Callable[..., Any] | None = None,
+    deps_factory: Callable[..., Any] | None = None,
 ) -> None:
-    """将 A2A 端点挂载到现有 FastAPI 应用。
-
-    挂载后新增：
-    - GET  /.well-known/agent.json — AgentCard 发现
-    - POST {rpc_url}               — A2A JSON-RPC 端点（send/sendSubscribe）
-
-    Args:
-        app: 现有 FastAPI 应用
-        base_url: Agent 的公开 URL（用于 AgentCard）
-        temporal_client_getter: 获取 Temporal client 的回调
-        agent_factory: 自定义 agent 工厂（subagent 注入不同 tools/prompt）
-        agent_card_name: AgentCard 名称
-        agent_card_description: AgentCard 描述
-        agent_card_skills: AgentCard skills 列表
-        rpc_url: JSON-RPC 端点路径
-    """
+    """将 A2A 端点挂载到现有 FastAPI 应用。"""
     agent_card = _build_agent_card(
         base_url,
         name=agent_card_name,
@@ -373,8 +348,8 @@ def mount_a2a(
         skills=agent_card_skills,
     )
     executor = ChatAgentExecutor(
+        agent=agent,
         temporal_client_getter=temporal_client_getter,
-        agent_factory=agent_factory,
     )
     task_store = InMemoryTaskStore()
 

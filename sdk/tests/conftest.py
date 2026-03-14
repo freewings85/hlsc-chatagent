@@ -102,3 +102,17 @@ def make_emitter():
         emitter = EventEmitter(event_queue)
         return event_queue, emitter
     return _make
+
+
+def make_test_agent(model: FunctionModel, tools: dict | None = None, agent_name: str = "main"):
+    """创建用于测试的 SDK Agent（传入 FunctionModel + 可选工具）"""
+    from agent_sdk import Agent, ToolConfig
+    from agent_sdk.prompt_loader import StaticPromptLoader
+
+    tool_config = ToolConfig(manual=tools) if tools else None
+    return Agent(
+        prompt_loader=StaticPromptLoader("You are a test assistant."),
+        tools=tool_config,
+        model=model,
+        agent_name=agent_name,
+    )

@@ -53,25 +53,12 @@ from agent_sdk._agent.agent_message import (
 )
 from agent_sdk._agent.compact.compactor import Compactor, SummarizeFn
 from agent_sdk._agent.deps import AgentDeps
-from agent_sdk._agent.message.attachment_collector import AttachmentCollector
-from agent_sdk._agent.memory.memory_context_service import MemoryContextService
 from agent_sdk._agent.memory.memory_message_service import MemoryMessageService
 from agent_sdk._agent.message.pre_model_call_service import PreModelCallMessageService
 from agent_sdk._agent.message.transcript_service import TranscriptService
-from agent_sdk._agent.skills.invoked_store import InvokedSkillStore
-from agent_sdk._agent.skills.registry import SkillRegistry, get_default_skill_dirs
-from agent_sdk._agent.skills.tool import invoke_skill
-from agent_sdk._agent.mcp.loader import load_mcp_toolsets
 from agent_sdk._agent.toolset import get_tools
 from agent_sdk._common.session_request_task import SessionRequestTask
-from agent_sdk._config.settings import (
-    get_agent_fs_backend,
-    get_compact_config,
-    get_inner_storage_backend,
-    get_memory_context_service,
-    get_memory_message_service,
-    get_transcript_service,
-)
+from agent_sdk._config.settings import get_compact_config
 from agent_sdk._event.event_emitter import EventEmitter
 from agent_sdk._agent.card_parser import make_card_reminder, parse_card
 from agent_sdk._event.event_model import EventModel
@@ -509,129 +496,3 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
 
     return final_response
 
-
-# ── 主 Agent 入口 ──────────────────────────────────────────────────────────
-
-
-async def run_main_agent(
-    emitter: EventEmitter,
-    task: SessionRequestTask,
-    agent: Agent[AgentDeps, str],
-    deps: AgentDeps,
-    message_history: list[ModelMessage] | None = None,
-    max_iterations: int = 25,
-    prompt_loader: Any = None,
-) -> None:
-    """主 Agent 入口（遗留路径，新代码请用 Agent.run()）。
-
-    负责：
-    1. 设置 backend + request_context
-    2. 通过 prompt_loader 加载 context_messages
-    3. 构建 Skill 系统 → 注入 deps
-    4. 构建 PreModelCallMessageService
-    5. 加载 MCP toolsets
-    6. 加载历史（MemoryMessageService）
-    7. 组装 LoopContext
-    8. 调用 run_agent_loop(ctx)
-
-    Args:
-        prompt_loader: PromptLoader 实例，用于加载 system_prompt 和 context_messages。
-            必须提供（不再有 PromptBuilder 兜底）。
-    """
-    # 确保 deps 与 task 的 session/user 信息一致
-    deps.session_id = task.session_id
-    deps.user_id = task.user_id
-
-    agent_fs_backend = get_agent_fs_backend()
-
-    # fs 工具的工作目录：如果 deps 已设置则复用，否则创建 session 级目录
-    if deps.fs_tools_backend is None:
-        from agent_sdk._storage.local_backend import FilesystemBackend
-        from agent_sdk._config.settings import get_fs_tools_backend
-        _fs_tools_root_backend = get_fs_tools_backend()
-        _session_root = f"{_fs_tools_root_backend.cwd}/{task.user_id}/sessions/{task.session_id}"
-        deps.fs_tools_backend = FilesystemBackend(root_dir=_session_root, virtual_mode=True)
-    deps.emitter = emitter
-
-    # 服务获取（全局单例，跨 request 复用缓存）
-    memory_service = get_memory_message_service()
-    context_service = get_memory_context_service()
-    transcript_service = get_transcript_service()
-
-    # 加载 prompt
-    from agent_sdk.prompt_loader import PromptResult
-    if prompt_loader is not None:
-        prompt_result: PromptResult = await prompt_loader.load(task.user_id, task.session_id)
-        system_prompt: str | None = prompt_result.system_prompt or None
-        context_messages: list[ModelRequest] = list(prompt_result.context_messages)
-    else:
-        system_prompt = None
-        context_messages = []
-
-    # 请求上下文 diff：只在有变化时注入消息，同时更新 deps 供工具读取
-    if task.context is not None:
-        changed = await context_service.diff(task.user_id, task.session_id, task.context)
-        if changed:
-            context_text = context_service.format_changed(changed)
-            context_messages.append(ModelRequest(
-                parts=[UserPromptPart(content=context_text)],
-                metadata={"is_meta": True, "source": "request_context"},
-            ))
-        await context_service.set(task.user_id, task.session_id, task.context)
-        deps.request_context = task.context
-    attachment_collector = AttachmentCollector(deps.file_state_tracker)
-    compactor = Compactor(
-        config=get_compact_config(),
-        user_id=task.user_id,
-        session_id=task.session_id,
-        summarize_fn=_make_summarize_fn(agent),
-    )
-
-    # Skill 系统初始化
-    skill_registry = SkillRegistry.load(get_default_skill_dirs())
-    invoked_store = InvokedSkillStore(get_inner_storage_backend(), task.user_id, task.session_id)
-    await invoked_store.load()
-
-    # 若有可用 skill，注册 Skill 工具到 deps
-    if skill_registry.has_skills():
-        deps.skill_registry = skill_registry
-        deps.invoked_skill_store = invoked_store
-        deps.available_tools = [t for t in deps.available_tools if t != "Skill"] + ["Skill"]
-        deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
-
-    pre_call_service = PreModelCallMessageService(
-        compactor=compactor,
-        context_messages=context_messages,
-        attachment_collector=attachment_collector,
-        skill_registry=skill_registry if skill_registry.has_skills() else None,
-        invoked_skill_store=invoked_store if skill_registry.has_skills() else None,
-        system_prompt=system_prompt,
-    )
-
-    # MCP toolsets 动态加载（每次对话获取最新配置）
-    mcp_toolsets = await load_mcp_toolsets(agent_fs_backend)
-
-    # 加载历史（保持 AgentMessage 格式，仅在 ModelRequestNode 执行前转换）
-    agent_history: list[AgentMessage] = []
-    if message_history is None:
-        agent_history = await memory_service.load(task.user_id, task.session_id)
-    else:
-        # 兼容外部传入 ModelMessage 的场景（如测试）
-        agent_history = from_model_messages(message_history)
-
-    # 组装 LoopContext 并调用核心引擎
-    ctx = LoopContext(
-        agent=agent,
-        deps=deps,
-        emitter=emitter,
-        task=task,
-        pre_call_service=pre_call_service,
-        memory_service=memory_service,
-        transcript_service=transcript_service,
-        agent_history=agent_history,
-        mcp_toolsets=mcp_toolsets if mcp_toolsets else None,
-        max_iterations=max_iterations,
-        agent_name="main",
-    )
-
-    await run_agent_loop(ctx)
