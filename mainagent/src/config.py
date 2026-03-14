@@ -6,3 +6,6 @@ import os
 
 DEMO_PRICE_FINDER_URL: str = os.getenv("DEMO_PRICE_FINDER_URL", "http://localhost:8101")
 """DemoPriceFinder Subagent 的 A2A 地址"""
+
+CODE_AGENT_URL: str = os.getenv("CODE_AGENT_URL", "http://localhost:8102")
+"""CodeAgent Subagent 的 A2A 地址"""
