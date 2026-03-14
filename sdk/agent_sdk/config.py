@@ -25,17 +25,19 @@ ToolFunc = Callable[..., Coroutine[Any, Any, str]]
 AGENT_NAME: str = os.getenv("AGENT_NAME", "agent")
 """Agent 名称（logfire / AgentApp / Agent 共用）"""
 
-DATA_DIR: str = os.getenv("DATA_DIR", "data")
-"""基础数据目录（inner/ 存 SDK 内部数据，fstools/ 存 fs 工具文件）"""
+def _agent_fs_dir() -> str:
+    from agent_sdk._config.settings import get_fs_config
+    return get_fs_config().agent_fs_dir
+
 
 AGENT_FS_DIR: str = os.getenv("AGENT_FS_DIR", ".chatagent")
 """Agent 工作目录（MCP、Skills 等）"""
 
 MCP_CONFIG_PATH: str = os.path.join(AGENT_FS_DIR, "mcp.json")
-"""MCP 配置文件路径：{AGENT_FS_DIR}/mcp.json"""
+"""MCP 配置文件路径"""
 
 SKILL_DIRS: list[str] = [os.path.join(AGENT_FS_DIR, "skills")]
-"""Skill 目录列表：{AGENT_FS_DIR}/skills/"""
+"""Skill 目录列表"""
 
 
 def get_agent_name() -> str:
@@ -85,7 +87,7 @@ class MemoryConfig:
     """消息工作集（messages.jsonl）配置"""
 
     backend: str = field(default_factory=lambda: os.getenv("MEMORY_SERVICE_TYPE", "fs"))
-    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, _inner_subdir()))
+    data_dir: str = field(default_factory=lambda: _inner_storage_dir())
 
 
 @dataclass
@@ -93,12 +95,12 @@ class TranscriptConfig:
     """审计日志（transcript.jsonl）配置"""
 
     enabled: bool = True
-    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, _inner_subdir()))
+    data_dir: str = field(default_factory=lambda: _inner_storage_dir())
 
 
-def _inner_subdir() -> str:
-    from agent_sdk._config.settings import INNER_STORAGE_SUBDIR
-    return INNER_STORAGE_SUBDIR
+def _inner_storage_dir() -> str:
+    from agent_sdk._config.settings import get_fs_config
+    return get_fs_config().inner_storage_dir
 
 
 @dataclass
@@ -179,6 +181,7 @@ def get_agent_fs_backend() -> BackendProtocol:
 
 def create_session_backend(user_id: str, session_id: str) -> BackendProtocol:
     """为单个会话创建 fs_tools 后端（非单例，每次新建）"""
-    from agent_sdk._config.settings import FS_TOOLS_SUBDIR
-    session_root = f"{DATA_DIR}/{FS_TOOLS_SUBDIR}/{user_id}/sessions/{session_id}"
+    from agent_sdk._config.settings import get_fs_config
+    fs_tools_dir = get_fs_config().fs_tools_dir
+    session_root = f"{fs_tools_dir}/{user_id}/sessions/{session_id}"
     return _create_backend(session_root)

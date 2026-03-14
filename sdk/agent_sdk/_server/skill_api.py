@@ -7,7 +7,7 @@
   4. ZIP 压缩包上传（包含完整 skill 目录结构）
 
 安装/卸载通过 Agent 文件资源 backend（root=AGENT_FS_DIR）操作，
-与内部存储（DATA_DIR/inner/）和 fs 工具（DATA_DIR/fstools/）隔离，集群部署时所有节点共享。
+与内部存储（INNER_STORAGE_DIR）和 fs 工具（FS_TOOLS_DIR）隔离，集群部署时所有节点共享。
 """
 
 from __future__ import annotations

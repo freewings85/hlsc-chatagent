@@ -34,14 +34,12 @@ async def bash(
     """
     effective_timeout = min(timeout, MAX_TIMEOUT_SECONDS)
 
-    # bash 在 fs_tools_backend 根目录下执行，与 read/write/edit 保持一致
-    cwd: str | None = None
-    backend = ctx.deps.fs_tools_backend
-    if backend is not None and hasattr(backend, "cwd"):
+    # bash 工作目录：BASH_CWD 环境变量，未设置时用进程 CWD
+    from agent_sdk._config.settings import get_fs_config
+    cwd: str | None = get_fs_config().bash_cwd
+    if cwd is not None:
         from pathlib import Path
-        cwd_path = Path(backend.cwd)
-        cwd_path.mkdir(parents=True, exist_ok=True)
-        cwd = str(cwd_path)
+        Path(cwd).mkdir(parents=True, exist_ok=True)
 
     # 合并 skill 环境变量（invoke_skill 从 config.env 加载）
     env: dict[str, str] | None = None

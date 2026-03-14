@@ -43,42 +43,30 @@ class LLMConfig:
     max_retries: int = field(default_factory=lambda: int(os.getenv("LLM_MAX_RETRIES", "2")))
 
 
-INNER_STORAGE_SUBDIR = "inner"
-"""SDK 内部存储子目录名（消息、transcript、memory、skill store）"""
-
-FS_TOOLS_SUBDIR = "fstools"
-"""fs 工具子目录名（read/write/edit/bash/glob/grep 的默认根）"""
-
-
 @dataclass
-class DataDirConfig:
-    """基础数据目录配置"""
+class FileSystemConfig:
+    """文件系统配置（4 个独立目录，每个 agent 按需配置）"""
 
-    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "data"))
+    # SDK 内部存储（消息、transcript、memory、skill invoked store）
+    inner_storage_dir: str = field(
+        default_factory=lambda: os.getenv("INNER_STORAGE_DIR", "data/inner")
+    )
 
-    @property
-    def inner_dir(self) -> str:
-        return os.path.join(self.data_dir, INNER_STORAGE_SUBDIR)
+    # fs 工具根目录（read/write/edit/glob/grep）
+    fs_tools_dir: str = field(
+        default_factory=lambda: os.getenv("FS_TOOLS_DIR", "data/fstools")
+    )
 
-    @property
-    def fstools_dir(self) -> str:
-        return os.path.join(self.data_dir, FS_TOOLS_SUBDIR)
+    # bash 工具工作目录（None = 进程 CWD）
+    bash_cwd: str | None = field(
+        default_factory=lambda: os.getenv("BASH_CWD", None)
+    )
 
+    # Agent 资源目录（skills、mcp.json）
+    agent_fs_dir: str = field(
+        default_factory=lambda: os.getenv("AGENT_FS_DIR", ".chatagent")
+    )
 
-
-@dataclass
-class AgentFsConfig:
-    """Agent 文件资源配置（skills、agent.md 等全局共享文件）
-
-    与内部数据（DATA_DIR/inner/）隔离，集群部署时所有节点共享此目录。
-    目录结构：
-      {AGENT_FS_DIR}/
-      ├── skills/        # 已安装的 skill
-      ├── agent.md       # 系统 prompt 配置
-      └── ...            # 将来可能有更多资源
-    """
-
-    agent_fs_dir: str = field(default_factory=lambda: os.getenv("AGENT_FS_DIR", ".chatagent"))
 
 
 @dataclass
@@ -118,8 +106,7 @@ class KafkaConfig:
 
 # 延迟初始化单例
 _llm_config: Optional[LLMConfig] = None
-_data_dir_config: Optional[DataDirConfig] = None
-_agent_fs_config: Optional[AgentFsConfig] = None
+_fs_config: Optional[FileSystemConfig] = None
 _server_config: Optional[ServerConfig] = None
 _temporal_config: Optional[TemporalConfig] = None
 _kafka_config: Optional[KafkaConfig] = None
@@ -148,20 +135,17 @@ def get_llm_config() -> LLMConfig:
     return _llm_config
 
 
-def get_data_dir_config() -> DataDirConfig:
-    """获取基础数据目录配置"""
-    global _data_dir_config
-    if _data_dir_config is None:
-        _data_dir_config = DataDirConfig()
-    return _data_dir_config
+def get_fs_config() -> FileSystemConfig:
+    """获取文件系统配置（4 个目录）"""
+    global _fs_config
+    if _fs_config is None:
+        _fs_config = FileSystemConfig()
+    return _fs_config
 
 
-def get_agent_fs_config() -> AgentFsConfig:
-    """获取 Agent 文件资源配置"""
-    global _agent_fs_config
-    if _agent_fs_config is None:
-        _agent_fs_config = AgentFsConfig()
-    return _agent_fs_config
+def get_agent_fs_config() -> FileSystemConfig:
+    """获取 Agent 文件资源配置（返回 FileSystemConfig，用 .agent_fs_dir）"""
+    return get_fs_config()
 
 
 def get_server_config() -> ServerConfig:
@@ -202,30 +186,29 @@ def get_compact_config() -> "CompactConfig":
 def get_inner_storage_backend() -> "BackendProtocol":
     """SDK 内部存储后端（消息、transcript、memory、skill store）。
 
-    root: {DATA_DIR}/inner/（如 data/inner/）
+    root: INNER_STORAGE_DIR 环境变量（默认 data/inner）
     """
     global _inner_storage_backend
     if _inner_storage_backend is None:
         from agent_sdk._storage.local_backend import FilesystemBackend
 
-        config = get_data_dir_config()
-        _inner_storage_backend = FilesystemBackend(root_dir=config.inner_dir, virtual_mode=True)
+        config = get_fs_config()
+        _inner_storage_backend = FilesystemBackend(root_dir=config.inner_storage_dir, virtual_mode=True)
     return _inner_storage_backend
 
 
 def get_fs_tools_backend() -> "BackendProtocol":
     """fs 工具后端（read/write/edit/bash/glob/grep）。
 
-    root: FS_TOOLS_DIR 环境变量（默认 {DATA_DIR}/fstools/，如 data/fstools/）
-    subagent 可设 FS_TOOLS_DIR=. 让工具直接读写项目目录。
+    root: FS_TOOLS_DIR 环境变量（默认 data/fstools）
+    subagent 可设 FS_TOOLS_DIR=apis 让工具只读 API 文档目录。
     """
     global _fs_tools_backend
     if _fs_tools_backend is None:
         from agent_sdk._storage.local_backend import FilesystemBackend
 
-        config = get_data_dir_config()
-        root = os.getenv("FS_TOOLS_DIR", config.fstools_dir)
-        _fs_tools_backend = FilesystemBackend(root_dir=root, virtual_mode=True)
+        config = get_fs_config()
+        _fs_tools_backend = FilesystemBackend(root_dir=config.fs_tools_dir, virtual_mode=True)
     return _fs_tools_backend
 
 
@@ -233,7 +216,7 @@ def get_fs_tools_backend() -> "BackendProtocol":
 def get_agent_fs_backend() -> "BackendProtocol":
     """获取 Agent 文件资源后端（全局单例，root=AGENT_FS_DIR，用于 skills / agent.md 等）
 
-    与内部存储（DATA_DIR/inner/）隔离，集群部署时所有节点共享。
+    与内部存储（INNER_STORAGE_DIR）隔离，集群部署时所有节点共享。
     """
     global _agent_fs_backend
     if _agent_fs_backend is None:
@@ -257,7 +240,7 @@ def get_memory_message_service() -> "MemoryMessageService":
             from agent_sdk._agent.memory.sqlite_memory_message_service import SqliteMemoryMessageService
 
             _memory_message_service = SqliteMemoryMessageService(
-                get_data_dir_config().inner_dir,
+                get_fs_config().inner_dir,
             )
         else:
             from agent_sdk._agent.memory.file_memory_message_service import FileMemoryMessageService

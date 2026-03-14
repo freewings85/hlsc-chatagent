@@ -2,7 +2,7 @@
 
 from agent_sdk._agent.compact.config import CompactConfig
 from agent_sdk._config import settings
-from agent_sdk._config.settings import LLMConfig, DataDirConfig, AgentFsConfig, ServerConfig
+from agent_sdk._config.settings import LLMConfig, FileSystemConfig, ServerConfig
 
 
 class TestLLMConfig:
@@ -11,22 +11,30 @@ class TestLLMConfig:
         assert config.llm_type in ("azure", "openai", "")
 
 
-class TestUserFsConfig:
+class TestFileSystemConfig:
     def test_default(self) -> None:
-        config = DataDirConfig()
-        assert "inner" in config.inner_dir
-        assert "fstools" in config.fstools_dir
+        config = FileSystemConfig()
+        assert config.inner_storage_dir == "data/inner"
+        assert config.fs_tools_dir == "data/fstools"
+        assert config.bash_cwd is None
+        assert config.agent_fs_dir == ".chatagent"
 
-    def test_data_dir(self) -> None:
-        config = DataDirConfig(data_dir="/tmp/test-data")
-        assert config.data_dir == "/tmp/test-data"
-        assert config.inner_dir == "/tmp/test-data/inner"
-        assert config.fstools_dir == "/tmp/test-data/fstools"
+    def test_custom(self) -> None:
+        config = FileSystemConfig(
+            inner_storage_dir="/tmp/inner",
+            fs_tools_dir="/tmp/fstools",
+            bash_cwd="/tmp/bash",
+            agent_fs_dir="/tmp/agent",
+        )
+        assert config.inner_storage_dir == "/tmp/inner"
+        assert config.fs_tools_dir == "/tmp/fstools"
+        assert config.bash_cwd == "/tmp/bash"
+        assert config.agent_fs_dir == "/tmp/agent"
 
 
 class TestAgentFsConfig:
     def test_default(self) -> None:
-        config = AgentFsConfig()
+        config = FileSystemConfig()
         assert config.agent_fs_dir == ".chatagent"
 
 
@@ -69,11 +77,11 @@ class TestSingletonsEdgeCases:
         c2 = settings.get_compact_config()
         assert c1 is c2
 
-    def test_get_data_dir_config_singleton(self) -> None:
-        """get_data_dir_config() 多次调用返回同一实例"""
-        settings._data_dir_config = None
-        c1 = settings.get_data_dir_config()
-        c2 = settings.get_data_dir_config()
+    def test_get_fs_config_singleton(self) -> None:
+        """get_fs_config() 多次调用返回同一实例"""
+        settings._fs_config = None
+        c1 = settings.get_fs_config()
+        c2 = settings.get_fs_config()
         assert c1 is c2
 
     def test_get_inner_storage_backend_singleton(self) -> None:
