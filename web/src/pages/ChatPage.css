@@ -378,3 +378,89 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── Spec Cards (```spec fence) ── */
+
+.spec-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 8px 0;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.spec-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fafafa;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.spec-card-icon { font-size: 16px; }
+
+.spec-card-title { flex: 1; }
+
+.spec-card-badge {
+  font-size: 12px;
+  font-weight: 500;
+  color: #666;
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.spec-card-body {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #333;
+}
+
+.spec-card-price {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e53e3e;
+  margin-bottom: 4px;
+}
+
+.spec-card-discount {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e53e3e;
+  margin-bottom: 4px;
+}
+
+.spec-card-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  color: #555;
+}
+
+.spec-card-row.total {
+  font-weight: 700;
+  color: #222;
+  font-size: 14px;
+}
+
+.spec-card-divider {
+  border-top: 1px dashed #ddd;
+  margin: 4px 0;
+}
+
+.spec-card-meta {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* Card type accent colors */
+.shop-card { border-left: 3px solid #3182ce; }
+.project-card { border-left: 3px solid #38a169; }
+.appointment-card { border-left: 3px solid #805ad5; }
+.coupon-card { border-left: 3px solid #dd6b20; }
+.generic-card { border-left: 3px solid #718096; }

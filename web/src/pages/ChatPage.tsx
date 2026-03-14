@@ -399,7 +399,7 @@ export default function ChatPage() {
                   ))}
                   {msg.text ? (
                     <div className="text-segment">
-                      <RichText text={msg.text} cards={msg.cards} />
+                      <RichText text={msg.text} />
                     </div>
                   ) : (
                     streaming && i === messages.length - 1 && msg.tools.length === 0 && (
@@ -438,58 +438,199 @@ export default function ChatPage() {
 }
 
 // --------------------------------------------------------------------------
-// RichText: splits text on {{card:xxx}} and renders card components inline
+// Spec Fence Parser: splits text into text/card parts
 // --------------------------------------------------------------------------
 
-function RichText({ text, cards }: { text: string; cards: Record<string, CardData> }) {
-  // Split by {{card:toolCallId}} pattern
-  const parts = text.split(/\{\{card:([^}]+)\}\}/)
-  // parts: [text, toolCallId, text, toolCallId, ...]
+interface TextPart { kind: 'text'; content: string }
+interface SpecCardPart { kind: 'card'; type: string; props: Record<string, unknown> }
+type RichPart = TextPart | SpecCardPart
 
-  if (parts.length === 1) return <>{text}</>
+function parseSpecFences(text: string): RichPart[] {
+  const parts: RichPart[] = []
+  const lines = text.split('\n')
+  let inFence = false
+  let textBuffer: string[] = []
 
-  // 按 tool_call_id 精确查找，找不到时按 detail_type fallback
-  const findCard = (ref: string): CardData | undefined => {
-    if (cards[ref]) return cards[ref]
-    return Object.values(cards).find(c => c.detail_type === ref)
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    if (!inFence && trimmed === '```spec') {
+      // Flush text buffer
+      if (textBuffer.length > 0) {
+        const content = textBuffer.join('\n').trim()
+        if (content) parts.push({ kind: 'text', content })
+        textBuffer = []
+      }
+      inFence = true
+      continue
+    }
+
+    if (inFence && trimmed === '```') {
+      inFence = false
+      continue
+    }
+
+    if (inFence) {
+      // Try parse as JSON card
+      if (trimmed.startsWith('{')) {
+        try {
+          const obj = JSON.parse(trimmed)
+          if (obj.type && obj.props) {
+            parts.push({ kind: 'card', type: obj.type, props: obj.props })
+            continue
+          }
+        } catch { /* not valid JSON, fall through */ }
+      }
+      // Non-JSON line inside fence — treat as text
+      if (trimmed) textBuffer.push(line)
+    } else {
+      textBuffer.push(line)
+    }
+  }
+
+  // Flush remaining text
+  if (textBuffer.length > 0) {
+    const content = textBuffer.join('\n').trim()
+    if (content) parts.push({ kind: 'text', content })
+  }
+
+  return parts
+}
+
+// --------------------------------------------------------------------------
+// RichText: renders text with embedded spec-fence cards
+// --------------------------------------------------------------------------
+
+function RichText({ text }: { text: string; cards?: Record<string, CardData> }) {
+  const parts = parseSpecFences(text)
+
+  // No spec fences — render as plain text
+  if (parts.length === 1 && parts[0].kind === 'text') {
+    return <>{text}</>
   }
 
   return (
     <>
       {parts.map((part, i) => {
-        if (i % 2 === 0) {
-          // Text segment
-          return part ? <span key={i}>{part}</span> : null
+        if (part.kind === 'text') {
+          return <span key={i}>{part.content}</span>
         }
-        // Card reference — part is toolCallId or detail_type
-        const card = findCard(part)
-        if (!card) return <span key={i}>{`{{card:${part}}}`}</span>
-        return <CardComponent key={i} card={card} />
+        return <SpecCard key={i} type={part.type} props={part.props} />
       })}
     </>
   )
 }
 
 // --------------------------------------------------------------------------
-// CardComponent: renders a card block based on detail_type
+// SpecCard: renders a card based on type from ```spec fence
 // --------------------------------------------------------------------------
 
-function CardComponent({ card }: { card: CardData }) {
-  const data = card.data?.data ?? {}
+function SpecCard({ type, props }: { type: string; props: Record<string, unknown> }) {
+  switch (type) {
+    case 'ShopCard':
+      return <ShopCard {...props as any} />
+    case 'ProjectCard':
+      return <ProjectCard {...props as any} />
+    case 'AppointmentCard':
+      return <AppointmentCard {...props as any} />
+    case 'CouponCard':
+      return <CouponCard {...props as any} />
+    default:
+      return <GenericCard type={type} props={props} />
+  }
+}
 
+function ShopCard({ name, price, rating, distance, address }: {
+  name: string; price: number; rating: number; distance?: string; address?: string
+}) {
   return (
-    <div className="card-block" data-card-type={card.detail_type}>
-      <div className="card-header">
-        <span className="card-icon">📊</span>
-        <span className="card-type">{card.detail_type}</span>
+    <div className="spec-card shop-card" data-card-type="ShopCard">
+      <div className="spec-card-header">
+        <span className="spec-card-icon">🏪</span>
+        <span className="spec-card-title">{name}</span>
+        {rating && <span className="spec-card-badge">⭐ {rating}</span>}
       </div>
-      <div className="card-body">
-        {Object.entries(data).map(([k, v]) => (
-          <div key={k} className="card-field">
-            <span className="card-label">{k}:</span>
-            <span className="card-value">
-              {typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)}
-            </span>
+      <div className="spec-card-body">
+        <div className="spec-card-price">¥{price}</div>
+        {distance && <div className="spec-card-meta">📍 {distance}</div>}
+        {address && <div className="spec-card-meta">{address}</div>}
+      </div>
+    </div>
+  )
+}
+
+function ProjectCard({ name, laborFee, partsFee, totalPrice, duration }: {
+  name: string; laborFee: number; partsFee: number; totalPrice: number; duration?: string
+}) {
+  return (
+    <div className="spec-card project-card" data-card-type="ProjectCard">
+      <div className="spec-card-header">
+        <span className="spec-card-icon">🔧</span>
+        <span className="spec-card-title">{name}</span>
+      </div>
+      <div className="spec-card-body">
+        <div className="spec-card-row"><span>工时费</span><span>¥{laborFee}</span></div>
+        <div className="spec-card-row"><span>配件费</span><span>¥{partsFee}</span></div>
+        <div className="spec-card-divider" />
+        <div className="spec-card-row total"><span>合计</span><span>¥{totalPrice}</span></div>
+        {duration && <div className="spec-card-meta">⏱ 预计 {duration}</div>}
+      </div>
+    </div>
+  )
+}
+
+function AppointmentCard({ shopName, projectName, time, price, status }: {
+  shopName: string; projectName: string; time: string; price: number; status: string
+}) {
+  const statusMap: Record<string, string> = {
+    confirmed: '✅ 已确认', pending: '⏳ 待确认', cancelled: '❌ 已取消',
+  }
+  return (
+    <div className="spec-card appointment-card" data-card-type="AppointmentCard">
+      <div className="spec-card-header">
+        <span className="spec-card-icon">📅</span>
+        <span className="spec-card-title">预约 · {projectName}</span>
+        <span className="spec-card-badge">{statusMap[status] ?? status}</span>
+      </div>
+      <div className="spec-card-body">
+        <div className="spec-card-row"><span>门店</span><span>{shopName}</span></div>
+        <div className="spec-card-row"><span>时间</span><span>{time}</span></div>
+        <div className="spec-card-row"><span>价格</span><span>¥{price}</span></div>
+      </div>
+    </div>
+  )
+}
+
+function CouponCard({ title, discount, minSpend, expireDate }: {
+  title: string; discount: string; minSpend?: number; expireDate?: string
+}) {
+  return (
+    <div className="spec-card coupon-card" data-card-type="CouponCard">
+      <div className="spec-card-header">
+        <span className="spec-card-icon">🎫</span>
+        <span className="spec-card-title">{title}</span>
+      </div>
+      <div className="spec-card-body">
+        <div className="spec-card-discount">{discount}</div>
+        {minSpend && <div className="spec-card-meta">满 ¥{minSpend} 可用</div>}
+        {expireDate && <div className="spec-card-meta">有效期至 {expireDate}</div>}
+      </div>
+    </div>
+  )
+}
+
+function GenericCard({ type, props }: { type: string; props: Record<string, unknown> }) {
+  return (
+    <div className="spec-card generic-card" data-card-type={type}>
+      <div className="spec-card-header">
+        <span className="spec-card-icon">📊</span>
+        <span className="spec-card-title">{type}</span>
+      </div>
+      <div className="spec-card-body">
+        {Object.entries(props).map(([k, v]) => (
+          <div key={k} className="spec-card-row">
+            <span>{k}</span>
+            <span>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
           </div>
         ))}
       </div>
