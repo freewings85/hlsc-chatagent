@@ -180,7 +180,7 @@ class ChatAgentExecutor(AgentExecutor):
     async def _resume_interrupt(
         self, active: _ActiveLoop, user_reply: str
     ) -> None:
-        """通过 Temporal resume 恢复中断的 agent loop。"""
+        """恢复中断的 agent loop（Temporal 或内存模式）。"""
         if not active.interrupt_key:
             logger.warning("No interrupt_key to resume")
             return
@@ -189,14 +189,11 @@ class ChatAgentExecutor(AgentExecutor):
         if self._temporal_client_getter:
             temporal_client = self._temporal_client_getter()
 
-        if temporal_client is None:
-            logger.error("Cannot resume interrupt: Temporal client not available")
-            return
-
         from agent_sdk._agent.interrupt import resume
 
         reply_data = {"reply": user_reply}
         try:
+            # client=None 时走内存模式
             await resume(temporal_client, active.interrupt_key, reply_data)
             active.interrupt_key = None  # 已消费
         except Exception as exc:

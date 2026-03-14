@@ -167,16 +167,24 @@ class AgentApp:
         # Interrupt Reply
         @fastapi_app.post("/chat/interrupt-reply")
         async def interrupt_reply(request: dict[str, Any]) -> JSONResponse:
-            if self._temporal_client is None:
-                return JSONResponse(
-                    status_code=503,
-                    content={"error": "Temporal 未启用"},
-                )
-            from agent_sdk._agent.interrupt import resume
+            from agent_sdk._agent.interrupt import is_interrupt_active, resume
             interrupt_key = request.get("interrupt_key", "")
             reply = request.get("reply", "")
             reply_data = reply if isinstance(reply, dict) else {"reply": reply}
+
+            if not is_interrupt_active(interrupt_key):
+                try:
+                    await resume(self._temporal_client, interrupt_key, reply_data)
+                except Exception:
+                    pass
+                return JSONResponse(
+                    status_code=410,
+                    content={"error": "该对话已失效（服务重启），请重新发送消息",
+                             "interrupt_key": interrupt_key},
+                )
+
             try:
+                # client=None 时走内存模式
                 await resume(self._temporal_client, interrupt_key, reply_data)
                 return JSONResponse({"status": "ok", "interrupt_key": interrupt_key})
             except Exception as exc:

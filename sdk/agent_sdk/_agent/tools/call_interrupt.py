@@ -19,7 +19,9 @@
 - 任何需要暂停 agent loop 等待用户的场景
 
 机制：
-    生成 interrupt_key → emit INTERRUPT 事件 → Temporal 等待 → 用户 resume → 返回回复
+    生成 interrupt_key → emit INTERRUPT 事件 → 等待用户 resume → 返回回复
+    TEMPORAL_ENABLED=true 时通过 Temporal Workflow 等待（持久化）
+    TEMPORAL_ENABLED=false 时通过 asyncio.Event 等待（内存，开发/测试用）
 """
 
 from __future__ import annotations
@@ -54,7 +56,7 @@ async def call_interrupt(
         用户的回复文本。dict 类型回复会被序列化为 JSON 字符串。
 
     Raises:
-        RuntimeError: Temporal 未配置时抛出。
+        RuntimeError: 内部错误时抛出。
     """
     emitter = ctx.deps.emitter
     session_id = ctx.deps.session_id

@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"Temporal interrupt worker started (queue={config.interrupt_task_queue})")
     else:
         worker_task = None
-        logger.warning("Temporal disabled, interrupt 机制将不可用")
+        logger.info("Temporal disabled, interrupt 使用内存模式（进程重启后丢失）")
 
     yield
 
@@ -254,13 +254,8 @@ async def interrupt_reply(request: InterruptReplyRequest) -> JSONResponse:
 
     前端收到 interrupt 事件后，用户操作完毕调用此接口。
     interrupt_key 来自 interrupt 事件的 data.interrupt_key 字段。
+    支持 Temporal 模式和内存模式（TEMPORAL_ENABLED=false）。
     """
-    if _temporal_client is None:
-        return JSONResponse(
-            status_code=503,
-            content={"error": "Temporal 未启用，无法处理 interrupt reply"},
-        )
-
     from agent_sdk._agent.interrupt import is_interrupt_active, resume
 
     reply_data = request.reply if isinstance(request.reply, dict) else {"reply": request.reply}
@@ -268,7 +263,7 @@ async def interrupt_reply(request: InterruptReplyRequest) -> JSONResponse:
     # 检查 interrupt 是否在当前进程中活跃
     # 不活跃 = server 重启过，agent loop 已丢失
     if not is_interrupt_active(request.interrupt_key):
-        # 仍然尝试完成 Temporal workflow（清理资源），但告知前端已失效
+        # 仍然尝试完成 workflow（清理资源），但告知前端已失效
         try:
             await resume(_temporal_client, request.interrupt_key, reply_data)
         except Exception:
@@ -282,6 +277,7 @@ async def interrupt_reply(request: InterruptReplyRequest) -> JSONResponse:
         )
 
     try:
+        # client=None 时 resume 走内存模式
         await resume(_temporal_client, request.interrupt_key, reply_data)
         return JSONResponse({"status": "ok", "interrupt_key": request.interrupt_key})
     except Exception as exc:

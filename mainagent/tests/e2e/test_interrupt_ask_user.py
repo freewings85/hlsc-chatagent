@@ -63,7 +63,7 @@ def _no_proxy_client(**kwargs: Any) -> httpx.Client:
     return httpx.Client(transport=transport, **kwargs)
 
 
-def _wait_for_health(url: str, timeout_secs: int = 30) -> bool:
+def _wait_for_health(url: str, timeout_secs: int = 60) -> bool:
     """等待服务启动（health check）。"""
     for _ in range(timeout_secs):
         try:
@@ -88,13 +88,12 @@ def _kill_proc(proc: subprocess.Popen) -> None:
 
 @pytest.fixture(scope="module")
 def interrupt_server_url():
-    """启动 mainagent + subagent（带 Temporal）。
+    """启动 mainagent + subagent。
 
     interrupt 流程：mainagent → call_subagent → subagent → call_interrupt → 前端
     需要两个服务同时运行。
+    Temporal 可用时走 Temporal 模式，不可用时走内存模式。
     """
-    if not _temporal_available():
-        pytest.skip("Temporal server not available at localhost:7233")
 
     # 确保测试端口空闲（杀掉可能残留的旧进程）
     for port in (INTERRUPT_TEST_PORT, SUBAGENT_TEST_PORT):
@@ -119,12 +118,14 @@ def interrupt_server_url():
 
     # 注意：保留 HTTP_PROXY 等代理变量，WSL 环境需要代理才能访问 Azure OpenAI。
     # 本地 httpx 调用使用 _no_proxy_client() 绕过代理。
-    clean_env = dict(os.environ)
+    # 移除 VIRTUAL_ENV 避免 uv 与子项目 venv 冲突。
+    clean_env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     interrupt_queue = f"test-interrupt-e2e-{os.getpid()}"
 
-    # 共享的 Temporal 配置
+    # Temporal 配置：可用时启用，不可用时走内存模式
+    temporal_enabled = _temporal_available()
     temporal_env = {
-        "TEMPORAL_ENABLED": "true",
+        "TEMPORAL_ENABLED": "true" if temporal_enabled else "false",
         "TEMPORAL_HOST": "localhost:7233",
         "TEMPORAL_INTERRUPT_QUEUE": interrupt_queue,
         "USE_NACOS": "FALSE",
@@ -145,7 +146,7 @@ def interrupt_server_url():
     }
 
     subagent_proc = subprocess.Popen(
-        [sys.executable, "server.py", "--port", str(SUBAGENT_TEST_PORT)],
+        ["uv", "run", "python", "server.py", "--port", str(SUBAGENT_TEST_PORT)],
         env=subagent_env,
         cwd=str(SUBAGENT_DIR),
         stdout=open("/tmp/e2e_subagent.log", "w"),
@@ -171,7 +172,7 @@ def interrupt_server_url():
     }
 
     mainagent_proc = subprocess.Popen(
-        [sys.executable, "server.py", "--port", str(INTERRUPT_TEST_PORT)],
+        ["uv", "run", "python", "server.py", "--port", str(INTERRUPT_TEST_PORT)],
         env=mainagent_env,
         cwd=str(MAINAGENT_DIR),
         stdout=open("/tmp/e2e_mainagent.log", "w"),
@@ -353,10 +354,10 @@ class TestInterruptAPIFlow:
                 text_content += d.get("content", "")
         assert len(text_content) > 0, "agent 应在 interrupt 恢复后生成文本"
 
-    def test_interrupt_reply_without_temporal_returns_503(self) -> None:
-        """无 Temporal 时 interrupt-reply 返回 503。
+    def test_interrupt_reply_inactive_key_returns_410(self) -> None:
+        """不存在的 interrupt_key 应返回 410（无论有无 Temporal）。
 
-        使用临时无 Temporal 的服务器（直接测 app 逻辑）。
+        使用临时无 Temporal 的服务器（内存模式）。
         """
         from fastapi.testclient import TestClient
 
@@ -369,8 +370,8 @@ class TestInterruptAPIFlow:
                 "/chat/interrupt-reply",
                 json={"interrupt_key": "fake-key", "reply": "hello"},
             )
-            assert resp.status_code == 503
-            assert "Temporal" in resp.json()["error"]
+            assert resp.status_code == 410
+            assert "失效" in resp.json()["error"]
         finally:
             app_mod._temporal_client = original
 

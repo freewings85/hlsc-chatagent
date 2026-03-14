@@ -84,9 +84,9 @@ class TestCallInterruptInSubAgent:
     """sub agent 中调用 call_interrupt 的完整流程"""
 
     @pytest.mark.asyncio
-    async def test_subagent_no_temporal_error(self) -> None:
-        """sub agent 无 Temporal 时 call_interrupt 抛 RuntimeError，
-        引擎层 wrap_tool_safe 捕获后返回错误字符串，LLM 收到 tool-return 后正常回复"""
+    async def test_subagent_memory_mode_interrupt(self) -> None:
+        """sub agent 无 Temporal 时走内存模式 interrupt，
+        后台 resume 后 tool 正常完成，LLM 收到结果后回复"""
 
         def model_fn(messages: list[ModelMessage], info: object) -> ModelResponse:
             for msg in messages:
@@ -116,16 +116,32 @@ class TestCallInterruptInSubAgent:
         queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
         emitter = EventEmitter(queue)
         deps = _make_parent_deps(
-            session_id="sub-no-temporal",
+            session_id="sub-memory-mode",
             emitter=emitter,
-            temporal_client=None,
+            temporal_client=None,  # 触发内存模式
         )
         ctx = _make_ctx(deps)
 
-        with patch("agent_sdk._agent.tools.task.create_model", return_value=model):
-            result = await task(ctx, "测试", "调用确认工具", subagent_type="general")
+        async def _auto_resume():
+            """监听 interrupt 事件，自动 resume"""
+            from agent_sdk._agent.interrupt import resume_memory
+            for _ in range(100):
+                while not queue.empty():
+                    evt = queue.get_nowait()
+                    if evt and evt.type == EventType.INTERRUPT:
+                        key = evt.data.get("interrupt_key", "")
+                        if key:
+                            await resume_memory(key, {"reply": "自动确认"})
+                            return
+                await asyncio.sleep(0.05)
 
-        assert "Temporal" in result or "工具执行错误" in result or "工具返回" in result
+        with patch("agent_sdk._agent.tools.task.create_model", return_value=model):
+            result, _ = await asyncio.gather(
+                task(ctx, "测试", "调用确认工具", subagent_type="general"),
+                _auto_resume(),
+            )
+
+        assert "用户回复: 自动确认" in result or "工具返回" in result
 
     @pytest.mark.asyncio
     async def test_subagent_with_temporal_mock(self) -> None:

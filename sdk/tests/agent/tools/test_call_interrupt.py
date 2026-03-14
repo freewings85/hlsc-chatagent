@@ -32,16 +32,35 @@ def _make_ctx(deps: AgentDeps) -> RunContext[AgentDeps]:
     return ctx
 
 
-class TestCallInterruptNoTemporal:
-    """无 Temporal client 时抛 RuntimeError"""
+class TestCallInterruptMemoryMode:
+    """无 Temporal client 时走内存模式"""
 
     @pytest.mark.asyncio
-    async def test_raises_runtime_error_without_temporal(self) -> None:
-        deps = _make_deps(emitter=None, temporal_client=None)
+    async def test_memory_mode_works_without_temporal(self) -> None:
+        """temporal_client=None 时使用内存模式，不抛异常"""
+        queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+        emitter = EventEmitter(queue)
+        deps = _make_deps(emitter=emitter, temporal_client=None)
         ctx = _make_ctx(deps)
 
-        with pytest.raises(RuntimeError, match="Temporal"):
-            await call_interrupt(ctx, {"type": "confirm", "question": "确认？"})
+        async def _reply_later():
+            """等 interrupt 事件发出后，调用 resume_memory 回复"""
+            from agent_sdk._agent.interrupt import resume_memory
+            # 等待 interrupt 事件
+            for _ in range(50):
+                if not queue.empty():
+                    evt = queue.get_nowait()
+                    if evt and evt.type == EventType.INTERRUPT:
+                        key = evt.data["interrupt_key"]
+                        await resume_memory(key, {"reply": "内存确认"})
+                        return
+                await asyncio.sleep(0.02)
+
+        result, _ = await asyncio.gather(
+            call_interrupt(ctx, {"type": "confirm", "question": "确认？"}),
+            _reply_later(),
+        )
+        assert result == "内存确认"
 
 
 class TestCallInterruptWithTemporal:
