@@ -47,7 +47,7 @@ class LLMConfig:
 class DataDirConfig:
     """基础数据目录配置（inner/ 和 fstools/ 的父目录）"""
 
-    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", os.getenv("USER_FS_DIR", "data")))
+    data_dir: str = field(default_factory=lambda: os.getenv("DATA_DIR", "data"))
 
     @property
     def inner_dir(self) -> str:
@@ -58,15 +58,12 @@ class DataDirConfig:
         return os.path.join(self.data_dir, "fstools")
 
 
-# 向后兼容别名
-UserFsConfig = DataDirConfig
-
 
 @dataclass
 class AgentFsConfig:
     """Agent 文件资源配置（skills、agent.md 等全局共享文件）
 
-    与用户数据（USER_FS_DIR）隔离，集群部署时所有节点共享此目录。
+    与用户数据（DATA_DIR）隔离，集群部署时所有节点共享此目录。
     目录结构：
       {AGENT_FS_DIR}/
       ├── skills/        # 已安装的 skill
@@ -114,13 +111,12 @@ class KafkaConfig:
 
 # 延迟初始化单例
 _llm_config: Optional[LLMConfig] = None
-_user_fs_config: Optional[UserFsConfig] = None
+_data_dir_config: Optional[DataDirConfig] = None
 _agent_fs_config: Optional[AgentFsConfig] = None
 _server_config: Optional[ServerConfig] = None
 _temporal_config: Optional[TemporalConfig] = None
 _kafka_config: Optional[KafkaConfig] = None
 _compact_config: Optional["CompactConfig"] = None
-_user_fs_backend: Optional["BackendProtocol"] = None  # 向后兼容
 _inner_storage_backend: Optional["BackendProtocol"] = None
 _fs_tools_backend: Optional["BackendProtocol"] = None
 _agent_fs_backend: Optional["BackendProtocol"] = None
@@ -147,14 +143,10 @@ def get_llm_config() -> LLMConfig:
 
 def get_data_dir_config() -> DataDirConfig:
     """获取基础数据目录配置"""
-    global _user_fs_config
-    if _user_fs_config is None:
-        _user_fs_config = DataDirConfig()
-    return _user_fs_config
-
-
-# 向后兼容
-get_user_fs_config = get_data_dir_config
+    global _data_dir_config
+    if _data_dir_config is None:
+        _data_dir_config = DataDirConfig()
+    return _data_dir_config
 
 
 def get_agent_fs_config() -> AgentFsConfig:
@@ -199,16 +191,6 @@ def get_compact_config() -> "CompactConfig":
     return _compact_config
 
 
-def get_user_fs_backend() -> "BackendProtocol":
-    """向后兼容，新代码请用 get_inner_storage_backend() 或 get_fs_tools_backend()。"""
-    global _user_fs_backend
-    if _user_fs_backend is None:
-        from agent_sdk._storage.local_backend import FilesystemBackend
-
-        config = get_data_dir_config()
-        _user_fs_backend = FilesystemBackend(root_dir=config.data_dir, virtual_mode=True)
-    return _user_fs_backend
-
 
 def get_inner_storage_backend() -> "BackendProtocol":
     """SDK 内部存储后端（消息、transcript、memory、skill store）。
@@ -240,15 +222,11 @@ def get_fs_tools_backend() -> "BackendProtocol":
     return _fs_tools_backend
 
 
-# 向后兼容别名
-get_backend = get_fs_tools_backend
-get_storage_config = get_user_fs_config
-
 
 def get_agent_fs_backend() -> "BackendProtocol":
     """获取 Agent 文件资源后端（全局单例，root=AGENT_FS_DIR，用于 skills / agent.md 等）
 
-    与用户 backend（root=USER_FS_DIR）隔离，集群部署时所有节点共享。
+    与用户 backend（root=DATA_DIR）隔离，集群部署时所有节点共享。
     """
     global _agent_fs_backend
     if _agent_fs_backend is None:

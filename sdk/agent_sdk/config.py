@@ -28,9 +28,6 @@ AGENT_NAME: str = os.getenv("AGENT_NAME", "agent")
 DATA_DIR: str = os.getenv("DATA_DIR", "data")
 """基础数据目录（inner/ 存 SDK 内部数据，fstools/ 存 fs 工具文件）"""
 
-# 向后兼容
-USER_FS_DIR: str = DATA_DIR
-
 AGENT_FS_DIR: str = os.getenv("AGENT_FS_DIR", ".chatagent")
 """Agent 工作目录（MCP、Skills 等）"""
 
@@ -88,7 +85,7 @@ class MemoryConfig:
     """消息工作集（messages.jsonl）配置"""
 
     backend: str = field(default_factory=lambda: os.getenv("MEMORY_SERVICE_TYPE", "fs"))
-    data_dir: str = field(default_factory=lambda: USER_FS_DIR)
+    data_dir: str = field(default_factory=lambda: DATA_DIR)
 
 
 @dataclass
@@ -96,7 +93,7 @@ class TranscriptConfig:
     """审计日志（transcript.jsonl）配置"""
 
     enabled: bool = True
-    data_dir: str = field(default_factory=lambda: USER_FS_DIR)
+    data_dir: str = field(default_factory=lambda: DATA_DIR)
 
 
 @dataclass
@@ -146,7 +143,6 @@ class AgentAppConfig:
 # ============================================================
 
 _storage_config: StorageConfig | None = None
-_user_fs_backend: BackendProtocol | None = None
 _agent_fs_backend: BackendProtocol | None = None
 
 
@@ -166,13 +162,6 @@ def _create_backend(root_dir: str) -> BackendProtocol:
         return FilesystemBackend(root_dir=root_dir, virtual_mode=True)
     raise ValueError(f"未知的 storage backend: {config.backend}")
 
-
-def get_user_fs_backend() -> BackendProtocol:
-    """获取用户级存储后端（全局单例，root=USER_FS_DIR）"""
-    global _user_fs_backend
-    if _user_fs_backend is None:
-        _user_fs_backend = _create_backend(USER_FS_DIR)
-    return _user_fs_backend
 
 
 def get_agent_fs_backend() -> BackendProtocol:

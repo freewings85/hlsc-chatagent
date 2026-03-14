@@ -25,7 +25,7 @@ uv run python server.py --port 9000
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `SERVER_PORT` | 服务端口 | 8100 |
-| `USER_FS_DIR` | 用户数据目录 | mainagent/data |
+| `DATA_DIR` | 用户数据目录 | mainagent/data |
 | `PROMPTS_DIR` | 提示词目录 | mainagent/prompts |
 | `MEMORY_SERVICE_TYPE` | 存储实现 (fs/sqlite) | sqlite |
 | `TEMPORAL_ENABLED` | Temporal 开关 | true |

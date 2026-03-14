@@ -69,38 +69,38 @@ class TestSingletonsEdgeCases:
         c2 = settings.get_compact_config()
         assert c1 is c2
 
-    def test_get_user_fs_config_singleton(self) -> None:
-        """get_user_fs_config() 多次调用返回同一实例"""
-        settings._user_fs_config = None
-        c1 = settings.get_user_fs_config()
-        c2 = settings.get_user_fs_config()
+    def test_get_data_dir_config_singleton(self) -> None:
+        """get_data_dir_config() 多次调用返回同一实例"""
+        settings._data_dir_config = None
+        c1 = settings.get_data_dir_config()
+        c2 = settings.get_data_dir_config()
         assert c1 is c2
 
-    def test_get_user_fs_backend_singleton(self) -> None:
-        """get_user_fs_backend() 多次调用返回同一实例"""
-        settings._user_fs_backend = None
-        b1 = settings.get_user_fs_backend()
-        b2 = settings.get_user_fs_backend()
+    def test_get_inner_storage_backend_singleton(self) -> None:
+        """get_inner_storage_backend() 多次调用返回同一实例"""
+        settings._inner_storage_backend = None
+        b1 = settings.get_inner_storage_backend()
+        b2 = settings.get_inner_storage_backend()
+        assert b1 is b2
+
+    def test_get_fs_tools_backend_singleton(self) -> None:
+        """get_fs_tools_backend() 多次调用返回同一实例"""
+        settings._fs_tools_backend = None
+        b1 = settings.get_fs_tools_backend()
+        b2 = settings.get_fs_tools_backend()
         assert b1 is b2
 
     def test_get_agent_fs_config_singleton(self) -> None:
-        """get_agent_fs_config() 多次调用返回同一实例"""
         settings._agent_fs_config = None
         c1 = settings.get_agent_fs_config()
         c2 = settings.get_agent_fs_config()
         assert c1 is c2
 
     def test_get_agent_fs_backend_singleton(self) -> None:
-        """get_agent_fs_backend() 多次调用返回同一实例"""
         settings._agent_fs_backend = None
         b1 = settings.get_agent_fs_backend()
         b2 = settings.get_agent_fs_backend()
         assert b1 is b2
-
-    def test_backward_compat_aliases(self) -> None:
-        """get_backend / get_storage_config 是向后兼容别名"""
-        assert settings.get_backend is settings.get_fs_tools_backend
-        assert settings.get_storage_config is settings.get_user_fs_config
 
 
 class TestCompactConfig:
