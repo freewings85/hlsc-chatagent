@@ -85,7 +85,7 @@ class MemoryConfig:
     """消息工作集（messages.jsonl）配置"""
 
     backend: str = field(default_factory=lambda: os.getenv("MEMORY_SERVICE_TYPE", "fs"))
-    data_dir: str = field(default_factory=lambda: DATA_DIR)
+    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, "inner"))
 
 
 @dataclass
@@ -93,7 +93,7 @@ class TranscriptConfig:
     """审计日志（transcript.jsonl）配置"""
 
     enabled: bool = True
-    data_dir: str = field(default_factory=lambda: DATA_DIR)
+    data_dir: str = field(default_factory=lambda: os.path.join(DATA_DIR, "inner"))
 
 
 @dataclass

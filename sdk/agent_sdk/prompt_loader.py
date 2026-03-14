@@ -51,7 +51,7 @@ class TemplatePromptLoader:
     """模板目录拼接 + context 文件的 prompt loader
 
     约定：
-    - MEMORY.md 固定在 {DATA_DIR}/{user_id}/MEMORY.md（有则注入，无则跳过）
+    - MEMORY.md 固定在 {DATA_DIR}/inner/{user_id}/MEMORY.md（有则注入，无则跳过）
 
     Args:
         template_parts: 模板文件路径列表，按顺序拼接为 system_prompt

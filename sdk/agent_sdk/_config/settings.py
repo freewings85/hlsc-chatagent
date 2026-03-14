@@ -63,7 +63,7 @@ class DataDirConfig:
 class AgentFsConfig:
     """Agent 文件资源配置（skills、agent.md 等全局共享文件）
 
-    与用户数据（DATA_DIR）隔离，集群部署时所有节点共享此目录。
+    与内部数据（DATA_DIR/inner/）隔离，集群部署时所有节点共享此目录。
     目录结构：
       {AGENT_FS_DIR}/
       ├── skills/        # 已安装的 skill
@@ -226,7 +226,7 @@ def get_fs_tools_backend() -> "BackendProtocol":
 def get_agent_fs_backend() -> "BackendProtocol":
     """获取 Agent 文件资源后端（全局单例，root=AGENT_FS_DIR，用于 skills / agent.md 等）
 
-    与用户 backend（root=DATA_DIR）隔离，集群部署时所有节点共享。
+    与内部存储（DATA_DIR/inner/）隔离，集群部署时所有节点共享。
     """
     global _agent_fs_backend
     if _agent_fs_backend is None:
