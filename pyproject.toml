@@ -7,9 +7,11 @@ dependencies = [
     "agent-sdk",
     "hlsc-mainagent",
     "hlsc-demo-price-finder",
+    "hlsc-recommend-project",
 ]
 
 [tool.uv.sources]
 agent-sdk = { path = "sdk", editable = true }
 hlsc-mainagent = { path = "mainagent", editable = true }
 hlsc-demo-price-finder = { path = "subagents/demo_price_finder", editable = true }
+hlsc-recommend-project = { path = "subagents/recommend_project", editable = true }
