@@ -7,12 +7,16 @@ from typing import Annotated, List
 from pydantic import Field
 from pydantic_ai import RunContext
 
+import asyncio
+
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end
 from src.services.restful.car_fault_retrieval_service import (
     FaultItem,
     car_fault_retrieval_service,
 )
+from src.services.restful.get_part_primary_service import get_main_part_ids
+from src.services.restful.get_project_bycar_service import get_project_ids_by_car
 
 
 async def search_fault_symptoms(
@@ -22,20 +26,27 @@ async def search_fault_symptoms(
 ) -> str:
     """从故障现象库中检索与描述相关的已知故障模式。
 
-    返回匹配的故障条目，每条包含故障标题、详细描述、关联的零部件和项目。
+    会根据车型的零部件和项目清单过滤结果，确保返回的故障与该车型相关。
 
     IMPORTANT: 故障库数据可能不全，检索结果仅作参考。应结合你自身的汽车知识综合判断。
-
-    Usage:
-    - 用户描述了故障症状（如异响、抖动、漏油、指示灯亮等）
-    - 可以将检索结果中关联的零部件 ID 和项目 ID 直接用于分析
     """
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
     log_tool_start("search_fault_symptoms", sid, rid, {"car_model_id": car_model_id, "query": query})
 
     try:
+        # 1. 并行获取车型的零部件 ID 和项目 ID（用于过滤检索结果）
+        part_ids, project_ids = await asyncio.gather(
+            get_main_part_ids(car_model_id, sid, rid),
+            get_project_ids_by_car(car_model_id, sid, rid),
+        )
+
+        # 2. 用车型信息过滤检索故障现象
         result = await car_fault_retrieval_service.retrieval(
-            query, session_id=sid, request_id=rid,
+            query,
+            session_id=sid,
+            request_id=rid,
+            primary_part_ids=part_ids or None,
+            primary_project_ids=project_ids or None,
         )
 
         if not result.items:

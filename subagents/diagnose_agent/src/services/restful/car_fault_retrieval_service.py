@@ -45,8 +45,10 @@ class CarFaultRetrievalService:
         query: str,
         session_id: str = "",
         request_id: str = "",
+        primary_part_ids: list[int] | None = None,
+        primary_project_ids: list[int] | None = None,
     ) -> FaultRetrievalResult:
-        """检索故障现象。
+        """检索故障现象（支持按车型零部件/项目过滤）。
 
         Raises:
             RuntimeError: URL 未配置或 API 返回错误
@@ -56,13 +58,17 @@ class CarFaultRetrievalService:
             raise RuntimeError("CAR_FAULT_RETRIEVAL_URL 未配置")
 
         dataset_ids = [d.strip() for d in CAR_FAULT_DATASET_IDS.split(",") if d.strip()]
-        payload = {
+        payload: dict = {
             "dataset_ids": dataset_ids,
             "query": query,
             "top_k": 5,
             "similarity_threshold": 0.2,
             "vector_similarity_weight": 0.3,
         }
+        if primary_part_ids:
+            payload["primary_part_ids"] = primary_part_ids
+        if primary_project_ids:
+            payload["primary_project_ids"] = primary_project_ids
 
         log_http_request(url, "POST", session_id, request_id, payload)
 
