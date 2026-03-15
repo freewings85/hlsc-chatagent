@@ -47,6 +47,7 @@ class Agent:
         # ── 用户直接提供 ──
         prompt_loader: PromptLoader,
         tools: ToolConfig | None = None,
+        context_formatter: Any = None,
         # ── config 驱动，框架内部构建 service ──
         model: Model | ModelConfig | None = None,
         memory_config: MemoryConfig | None = None,
@@ -58,6 +59,7 @@ class Agent:
     ) -> None:
         self._prompt_loader = prompt_loader
         self._tools = tools
+        self._context_formatter = context_formatter
         self._model_config = model
         self._memory_config = memory_config or MemoryConfig()
         self._transcript_config = transcript_config or TranscriptConfig()
@@ -69,7 +71,6 @@ class Agent:
         self._pydantic_model: Model | None = None
         self._memory_service: Any = None
         self._transcript_service: Any = None
-        self._context_service: Any = None
 
     def _build_model(self) -> Model:
         """根据配置构建 Pydantic AI Model"""
@@ -234,16 +235,15 @@ class Agent:
         # 9. Context messages（来自 prompt_loader）
         context_messages: list[ModelRequest] = list(prompt_result.context_messages)
 
-        # 10. 请求上下文 diff
-        if request_context is not None and self._context_service is not None:
-            changed = await self._context_service.diff(user_id, session_id, request_context)
-            if changed:
-                context_text = self._context_service.format_changed(changed)
-                context_messages.append(ModelRequest(
-                    parts=[UserPromptPart(content=context_text)],
-                    metadata={"is_meta": True, "source": "request_context"},
-                ))
-            await self._context_service.set(user_id, session_id, request_context)
+        # 10. 请求上下文（始终注入完整 context，每轮 LLM 调用都能看到）
+        if request_context is not None:
+            if self._context_formatter is not None:
+                context_text = self._context_formatter.format(request_context)
+                if context_text:
+                    context_messages.append(ModelRequest(
+                        parts=[UserPromptPart(content=context_text)],
+                        metadata={"is_meta": True, "source": "request_context"},
+                    ))
             deps.request_context = request_context
 
         # 11. Attachment collector

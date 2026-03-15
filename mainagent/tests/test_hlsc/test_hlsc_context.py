@@ -1,12 +1,9 @@
-"""HlscRequestContext 和 hlsc_context_formatter 测试"""
+"""HlscRequestContext 和 HlscContextFormatter 测试"""
 
 from __future__ import annotations
 
-import pytest
-
-from agent_sdk._agent.memory.inmemory_context_service import InMemoryContextService
 from hlsc.models import CarInfo, LocationInfo
-from src.hlsc_context import HlscRequestContext, hlsc_context_formatter
+from src.hlsc_context import HlscContextFormatter, HlscRequestContext
 
 
 class TestHlscRequestContext:
@@ -27,53 +24,40 @@ class TestHlscRequestContext:
 
 class TestHlscContextFormatter:
 
-    def test_car_change(self) -> None:
-        result = hlsc_context_formatter({
-            "current_car": {"car_model_id": "123", "car_model_name": "宝马3系"},
-        })
+    def test_with_car_and_location(self) -> None:
+        formatter = HlscContextFormatter()
+        ctx = HlscRequestContext(
+            current_car=CarInfo(car_model_id="123", car_model_name="宝马3系"),
+            current_location=LocationInfo(address="浦东新区张江", lat=31.2, lng=121.5),
+        )
+        result = formatter.format(ctx)
+        assert "request_context" in result
+        assert "car_model_id: 123" in result
         assert "宝马3系" in result
-        assert "用户车辆" in result
-
-    def test_location_change(self) -> None:
-        result = hlsc_context_formatter({
-            "current_location": {"address": "浦东新区张江"},
-        })
         assert "浦东新区张江" in result
-        assert "用户位置" in result
 
-    def test_both_change(self) -> None:
-        result = hlsc_context_formatter({
-            "current_car": {"car_model_id": "123", "car_model_name": "奔驰C级"},
-            "current_location": {"address": "徐汇区漕河泾"},
-        })
+    def test_empty_context(self) -> None:
+        formatter = HlscContextFormatter()
+        ctx = HlscRequestContext()
+        result = formatter.format(ctx)
+        assert "未设置" in result
+        assert "car_model_id" in result
+        assert "location" in result
+
+    def test_car_only(self) -> None:
+        formatter = HlscContextFormatter()
+        ctx = HlscRequestContext(
+            current_car=CarInfo(car_model_id="456", car_model_name="奔驰C级"),
+        )
+        result = formatter.format(ctx)
         assert "奔驰C级" in result
+        assert "location: (未设置)" in result
+
+    def test_location_only(self) -> None:
+        formatter = HlscContextFormatter()
+        ctx = HlscRequestContext(
+            current_location=LocationInfo(address="徐汇区漕河泾", lat=31.17, lng=121.4),
+        )
+        result = formatter.format(ctx)
+        assert "car_model_id: (未设置)" in result
         assert "漕河泾" in result
-
-    def test_fallback_unknown_keys(self) -> None:
-        result = hlsc_context_formatter({"some_new_field": "value"})
-        assert "some_new_field" in result
-
-
-class TestHlscContextDiff:
-
-    async def test_diff_with_hlsc_context(self) -> None:
-        service = InMemoryContextService(formatter=hlsc_context_formatter)
-        ctx1 = HlscRequestContext(
-            current_car=CarInfo(car_model_id="1", car_model_name="宝马3系"),
-            current_location=LocationInfo(address="张江"),
-        )
-        await service.set("u1", "s1", ctx1)
-
-        # 只改了位置
-        ctx2 = HlscRequestContext(
-            current_car=CarInfo(car_model_id="1", car_model_name="宝马3系"),
-            current_location=LocationInfo(address="漕河泾"),
-        )
-        changed = await service.diff("u1", "s1", ctx2)
-        assert changed is not None
-        assert "current_location" in changed
-        assert "current_car" not in changed
-
-        # format
-        text = service.format_changed(changed)
-        assert "漕河泾" in text

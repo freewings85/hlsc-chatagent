@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from agent_sdk._common.request_context import RequestContext
+from agent_sdk._common.request_context import ContextFormatter, RequestContext
 from hlsc.models import CarInfo, LocationInfo
 
 
@@ -15,24 +13,30 @@ class HlscRequestContext(RequestContext):
     current_location: LocationInfo | None = None
 
 
-def hlsc_context_formatter(changed: dict[str, Any]) -> str:
-    """将变化的上下文字段格式化为自然语言提示。"""
-    parts: list[str] = []
+class HlscContextFormatter(ContextFormatter):
+    """将 HlscRequestContext 格式化为注入 LLM 的文本。
 
-    if "current_car" in changed and changed["current_car"] is not None:
-        car = changed["current_car"]
-        name = car.get("car_model_name", "") if isinstance(car, dict) else car.car_model_name
-        if name:
-            parts.append(f"用户车辆: {name}")
+    每次 LLM 调用前执行，确保 LLM 始终能看到当前车辆和位置。
+    """
 
-    if "current_location" in changed and changed["current_location"] is not None:
-        loc = changed["current_location"]
-        addr = loc.get("address", "") if isinstance(loc, dict) else loc.address
-        if addr:
-            parts.append(f"用户位置: {addr}")
+    def format(self, context: RequestContext) -> str:
+        if not isinstance(context, HlscRequestContext):
+            return ""
 
-    if not parts:
-        # fallback: 列出所有变化的 key
-        parts.append("用户上下文已更新: " + ", ".join(changed.keys()))
+        parts: list[str] = []
 
-    return "当前用户信息：\n" + "\n".join(parts)
+        if context.current_car is not None:
+            car = context.current_car
+            parts.append(f"car_model_id: {car.car_model_id} ({car.car_model_name})")
+        else:
+            parts.append("car_model_id: (未设置)")
+
+        if context.current_location is not None:
+            loc = context.current_location
+            lat = loc.lat or "未知"
+            lng = loc.lng or "未知"
+            parts.append(f"location: {loc.address} (lat={lat}, lng={lng})")
+        else:
+            parts.append("location: (未设置)")
+
+        return "[request_context]\n" + "\n".join(parts)

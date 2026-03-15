@@ -7,24 +7,20 @@ from __future__ import annotations
 
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
+from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 from src.tools import create_main_tool_map
 
 
 def create_agent_app() -> AgentApp:
     """创建 HLSC 主 AgentApp"""
-    # 注册业务上下文格式化器
-    from agent_sdk._config.settings import register_context_formatter
-    from src.hlsc_context import hlsc_context_formatter
-
-    register_context_formatter(hlsc_context_formatter)
-
     prompt_loader = create_main_prompt_loader()
     tool_map = {**create_default_tool_map(), **create_main_tool_map()}
 
     agent = Agent(
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map),
+        context_formatter=HlscContextFormatter(),
     )
 
     return AgentApp(
