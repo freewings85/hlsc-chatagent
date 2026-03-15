@@ -21,6 +21,7 @@ SYSTEM_PROMPT_PARTS: list[Path] = [
     _TEMPLATES_DIR / "TOOLS.md",
     _TEMPLATES_DIR / "TASK.md",
     _TEMPLATES_DIR / "SKILL.md",
+    _TEMPLATES_DIR / "context.md",
     _TEMPLATES_DIR / "card.md",
 ]
 
