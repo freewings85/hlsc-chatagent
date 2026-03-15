@@ -114,6 +114,25 @@ def main() -> None:
 
     prompt_loader = TemplatePromptLoader(template_parts=template_parts)
 
+    # Diagnose agent tool（通过 A2A 调用，需要 DIAGNOSE_AGENT_URL 环境变量）
+    diagnose_url = os.getenv("DIAGNOSE_AGENT_URL", "")
+    diagnose_tool = None
+    if diagnose_url:
+        from agent_sdk.a2a import call_subagent
+
+        async def call_diagnose_agent(
+            ctx: RunContext[AgentDeps],
+            query: Annotated[str, Field(description="包含车型信息和故障描述的完整查询")],
+        ) -> str:
+            """调用诊断 Agent 分析汽车故障原因。
+
+            适用场景：用户描述故障症状（如"过减速带咚咚响"、"方向盘抖"）。
+            query 应包含车型信息和故障描述。
+            """
+            return await call_subagent(ctx, url=diagnose_url, message=query)
+
+        diagnose_tool = call_diagnose_agent
+
     # 组装 tool map
     tool_map = {
         **create_default_tool_map(),
@@ -124,6 +143,8 @@ def main() -> None:
         "fuzzy_match_location": fuzzy_match_location,
         "ask_user_location": ask_user_location,
     }
+    if diagnose_tool:
+        tool_map["call_diagnose_agent"] = diagnose_tool
 
     agent = Agent(
         prompt_loader=prompt_loader,
