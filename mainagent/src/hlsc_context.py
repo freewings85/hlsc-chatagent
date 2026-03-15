@@ -27,16 +27,21 @@ class HlscContextFormatter(ContextFormatter):
 
         if context.current_car is not None:
             car = context.current_car
-            parts.append(f"car_model_id: {car.car_model_id} ({car.car_model_name})")
+            parts.append(
+                f"current_car(car_model_id={car.car_model_id}, "
+                f"car_model_name={car.car_model_name}, "
+                f"vin_code={car.vin_code})"
+            )
         else:
-            parts.append("car_model_id: (未设置)")
+            parts.append("current_car: (未设置)")
 
         if context.current_location is not None:
             loc = context.current_location
-            lat = loc.lat or "未知"
-            lng = loc.lng or "未知"
-            parts.append(f"location: {loc.address} (lat={lat}, lng={lng})")
+            parts.append(
+                f"current_location(address={loc.address}, "
+                f"lat={loc.lat}, lng={loc.lng})"
+            )
         else:
-            parts.append("location: (未设置)")
+            parts.append("current_location: (未设置)")
 
-        return "[request_context]\n" + "\n".join(parts)
+        return "[request_context]: " + ", ".join(parts)
