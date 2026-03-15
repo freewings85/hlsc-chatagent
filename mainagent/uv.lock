@@ -701,11 +701,23 @@ wheels = [
 ]
 
 [[package]]
+name = "hlsc-extensions"
+version = "0.1.0"
+source = { editable = "../extensions" }
+dependencies = [
+    { name = "agent-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "agent-sdk", editable = "../sdk" }]
+
+[[package]]
 name = "hlsc-mainagent"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "agent-sdk" },
+    { name = "hlsc-extensions" },
     { name = "httpx" },
 ]
 
@@ -721,6 +733,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agent-sdk", editable = "../sdk" },
+    { name = "hlsc-extensions", editable = "../extensions" },
     { name = "httpx", specifier = ">=0.27" },
 ]
 

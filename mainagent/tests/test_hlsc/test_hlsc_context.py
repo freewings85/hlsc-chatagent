@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from agent_sdk._agent.memory.inmemory_context_service import InMemoryContextService
+from hlsc.models import CarInfo, LocationInfo
 from src.hlsc_context import HlscRequestContext, hlsc_context_formatter
-from src.hlsc_core import CarInfo, LocationInfo
 
 
 class TestHlscRequestContext:
