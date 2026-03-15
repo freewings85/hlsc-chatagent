@@ -36,8 +36,8 @@ AGENT_FS_DIR: str = os.getenv("AGENT_FS_DIR", ".chatagent")
 MCP_CONFIG_PATH: str = os.path.join(AGENT_FS_DIR, "mcp.json")
 """MCP 配置文件路径"""
 
-SKILL_DIRS: list[str] = [os.path.join(AGENT_FS_DIR, "skills")]
-"""Skill 目录列表"""
+SKILL_DIRS: list[str] = [os.path.join(AGENT_FS_DIR, "fstools", "skills")]
+"""Skill 目录列表（在 AGENT_FS_DIR/fstools/skills/ 下）"""
 
 
 def get_agent_name() -> str:

@@ -11,6 +11,7 @@
 
 from agent_sdk._agent.tools.bash import bash
 from agent_sdk._agent.file_state import ChangedFile, FileEntry, FileStateTracker
+from agent_sdk._agent.tools.execute_skill_script import execute_skill_script
 from agent_sdk._agent.tools.fs import edit, glob, grep, read, write
 from agent_sdk._agent.tools.task import task
 
@@ -27,13 +28,14 @@ __all__ = [
     "grep",
     "bash",
     "task",
+    "execute_skill_script",
     # 便捷工厂
     "ALL_FS_TOOLS",
     "create_default_tool_map",
 ]
 
 ALL_FS_TOOLS: list[str] = [
-    "read", "edit", "write", "glob", "grep", "bash", "task",
+    "read", "edit", "write", "glob", "grep", "bash", "task", "execute_skill_script",
 ]
 
 
@@ -47,4 +49,5 @@ def create_default_tool_map() -> dict:
         "grep": grep,
         "bash": bash,
         "task": task,
+        "execute_skill_script": execute_skill_script,
     }
