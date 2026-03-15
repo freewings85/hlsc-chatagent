@@ -19,9 +19,13 @@ async def search(keyword: str, car_model_id: str) -> dict:
     if not CAR_PART_RETRIEVAL_URL:
         return {"error": "CAR_PART_RETRIEVAL_URL 未配置"}
 
+    dataset_id = os.getenv("CAR_PART_DATASET_ID", "default")
     payload = {
+        "dataset_id": dataset_id,
         "part_names": [keyword],
-        "carKey": car_model_id,
+        "top_k": 5,
+        "similarity_threshold": 0.2,
+        "vector_similarity_weight": 0.3,
     }
 
     async with httpx.AsyncClient(timeout=10.0) as client:
