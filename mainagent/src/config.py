@@ -9,3 +9,6 @@ DEMO_PRICE_FINDER_URL: str = os.getenv("DEMO_PRICE_FINDER_URL", "http://localhos
 
 CODE_AGENT_URL: str = os.getenv("CODE_AGENT_URL", "http://localhost:8102")
 """CodeAgent Subagent 的 A2A 地址"""
+
+DIAGNOSE_AGENT_URL: str = os.getenv("DIAGNOSE_AGENT_URL", "http://localhost:8103")
+"""DiagnoseAgent Subagent 的 A2A 地址"""
