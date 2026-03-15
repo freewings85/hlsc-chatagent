@@ -5,15 +5,13 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from typing import List
 
 import httpx
 
+from agent_sdk.logging import log_http_request, log_http_response
 from hlsc.models import CarInfo
-
-logger = logging.getLogger(__name__)
 
 LIST_USER_CARS_URL = os.getenv("LIST_USER_CARS_URL", "")
 
@@ -21,30 +19,26 @@ LIST_USER_CARS_URL = os.getenv("LIST_USER_CARS_URL", "")
 class ListUserCarsService:
     """用户车辆列表服务"""
 
-    async def get_user_cars(self, session_id: str) -> List[CarInfo]:
+    async def get_user_cars(
+        self, session_id: str, request_id: str = "",
+    ) -> List[CarInfo]:
         """获取用户绑定的车辆列表。
 
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            车辆列表
+        Raises:
+            RuntimeError: URL 未配置或 API 返回错误状态
         """
         url = LIST_USER_CARS_URL
         if not url:
-            logger.warning("LIST_USER_CARS_URL 未配置")
-            return []
+            raise RuntimeError("LIST_USER_CARS_URL 未配置")
 
         payload = {"conversationId": session_id}
-
-        logger.info(f"[list_user_cars] POST {url} payload={payload}")
+        log_http_request(url, "POST", session_id, request_id, payload)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             data = response.json()
-
-            logger.info(f"[list_user_cars] status={response.status_code} count={len(data.get('result', []))}")
+            log_http_response(response.status_code, session_id, request_id, data)
 
             if data.get("status") == 0:
                 return [
@@ -60,5 +54,4 @@ class ListUserCarsService:
                 raise RuntimeError(f"获取用户车辆失败: {error_msg}")
 
 
-# 单例
 list_user_cars_service = ListUserCarsService()

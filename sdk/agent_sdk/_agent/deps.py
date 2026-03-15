@@ -25,6 +25,7 @@ class AgentDeps:
     """Agent 运行时依赖，通过 RunContext[AgentDeps] 在 tool 中访问"""
 
     session_id: str = "default"
+    request_id: str = ""
     user_id: str = "anonymous"
     # 当前可用工具名列表
     available_tools: list[str] = field(default_factory=list)

@@ -199,9 +199,12 @@ class Agent:
             fs_tools_backend = create_session_backend(user_id, session_id)
 
         # 5. 构建 deps
+        import uuid
+        request_id = uuid.uuid4().hex
         file_state_tracker = FileStateTracker()
         deps = AgentDeps(
             session_id=session_id,
+            request_id=request_id,
             user_id=user_id,
             available_tools=available_tools,
             tool_map=tool_map,
@@ -288,12 +291,13 @@ class Agent:
         else:
             agent_history = await memory_service.load(user_id, session_id)
 
-        # 16. 创建 task
+        # 16. 创建 task（共用 request_id）
         task = SessionRequestTask(
             session_id=session_id,
             message=message,
             user_id=user_id,
             sinker=None,  # type: ignore[arg-type]
+            request_id=request_id,
             context=request_context,
         )
 

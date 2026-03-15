@@ -20,6 +20,12 @@ class HlscContextFormatter(ContextFormatter):
     """
 
     def format(self, context: RequestContext) -> str:
+        # 支持 dict（从 HTTP 请求直接传入）和 HlscRequestContext
+        if isinstance(context, dict):
+            try:
+                context = HlscRequestContext(**context)
+            except Exception:
+                return ""
         if not isinstance(context, HlscRequestContext):
             return ""
 

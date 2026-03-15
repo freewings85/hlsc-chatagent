@@ -5,54 +5,43 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from typing import Optional
 
 import httpx
 
+from agent_sdk.logging import log_http_request, log_http_response
 from hlsc.models import CarInfo
 
-logger = logging.getLogger(__name__)
-
-# 接口地址（环境变量配置）
 FUZZY_MATCH_CAR_URL = os.getenv("FUZZY_MATCH_CAR_URL", "")
 
 
 class FuzzyMatchCarService:
     """模糊匹配车型服务"""
 
-    async def match(self, query: str, session_id: str = "") -> Optional[CarInfo]:
+    async def match(
+        self, query: str, session_id: str = "", request_id: str = "",
+    ) -> Optional[CarInfo]:
         """根据用户输入的车型关键词匹配车型。
 
-        Args:
-            query: 车型关键词，如"宝马X3"、"卡罗拉"
-            session_id: 会话 ID
-
-        Returns:
-            匹配成功返回 CarInfo，失败返回 None
+        Raises:
+            RuntimeError: URL 未配置或 API 返回错误状态
         """
         if not query:
             return None
 
         url = FUZZY_MATCH_CAR_URL
         if not url:
-            logger.warning("FUZZY_MATCH_CAR_URL 未配置")
-            return None
+            raise RuntimeError("FUZZY_MATCH_CAR_URL 未配置")
 
-        payload = {
-            "queryKey": query,
-            "conversationId": session_id,
-        }
-
-        logger.info(f"[fuzzy_match_car] POST {url} payload={payload}")
+        payload = {"queryKey": query, "conversationId": session_id}
+        log_http_request(url, "POST", session_id, request_id, payload)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             data = response.json()
-
-            logger.info(f"[fuzzy_match_car] status={response.status_code} data={data}")
+            log_http_response(response.status_code, session_id, request_id, data)
 
             if data.get("status") == 0:
                 result = data.get("result")
@@ -68,5 +57,4 @@ class FuzzyMatchCarService:
                 raise RuntimeError(f"模糊匹配车型失败: {error_msg}")
 
 
-# 单例
 fuzzy_match_car_service = FuzzyMatchCarService()
