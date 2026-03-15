@@ -127,7 +127,7 @@ def main() -> None:
 
     agent = Agent(
         prompt_loader=prompt_loader,
-        tools=ToolConfig(manual=tool_map, exclude=["task"]),
+        tools=ToolConfig(manual=tool_map, exclude=["write", "edit", "bash"]),
         context_formatter=TestContextFormatter(),
     )
 
@@ -138,13 +138,14 @@ def main() -> None:
         ),
     )
 
-    # Copy skills
+    # Copy skills to .chatagent/fstools/skills/（和 mainagent 结构一致）
     import shutil
-    skills_dest = Path(".chatagent/skills")
+    skills_dest = Path(".chatagent/fstools/skills")
     skills_src = PROJECT_ROOT / "extensions" / "skills"
     if skills_src.exists():
         if skills_dest.exists():
             shutil.rmtree(skills_dest)
+        skills_dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(skills_src, skills_dest)
 
     app.run()

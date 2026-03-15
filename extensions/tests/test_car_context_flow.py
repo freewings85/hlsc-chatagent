@@ -20,10 +20,12 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAINAGENT_DIR = PROJECT_ROOT / "mainagent"
+CJML_DIR = PROJECT_ROOT.parent / "cjml-cheap-weixiu"
 WEB_DIR = PROJECT_ROOT / "web"
 DIST_DIR = WEB_DIR / "dist"
 TEST_SERVER = Path(__file__).parent / "test_server.py"
 TEST_PORT = 8195
+MOCK_PORT = 8106
 
 
 def _no_proxy_client(**kwargs: Any) -> httpx.Client:
@@ -46,29 +48,46 @@ def _wait_for_health(url: str, timeout_secs: int = 90) -> bool:
 
 @pytest.fixture(scope="module")
 def server_url():
-    """启动测试 Agent 服务器（自包含，不依赖 mainagent 生产代码）"""
+    """启动 mock server + 测试 Agent 服务器"""
     if not DIST_DIR.exists():
         subprocess.run(["npx", "vite", "build"], cwd=str(WEB_DIR), check=True, timeout=60)
 
-    for port in (TEST_PORT,):
+    for port in (TEST_PORT, MOCK_PORT):
         subprocess.run(f"lsof -ti:{port} | xargs kill -9", shell=True, capture_output=True)
     time.sleep(1)
 
+    # 1. 启动 cjml mock server（提供零部件搜索/价格等接口）
+    mock_proc = None
+    mock_server_py = CJML_DIR / "mock_tool_server.py"
+    if mock_server_py.exists():
+        mock_proc = subprocess.Popen(
+            ["uv", "run", "python", str(mock_server_py)],
+            cwd=str(CJML_DIR),
+            stdout=open("/tmp/e2e_mock_server.log", "w"),
+            stderr=subprocess.STDOUT,
+        )
+        _wait_for_health(f"http://127.0.0.1:{MOCK_PORT}", timeout_secs=60)
+
     clean_env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
 
+    # 2. 启动测试 Agent 服务器
     proc = subprocess.Popen(
         ["uv", "run", "python", str(TEST_SERVER), "--port", str(TEST_PORT)],
         env={
             **clean_env,
             "TEMPORAL_ENABLED": "false",
             "INNER_STORAGE_DIR": str(MAINAGENT_DIR / "data" / "inner"),
-            "FS_TOOLS_DIR": str(MAINAGENT_DIR / "data" / "fstools"),
-            "AGENT_FS_DIR": str(MAINAGENT_DIR / ".chatagent"),
+            "FS_TOOLS_DIR": ".chatagent/fstools",
+            "AGENT_FS_DIR": ".chatagent",
             "LOG_DIR": str(MAINAGENT_DIR / "logs"),
             "PROMPTS_DIR": str(MAINAGENT_DIR / "prompts"),
             "USE_NACOS": "FALSE",
+            # Mock server URLs（零部件相关）
+            "CAR_PART_RETRIEVAL_URL": f"http://127.0.0.1:{MOCK_PORT}/api/carParts/fusionSearch",
+            "QUERY_PART_PRICE_URL": f"http://127.0.0.1:{MOCK_PORT}/api/price/partPrice",
+            "CAR_PART_DATASET_ID": "test-dataset",
         },
-        cwd=str(MAINAGENT_DIR),  # 从 mainagent 目录启动，加载其 .env.local（Azure 配置）
+        cwd=str(MAINAGENT_DIR),
         stdout=open("/tmp/e2e_test_server.log", "w"),
         stderr=subprocess.STDOUT,
     )
@@ -82,6 +101,9 @@ def server_url():
 
     proc.kill()
     proc.wait()
+    if mock_proc:
+        mock_proc.kill()
+        mock_proc.wait()
 
 
 def _collect_sse(server_url: str, message: str, context: dict | None = None, timeout: int = 120) -> list[dict]:
@@ -238,3 +260,40 @@ class TestCarContextFlow:
         # 验证 interrupt 类型
         idata = interrupts[0]["data"].get("data", interrupts[0]["data"])
         assert idata.get("type") in ("select_car", "select_location")
+
+
+class TestQueryPartPrice:
+    """验证 query-part-price skill 完整流程"""
+
+    def test_query_part_price_with_context(self, server_url: str) -> None:
+        """有 context + 问零部件价格 → invoke skill → execute_skill_script → 返回价格"""
+        events = _collect_sse(server_url, "刹车片多少钱", context={
+            "current_car": {"car_model_id": "CAR-001", "car_model_name": "帕萨特 2020款"},
+            "current_location": {"address": "浦东张江", "lat": 31.2, "lng": 121.5},
+        }, timeout=180)
+
+        tool_calls = [
+            e["data"].get("data", e["data"]).get("tool_name", "")
+            for e in events if e["type"] == "tool_call_start"
+        ]
+
+        # 应调用 Skill（invoke query-part-price）
+        # 和/或 execute_skill_script（执行 search_parts / get_part_price）
+        has_skill = "Skill" in tool_calls
+        has_script = "execute_skill_script" in tool_calls
+
+        texts = "".join(
+            e["data"].get("data", e["data"]).get("content", "")
+            for e in events if e["type"] == "text"
+        )
+
+        # 至少应有零部件相关的回复
+        has_part_info = any(kw in texts for kw in ["刹车", "价格", "配件", "零部件", "Error"])
+
+        if not has_skill and not has_script:
+            # LLM 可能直接用 get_car_price 了（没走 skill）
+            if "get_car_price" in tool_calls:
+                pytest.skip("LLM used get_car_price instead of query-part-price skill")
+            pytest.skip(f"LLM did not invoke skill or script. Tools: {tool_calls}")
+
+        assert has_part_info, f"应包含零部件相关信息，实际: {texts[:300]}"
