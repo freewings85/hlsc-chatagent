@@ -21,17 +21,19 @@ async def fuzzy_match_car_info(
     ctx: RunContext[AgentDeps],
     query: Annotated[str, Field(description="车型关键词，如'宝马X3'、'奔驰C级'、'卡罗拉'")],
 ) -> str:
-    session_id = ctx.deps.session_id
+    try:
+        session_id = ctx.deps.session_id
+        car_info = await fuzzy_match_car_service.match(query, session_id=session_id)
 
-    car_info = await fuzzy_match_car_service.match(query, session_id=session_id)
+        if not car_info:
+            return f"未找到匹配'{query}'的车型"
 
-    if not car_info:
-        return f"未找到匹配'{query}'的车型"
-
-    return (
-        f"匹配车型：car_model_id={car_info.car_model_id}, "
-        f"car_model_name={car_info.car_model_name}"
-    )
+        return (
+            f"匹配车型：car_model_id={car_info.car_model_id}, "
+            f"car_model_name={car_info.car_model_name}"
+        )
+    except Exception as e:
+        return f"Error: fuzzy_match_car_info failed - {e}"
 
 
 # 设置 tool description（从外部 prompt 文件加载）

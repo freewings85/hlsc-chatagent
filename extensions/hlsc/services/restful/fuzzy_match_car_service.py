@@ -47,27 +47,25 @@ class FuzzyMatchCarService:
 
         logger.info(f"[fuzzy_match_car] POST {url} payload={payload}")
 
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
 
-                logger.info(f"[fuzzy_match_car] status={response.status_code} data={data}")
+            logger.info(f"[fuzzy_match_car] status={response.status_code} data={data}")
 
-                if data.get("status") == 0:
-                    result = data.get("result")
-                    if result and result.get("car_key"):
-                        return CarInfo(
-                            car_model_id=result["car_key"],
-                            car_model_name=result.get("car_name", ""),
-                            vin_code=result.get("vin_code") or None,
-                        )
+            if data.get("status") == 0:
+                result = data.get("result")
+                if result and result.get("car_key"):
+                    return CarInfo(
+                        car_model_id=result["car_key"],
+                        car_model_name=result.get("car_name", ""),
+                        vin_code=result.get("vin_code") or None,
+                    )
                 return None
-
-        except Exception as e:
-            logger.error(f"[fuzzy_match_car] error: {e}")
-            return None
+            else:
+                error_msg = data.get("message", "未知错误")
+                raise RuntimeError(f"模糊匹配车型失败: {error_msg}")
 
 
 # 单例

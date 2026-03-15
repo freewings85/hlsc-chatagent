@@ -17,18 +17,20 @@ _DESCRIPTION = load_tool_prompt("list_user_cars")
 async def list_user_cars(
     ctx: RunContext[AgentDeps],
 ) -> str:
-    session_id = ctx.deps.session_id
+    try:
+        session_id = ctx.deps.session_id
+        cars = await list_user_cars_service.get_user_cars(session_id)
 
-    cars = await list_user_cars_service.get_user_cars(session_id)
+        if not cars:
+            return "用户没有绑定车辆"
 
-    if not cars:
-        return "用户没有绑定车辆"
-
-    lines = [
-        f"- car_model_id={c.car_model_id}, car_model_name={c.car_model_name}"
-        for c in cars
-    ]
-    return f"用户车库（共 {len(cars)} 辆）：\n" + "\n".join(lines)
+        lines = [
+            f"- car_model_id={c.car_model_id}, car_model_name={c.car_model_name}"
+            for c in cars
+        ]
+        return f"用户车库（共 {len(cars)} 辆）：\n" + "\n".join(lines)
+    except Exception as e:
+        return f"Error: list_user_cars failed - {e}"
 
 
 list_user_cars.__doc__ = _DESCRIPTION

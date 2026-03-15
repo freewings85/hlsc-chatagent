@@ -39,31 +39,25 @@ class ListUserCarsService:
 
         logger.info(f"[list_user_cars] POST {url} payload={payload}")
 
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
 
-                logger.info(f"[list_user_cars] status={response.status_code} count={len(data.get('result', []))}")
+            logger.info(f"[list_user_cars] status={response.status_code} count={len(data.get('result', []))}")
 
-                if data.get("status") == 0:
-                    return [
-                        CarInfo(
-                            car_model_id=c.get("car_key", ""),
-                            car_model_name=c.get("car_name", ""),
-                            vin_code=c.get("vin_code") or None,
-                        )
-                        for c in data.get("result", [])
-                    ]
-                else:
-                    error_msg = data.get("message", "未知错误")
-                    logger.error(f"[list_user_cars] API error: {error_msg}")
-                    return []
-
-        except Exception as e:
-            logger.error(f"[list_user_cars] error: {e}")
-            return []
+            if data.get("status") == 0:
+                return [
+                    CarInfo(
+                        car_model_id=c.get("car_key", ""),
+                        car_model_name=c.get("car_name", ""),
+                        vin_code=c.get("vin_code") or None,
+                    )
+                    for c in data.get("result", [])
+                ]
+            else:
+                error_msg = data.get("message", "未知错误")
+                raise RuntimeError(f"获取用户车辆失败: {error_msg}")
 
 
 # 单例
