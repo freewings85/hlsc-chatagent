@@ -535,3 +535,118 @@ class TestDataclasses:
         )
         assert event.question == "确认？"
         assert len(event.artifacts) == 1
+
+
+# ---- Tests: context 传递 ----
+
+
+class TestContextPassing:
+    @respx.mock
+    @pytest.mark.anyio
+    async def test_a2a_send_with_metadata(self) -> None:
+        """_a2a_send 传入 metadata 时，请求体应包含 metadata 字段。"""
+        url = "http://subagent:8101"
+        respx.post(f"{url}/a2a").respond(
+            json={"jsonrpc": "2.0", "id": "1", "result": {"id": "task-1"}},
+        )
+        metadata = {"request_context": {"vehicle_info": {"car_model_name": "宝马 325Li"}}}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            await _a2a_send(client, url, "ctx-1", "推荐保养", metadata=metadata)
+
+        req = respx.calls.last.request
+        body = json.loads(req.content)
+        msg = body["params"]["message"]
+        assert msg["metadata"] == metadata
+
+    @respx.mock
+    @pytest.mark.anyio
+    async def test_a2a_send_without_metadata(self) -> None:
+        """_a2a_send 不传 metadata 时，请求体不应有 metadata 字段。"""
+        url = "http://subagent:8101"
+        respx.post(f"{url}/a2a").respond(
+            json={"jsonrpc": "2.0", "id": "1", "result": {"id": "task-1"}},
+        )
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            await _a2a_send(client, url, "ctx-1", "hello")
+
+        req = respx.calls.last.request
+        body = json.loads(req.content)
+        msg = body["params"]["message"]
+        assert "metadata" not in msg
+
+    @respx.mock
+    @pytest.mark.anyio
+    async def test_call_subagent_passes_context_in_first_request(self) -> None:
+        """call_subagent 传入 context 时，首次 A2A 请求应在 metadata 中携带 request_context。"""
+        url = "http://subagent:8101"
+        _agent_card_cache[url] = "RecommendProject"
+
+        respx.post(f"{url}/a2a").respond(json=_a2a_response(
+            state="completed", text="推荐结果",
+        ))
+
+        ctx = _make_ctx()
+        vehicle_context = {
+            "vehicle_info": {
+                "car_model_name": "宝马 325Li",
+                "vin_code": "WBAJB1105MCJ12345",
+                "mileage_km": 35000.0,
+                "car_age_year": 2.5,
+            },
+        }
+        result = await call_subagent(
+            ctx, url=url, message="我的车该做什么保养", context=vehicle_context,
+        )
+        assert "推荐结果" in result
+
+        # 验证 A2A 请求体中包含 context
+        req = respx.calls.last.request
+        body = json.loads(req.content)
+        msg = body["params"]["message"]
+        assert "metadata" in msg
+        assert msg["metadata"]["request_context"] == vehicle_context
+
+    @respx.mock
+    @pytest.mark.anyio
+    async def test_call_subagent_no_context(self) -> None:
+        """call_subagent 不传 context 时，A2A 请求不应有 metadata。"""
+        url = "http://subagent:8101"
+        _agent_card_cache[url] = "TestAgent"
+
+        respx.post(f"{url}/a2a").respond(json=_a2a_response(
+            state="completed", text="ok",
+        ))
+
+        ctx = _make_ctx()
+        await call_subagent(ctx, url=url, message="query")
+
+        req = respx.calls.last.request
+        body = json.loads(req.content)
+        msg = body["params"]["message"]
+        assert "metadata" not in msg
+
+    @respx.mock
+    @pytest.mark.anyio
+    async def test_call_subagent_session_passes_context(self) -> None:
+        """call_subagent_session 展开模式也应传递 context。"""
+        url = "http://subagent:8101"
+        _agent_card_cache[url] = "RecommendProject"
+
+        respx.post(f"{url}/a2a").respond(json=_a2a_response(
+            state="completed", text="推荐完成",
+        ))
+
+        ctx = _make_ctx()
+        vehicle_context = {"vehicle_info": {"car_model_name": "大众 Polo"}}
+        async with call_subagent_session(
+            ctx, url=url, message="推荐保养", context=vehicle_context,
+        ) as session:
+            async for _event in session:
+                pass
+
+        assert "推荐完成" in session.result
+
+        req = respx.calls.last.request
+        body = json.loads(req.content)
+        msg = body["params"]["message"]
+        assert msg["metadata"]["request_context"] == vehicle_context
