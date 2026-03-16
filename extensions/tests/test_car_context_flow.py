@@ -266,7 +266,7 @@ class TestQueryPartPrice:
     """验证 query-part-price skill 完整流程"""
 
     def test_query_part_price_with_context(self, server_url: str) -> None:
-        """有 context + 问零部件价格 → invoke skill → execute_skill_script → 返回价格"""
+        """有 context + 问零部件价格 → invoke skill → bash 执行脚本 → 返回价格"""
         events = _collect_sse(server_url, "刹车片多少钱", context={
             "current_car": {"car_model_id": "CAR-001", "car_model_name": "帕萨特 2020款"},
             "current_location": {"address": "浦东张江", "lat": 31.2, "lng": 121.5},
@@ -278,9 +278,9 @@ class TestQueryPartPrice:
         ]
 
         # 应调用 Skill（invoke query-part-price）
-        # 和/或 execute_skill_script（执行 search_parts / get_part_price）
+        # 和/或 bash（执行 search_parts / get_part_price 脚本）
         has_skill = "Skill" in tool_calls
-        has_script = "execute_skill_script" in tool_calls
+        has_script = "bash" in tool_calls
 
         texts = "".join(
             e["data"].get("data", e["data"]).get("content", "")

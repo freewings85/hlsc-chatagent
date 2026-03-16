@@ -15,10 +15,13 @@ description: 当用户想查找附近的汽修门店时（如"附近有什么修
 
 ### Step 1：搜索门店
 
-调用 `execute_skill_script`：
-- skill_name: `search-nearby-shops`
-- script_path: `scripts/search_shops.py`
-- args: `--keyword <关键词> --lat <纬度> --lng <经纬度> --topk <数量>`
+使用 bash 执行：
+
+```bash
+python scripts/search_shops.py --keyword <关键词> --lat <纬度> --lng <经度> --topk <数量>
+```
+
+工作目录为当前 skill 目录（`skills/search-nearby-shops/`）。
 
 keyword 可以是用户提到的门店类型或特长（如"刹车专修"、"奔驰专修"），不指定则搜索全部。
 topk 默认 5，用户说"多找几家"可以加大。

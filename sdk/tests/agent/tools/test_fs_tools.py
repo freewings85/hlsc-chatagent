@@ -450,6 +450,6 @@ class TestCreateDefaultToolMap:
         assert "grep" in tool_map
         assert "bash" in tool_map
         assert "task" in tool_map
-        assert "execute_skill_script" in tool_map
+        assert "execute_skill_script" not in tool_map
         assert "ask_user" not in tool_map
-        assert len(tool_map) == 8
+        assert len(tool_map) == 7

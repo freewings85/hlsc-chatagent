@@ -52,7 +52,7 @@ def create_agent_app() -> AgentApp:
 
     agent = Agent(
         prompt_loader=prompt_loader,
-        tools=ToolConfig(manual=tool_map, exclude=["write", "edit", "bash"]),
+        tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
         context_formatter=HlscContextFormatter(),
     )
 
