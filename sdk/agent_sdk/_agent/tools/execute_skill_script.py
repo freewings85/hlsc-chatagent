@@ -2,11 +2,22 @@
 
 只允许执行 {AGENT_FS_DIR}/fstools/skills/{skill_name}/scripts/ 下的脚本，
 不能执行任意命令。安全替代通用 bash 工具。
+
+Python 环境配置：
+  SKILL_PYTHON 环境变量指定 Python 解释器路径。
+  不设则使用当前 agent 进程的 Python（sys.executable）。
+
+  示例：
+    SKILL_PYTHON=python          # Windows 默认
+    SKILL_PYTHON=python3         # Linux 默认
+    SKILL_PYTHON=/path/to/.venv/bin/python  # 指定 venv
 """
 
 from __future__ import annotations
 
 import os
+import platform
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -18,10 +29,48 @@ from agent_sdk._agent.executor import get_executor
 from agent_sdk.logging import log_tool_start, log_tool_end
 
 
+def _get_python() -> str:
+    """获取 Python 解释器路径。
+
+    优先级：SKILL_PYTHON 环境变量 > sys.executable
+    """
+    env_python = os.getenv("SKILL_PYTHON")
+    if env_python:
+        return env_python
+    # 使用当前进程的 Python（跨平台，一定存在）
+    return sys.executable
+
+
+def _build_command(full_path: Path, args: str) -> str:
+    """根据文件类型和平台构建执行命令。"""
+    suffix = full_path.suffix
+    # 路径加引号，防止空格等特殊字符问题
+    quoted_path = f'"{full_path}"'
+
+    if suffix == ".py":
+        python = _get_python()
+        return f'{python} {quoted_path} {args}'.strip()
+    elif suffix == ".sh":
+        if platform.system() == "Windows":
+            # Windows 上尝试用 Git Bash 或 WSL
+            git_bash = Path("C:/Program Files/Git/bin/bash.exe")
+            if git_bash.exists():
+                return f'"{git_bash}" {quoted_path} {args}'.strip()
+            # 回退：用 PowerShell 执行（可能不兼容）
+            return f'powershell -File {quoted_path} {args}'.strip()
+        return f'bash {quoted_path} {args}'.strip()
+    elif suffix == ".ps1":
+        return f'powershell -ExecutionPolicy Bypass -File {quoted_path} {args}'.strip()
+    elif suffix == ".bat" or suffix == ".cmd":
+        return f'cmd /c {quoted_path} {args}'.strip()
+    else:
+        return f'{quoted_path} {args}'.strip()
+
+
 async def execute_skill_script(
     ctx: RunContext[AgentDeps],
-    skill_name: Annotated[str, Field(description="skill 名称，如 'confirm-car-info'")],
-    script_path: Annotated[str, Field(description="脚本在 skill 目录下的相对路径，如 'scripts/query.py'")],
+    skill_name: Annotated[str, Field(description="skill 名称，如 'query-part-price'")],
+    script_path: Annotated[str, Field(description="脚本在 skill 目录下的相对路径，如 'scripts/search_parts.py'")],
     args: Annotated[str, Field(description="传给脚本的参数")] = "",
 ) -> str:
     """执行指定 skill 目录下的脚本。
@@ -47,7 +96,7 @@ async def execute_skill_script(
             full_path.relative_to(skills_root.resolve())
         except ValueError:
             log_tool_end("execute_skill_script", sid, rid, exc=ValueError("路径越界"))
-            return f"Error: 脚本路径不在 skills 目录内"
+            return "Error: 脚本路径不在 skills 目录内"
 
         if not full_path.exists():
             log_tool_end("execute_skill_script", sid, rid, exc=FileNotFoundError(str(full_path)))
@@ -57,14 +106,7 @@ async def execute_skill_script(
             log_tool_end("execute_skill_script", sid, rid, exc=ValueError("不是文件"))
             return f"Error: {script_path} 不是文件"
 
-        # 根据文件类型选择执行命令
-        suffix = full_path.suffix
-        if suffix == ".py":
-            command = f"python3 {full_path} {args}".strip()
-        elif suffix == ".sh":
-            command = f"bash {full_path} {args}".strip()
-        else:
-            command = f"{full_path} {args}".strip()
+        command = _build_command(full_path, args)
 
         executor = get_executor()
         result = await executor.execute(
