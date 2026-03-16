@@ -110,7 +110,11 @@ class ChatAgentExecutor(AgentExecutor):
         # 新任务：启动 agent loop
         await updater.start_work()
         session_id = context_id
-        user_id = context.metadata.get("user_id", "a2a") if context.metadata else "a2a"
+        metadata = context.metadata or {}
+        user_id = metadata.get("user_id", "a2a")
+
+        # 从 A2A message metadata 中提取 request_context（由 call_subagent 传入）
+        request_context = metadata.get("request_context")
 
         internal_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
 
@@ -139,6 +143,7 @@ class ChatAgentExecutor(AgentExecutor):
                 emitter=emitter,
                 temporal_client=temporal_client,
                 fs_tools_backend=fs_tools_backend,
+                request_context=request_context,
             ),
             name=f"a2a-agent-{context.task_id}",
         )

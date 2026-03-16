@@ -16,6 +16,7 @@ from src.config import DIAGNOSE_AGENT_URL
 async def call_diagnose_agent(
     ctx: RunContext[AgentDeps],
     query: Annotated[str, Field(description="包含车型信息和故障描述的完整查询")],
+    car_model_id: str
 ) -> str:
     """调用诊断 Agent 分析汽车故障原因。
 

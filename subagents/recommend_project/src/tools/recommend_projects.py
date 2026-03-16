@@ -8,14 +8,14 @@ from __future__ import annotations
 import json
 import math
 import os
-from typing import Any, Optional
+from typing import Any
 
 import httpx
-from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end, log_http_request, log_http_response
+from src.recommend_context import VehicleInfo
 
 _API_PATH: str = "/project/maintainProjectTreeByCarKey"
 
@@ -26,15 +26,6 @@ def _get_datamanager_url() -> str:
         "service.ai.datamanager.url",
         os.getenv("SERVICE_AI_DATAMANAGER_URL", "http://192.168.100.108:50400/service_ai_datamanager"),
     )
-
-
-class VehicleInfo(BaseModel):
-    """车辆信息"""
-    car_model_name: str = Field(default="", description="车型名称，如 2024款 宝马 325Li")
-    car_key: str = Field(default="", description="车型编码（carKey），用于精确匹配项目")
-    vin_code: str = Field(default="", description="VIN 码，如 WBAJB1105MCJ12345")
-    mileage_km: Optional[float] = Field(default=None, description="当前里程数（千米），如 35000.0")
-    car_age_year: Optional[float] = Field(default=None, description="车龄（年），如 2.5")
 
 
 async def recommend_projects(

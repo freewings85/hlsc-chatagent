@@ -62,12 +62,14 @@ class SubagentSession:
         message: str,
         timeout: float,
         agent_name: str,
+        context: dict[str, Any] | None = None,
     ) -> None:
         self._ctx = ctx
         self._url = url
         self._message = message
         self._timeout = timeout
         self.agent_name: str = agent_name
+        self._context = context
         self.result: str = ""
 
         # 内部状态
@@ -94,11 +96,16 @@ class SubagentSession:
 
         context_id = f"sa-{session_id}-{uuid4().hex[:8]}"
 
+        # 构造 metadata（首次调用带 context）
+        metadata: dict[str, Any] | None = None
+        if self._context:
+            metadata = {"request_context": self._context}
+
         # 使用自定义 transport 绕过 HTTP_PROXY（A2A 调用都是内网地址）
         transport = httpx.AsyncHTTPTransport()
         async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(self._timeout)) as client:
             # 首次 A2A 调用
-            result = await _a2a_send(client, self._url, context_id, self._message)
+            result = await _a2a_send(client, self._url, context_id, self._message, metadata=metadata)
 
             while True:
                 task_state = result.get("status", {}).get("state", "")
@@ -296,6 +303,7 @@ async def _a2a_send(
     context_id: str,
     message: str,
     task_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """发送 A2A message/send 请求。"""
     msg: dict[str, Any] = {
@@ -306,6 +314,8 @@ async def _a2a_send(
     }
     if task_id:
         msg["taskId"] = task_id
+    if metadata:
+        msg["metadata"] = metadata
 
     request_body = {
         "jsonrpc": "2.0",
@@ -345,6 +355,7 @@ async def call_subagent_session(
     *,
     url: str,
     message: str,
+    context: dict[str, Any] | None = None,
     timeout: float = 300.0,
 ) -> AsyncIterator[SubagentSession]:
     """展开模式：async with + async for 可介入 A2A 过程。
@@ -363,13 +374,14 @@ async def call_subagent_session(
         ctx: Pydantic AI RunContext
         url: subagent 的 base URL
         message: 发给 subagent 的消息
+        context: 请求上下文（车辆、位置等），通过 A2A metadata 传递给 subagent
         timeout: HTTP 超时（秒）
 
     Yields:
         SubagentSession 对象，支持 async for 迭代事件
     """
     agent_name = await _fetch_agent_name(url)
-    session = SubagentSession(ctx, url, message, timeout, agent_name)
+    session = SubagentSession(ctx, url, message, timeout, agent_name, context=context)
     await session._init()
     yield session
 
@@ -379,6 +391,7 @@ async def call_subagent(
     *,
     url: str,
     message: str,
+    context: dict[str, Any] | None = None,
     timeout: float = 300.0,
 ) -> str:
     """一行调用 subagent，返回最终结果。
@@ -390,12 +403,13 @@ async def call_subagent(
         ctx: Pydantic AI RunContext，提供 deps（emitter, temporal_client 等）
         url: subagent 的 base URL（e.g. "http://localhost:8101"）
         message: 发给 subagent 的消息
+        context: 请求上下文（车辆、位置等），通过 A2A metadata 传递给 subagent
         timeout: HTTP 超时（秒）
 
     Returns:
         subagent 的最终结果字符串
     """
-    async with call_subagent_session(ctx, url=url, message=message, timeout=timeout) as session:
+    async with call_subagent_session(ctx, url=url, message=message, context=context, timeout=timeout) as session:
         async for _event in session:
             pass  # 默认行为在迭代器内部自动执行
     return session.result
