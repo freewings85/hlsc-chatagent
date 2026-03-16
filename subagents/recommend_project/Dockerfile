@@ -35,6 +35,10 @@ COPY subagents/recommend_project/server.py subagents/recommend_project/
 COPY subagents/recommend_project/src subagents/recommend_project/src
 COPY subagents/recommend_project/prompts subagents/recommend_project/prompts
 
+# 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
+COPY subagents/recommend_project/.env.test subagents/recommend_project/.env.test.nacos subagents/recommend_project/
+COPY subagents/recommend_project/.env.uat subagents/recommend_project/.env.uat.nacos subagents/recommend_project/
+
 # 运行时目录（生产环境应挂载为 volume）
 RUN mkdir -p subagents/recommend_project/.chatagent subagents/recommend_project/logs subagents/recommend_project/data
 
