@@ -15,8 +15,8 @@ from src.services.restful.car_fault_retrieval_service import (
     FaultItem,
     car_fault_retrieval_service,
 )
-from src.services.restful.get_part_primary_service import get_main_part_ids
-from src.services.restful.get_project_bycar_service import get_project_ids_by_car
+from hlsc.services.restful.get_part_primary_service import get_main_part_ids
+from hlsc.services.restful.get_project_bycar_service import get_project_ids_by_car
 
 
 async def search_fault_symptoms(

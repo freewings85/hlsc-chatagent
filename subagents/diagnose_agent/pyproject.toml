@@ -5,6 +5,7 @@ description = "汽车故障诊断 Subagent — 从故障知识库检索并分析
 requires-python = ">=3.12"
 dependencies = [
     "agent-sdk",
+    "hlsc-extensions",
     "httpx>=0.27",
 ]
 
@@ -28,3 +29,4 @@ dev = [
 
 [tool.uv.sources]
 agent-sdk = { path = "../../sdk", editable = true }
+hlsc-extensions = { path = "../../extensions", editable = true }
