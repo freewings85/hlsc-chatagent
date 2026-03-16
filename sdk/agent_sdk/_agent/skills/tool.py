@@ -19,23 +19,6 @@ from agent_sdk._agent.deps import AgentDeps
 from agent_sdk._agent.skills.invoked_store import InvokedSkill
 
 
-def _load_config_env(skill_dir: Path) -> dict[str, str]:
-    """从 skill 目录的 config.env 加载环境变量。"""
-    env_file = skill_dir / "config.env"
-    if not env_file.is_file():
-        return {}
-    env: dict[str, str] = {}
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        env[key.strip()] = value.strip()
-    return env
-
-
 async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -> str:
     """Execute a skill within the main session.
 
@@ -72,16 +55,11 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
             invoked_at=datetime.now(timezone.utc),
         ))
 
-    # config.env 加载
     content = entry.content
     skill_dir_hint = ""
     if entry.source_path is not None:
         skill_dir = entry.source_path.parent.resolve()
         skill_dir_hint = f"\n\n<skill-dir>{skill_dir}</skill-dir>"
-        # 加载 skill 环境变量到 deps（bash 执行时注入）
-        skill_env = _load_config_env(skill_dir)
-        if skill_env:
-            ctx.deps.skill_env.update(skill_env)
 
     # metadata tag（参照 Claude Code nI8()）
     metadata_tag = (

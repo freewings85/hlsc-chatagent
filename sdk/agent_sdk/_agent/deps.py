@@ -48,8 +48,6 @@ class AgentDeps:
     invoked_skill_store: InvokedSkillStore | None = None
     # 事件发射器（interrupt 等工具需要直接发出 SSE 事件）
     emitter: EventEmitter | None = None
-    # Skill 环境变量（invoke_skill 从 config.env 加载，bash 执行时注入）
-    skill_env: dict[str, str] = field(default_factory=dict)
     # 请求上下文（位置、车辆信息等），工具可通过 ctx.deps.request_context 读取
     request_context: RequestContext | None = None
     # Temporal client（call_interrupt 机制用，必须配置）

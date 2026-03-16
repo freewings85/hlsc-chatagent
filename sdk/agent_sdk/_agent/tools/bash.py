@@ -66,10 +66,8 @@ async def bash(
     # bash 工作目录
     cwd: str | None = get_fs_config().bash_cwd
 
-    # 环境变量：PATH 注入 + skill 环境变量
+    # 环境变量：PATH 注入
     env: dict[str, str] = {"PATH": _build_path_env()}
-    if ctx.deps.skill_env:
-        env.update(ctx.deps.skill_env)
 
     executor = get_executor()
     result = await executor.execute(command, timeout=effective_timeout, cwd=cwd, env=env)
