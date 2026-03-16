@@ -6,7 +6,7 @@ when_to_use: "Use when ... Triggers on: my skill, ..."
 
 # My Skill
 
-这是一个示例 Skill 模板。将本目录复制到 `.chatagent/skills/` 下即可生效。
+这是一个示例 Skill 模板。将本目录复制到 `.chatagent/fstools/skills/` 下即可生效。
 
 ## 使用说明
 

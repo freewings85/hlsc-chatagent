@@ -12,4 +12,4 @@ This is a bundled example skill used to verify that the skill system is working 
 
 1. Acknowledge that the skill was invoked successfully.
 2. Report the skill system status: registry loaded, invoked_store active.
-3. Remind the user they can create their own skills in `.chatagent/skills/` or `~/.chatagent/skills/`.
+3. Remind the user they can create their own skills in `.chatagent/fstools/skills/`.

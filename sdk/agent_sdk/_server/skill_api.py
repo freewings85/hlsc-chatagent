@@ -148,7 +148,7 @@ async def list_skills() -> list[SkillInfo]:
 async def install_skill(req: InstallRequest) -> InstallResponse:
     """从 URL 安装 skill。
 
-    下载 SKILL.md → 解析验证 → 通过 skills backend 写入 {name}/SKILL.md。
+    下载 SKILL.md → 解析验证 → 通过 agent_fs backend 写入 fstools/skills/{name}/SKILL.md。
     """
     # 1. 解析 URL
     try:
@@ -178,13 +178,13 @@ async def install_skill(req: InstallRequest) -> InstallResponse:
             detail="SKILL.md 格式无效：缺少 name 或 description 字段，或无 YAML frontmatter",
         )
 
-    # 4. 通过 agent_fs backend 写入 skills/{name}/SKILL.md
+    # 4. 通过 agent_fs backend 写入 fstools/skills/{name}/SKILL.md
     backend = get_agent_fs_backend()
-    skill_path = f"/skills/{entry.name}/SKILL.md"
+    skill_path = f"/fstools/skills/{entry.name}/SKILL.md"
 
     # 先删除旧版本（如果存在），再写入新内容
-    if await backend.aexists(f"/skills/{entry.name}"):
-        await backend.adelete(f"/skills/{entry.name}")
+    if await backend.aexists(f"/fstools/skills/{entry.name}"):
+        await backend.adelete(f"/fstools/skills/{entry.name}")
 
     upload_results = await backend.aupload_files(
         [(skill_path, content.encode("utf-8"))]
@@ -214,8 +214,8 @@ async def install_skill(req: InstallRequest) -> InstallResponse:
 async def uninstall_skill(name: str) -> InstallResponse:
     """卸载 project 级 skill（不允许卸载 bundled）。"""
     backend = get_agent_fs_backend()
-    skill_dir = f"/skills/{name}"
-    skill_file = f"/skills/{name}/SKILL.md"
+    skill_dir = f"/fstools/skills/{name}"
+    skill_file = f"/fstools/skills/{name}/SKILL.md"
 
     if not await backend.aexists(skill_dir):
         raise HTTPException(status_code=404, detail=f"Skill '{name}' 未安装（project 级）")
@@ -352,7 +352,7 @@ async def upload_skill(file: UploadFile) -> InstallResponse:
 
     # 7. 写入 backend
     backend = get_agent_fs_backend()
-    skill_dir = f"/skills/{entry.name}"
+    skill_dir = f"/fstools/skills/{entry.name}"
 
     # 先删除旧版本
     if await backend.aexists(skill_dir):
@@ -364,7 +364,7 @@ async def upload_skill(file: UploadFile) -> InstallResponse:
         relative = name[len(strip_prefix):] if strip_prefix else name
         if not relative:
             continue
-        dest_path = f"/skills/{entry.name}/{relative}"
+        dest_path = f"/fstools/skills/{entry.name}/{relative}"
         content = zf.read(name)
         results = await backend.aupload_files([(dest_path, content)])
         if results[0].error:

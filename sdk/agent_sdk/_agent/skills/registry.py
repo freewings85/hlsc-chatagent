@@ -245,7 +245,7 @@ class SkillRegistry:
 def get_default_skill_dirs() -> list[Path]:
     """返回默认的 skill 目录列表（优先级从低到高）。
 
-    两层：bundled（内置）→ project（AGENT_FS_DIR/skills）。
+    两层：bundled（内置）→ project（AGENT_FS_DIR/fstools/skills）。
     """
     from agent_sdk.config import SKILL_DIRS
 

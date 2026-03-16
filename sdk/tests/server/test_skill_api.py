@@ -147,13 +147,13 @@ class TestSkillApiEndpoints:
             assert data["skill"]["name"] == "test-install"
 
             # Verify file on disk via backend
-            assert skills_backend.exists("/skills/test-install/SKILL.md")
+            assert skills_backend.exists("/fstools/skills/test-install/SKILL.md")
 
             # Uninstall
             resp2 = client.delete("/api/skills/test-install")
             assert resp2.status_code == 200
             assert resp2.json()["success"] is True
-            assert not skills_backend.exists("/skills/test-install")
+            assert not skills_backend.exists("/fstools/skills/test-install")
 
     def test_install_invalid_skill_content(self, client: TestClient, tmp_path: Path) -> None:
         """下载到的内容不是有效 SKILL.md 时返回 400。"""

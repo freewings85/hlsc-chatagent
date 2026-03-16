@@ -43,8 +43,8 @@ SDK 自动从 `{AGENT_FS_DIR}/mcp.json` 加载，无需在代码中配置。
 
 ## Skills
 
-每个 Skill 是 `skills/` 下的一个子目录，包含 `SKILL.md` 文件（frontmatter + 指令）。
+每个 Skill 是 `fstools/skills/` 下的一个子目录，包含 `SKILL.md` 文件（frontmatter + 指令）。
 
-SDK 自动从 `{AGENT_FS_DIR}/skills/` 发现并加载所有 Skill，无需在代码中配置。
+SDK 自动从 `{AGENT_FS_DIR}/fstools/skills/` 发现并加载所有 Skill，无需在代码中配置。
 
 更多 Skill 编写示例参考 Anthropic 官方仓库：https://github.com/anthropics/skills
