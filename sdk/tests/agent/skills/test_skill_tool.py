@@ -154,28 +154,30 @@ class TestInvokeSkillPersistence:
         assert recorded.name == "review"
 
 
-class TestInvokeSkillBaseDir:
-    async def test_basedir_substitution(self) -> None:
-        """{baseDir} 被替换为 SKILL.md 所在目录"""
+class TestInvokeSkillDir:
+    async def test_skill_dir_injected(self) -> None:
+        """有 source_path 时注入 <skill-dir> 标签"""
         entry = make_entry(
             "bidding",
-            'Run: bash("python {baseDir}/scripts/prepare.py")',
+            'Run: bash("python scripts/prepare.py")',
             source_path=Path("/skills/publish-bidding/SKILL.md"),
         )
         registry = make_registry(entry)
         ctx = make_ctx(registry=registry)
         result = await invoke_skill(ctx, "bidding")
-        assert "/skills/publish-bidding/scripts/prepare.py" in result
-        assert "{baseDir}" not in result
+        assert "<skill-dir>" in result
+        assert "/skills/publish-bidding</skill-dir>" in result
+        # 原始内容不被修改
+        assert "python scripts/prepare.py" in result
 
-    async def test_no_basedir_when_no_source_path(self) -> None:
-        """{baseDir} 不替换（source_path 为 None 时保持原样）"""
+    async def test_no_skill_dir_when_no_source_path(self) -> None:
+        """source_path 为 None 时不注入 <skill-dir>"""
         entry = make_entry(
             "test",
-            "path: {baseDir}/scripts/run.py",
+            "Run scripts/run.py",
             source_path=None,
         )
         registry = make_registry(entry)
         ctx = make_ctx(registry=registry)
         result = await invoke_skill(ctx, "test")
-        assert "{baseDir}" in result
+        assert "<skill-dir>" not in result
