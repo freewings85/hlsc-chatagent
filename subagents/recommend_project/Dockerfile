@@ -44,7 +44,7 @@ RUN mkdir -p subagents/recommend_project/.chatagent subagents/recommend_project/
 
 WORKDIR /app/subagents/recommend_project
 
-EXPOSE 8103
+EXPOSE 8105
 
 ENV ACTIVE=test
 

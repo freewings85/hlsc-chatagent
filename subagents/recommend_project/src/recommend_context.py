@@ -13,7 +13,7 @@ class VehicleInfo(BaseModel):
     """车辆信息（由 MainAgent 通过 A2A context 传入）"""
 
     car_model_name: str = Field(default="", description="车型名称，如 2024款 宝马 325Li")
-    car_key: str = Field(default="", description="车型编码（carKey），用于精确匹配项目")
+    car_model_id: str = Field(default="", description="车型编码，用于精确匹配项目")
     vin_code: str = Field(default="", description="VIN 码，如 WBAJB1105MCJ12345")
     mileage_km: Optional[float] = Field(default=None, description="当前里程数（千米），如 35000.0")
     car_age_year: Optional[float] = Field(default=None, description="车龄（年），如 2.5")
@@ -48,8 +48,8 @@ class RecommendContextFormatter(ContextFormatter):
         parts: list[str] = []
         if v.car_model_name:
             parts.append(f"car_model_name={v.car_model_name}")
-        if v.car_key:
-            parts.append(f"car_key={v.car_key}")
+        if v.car_model_id:
+            parts.append(f"car_model_id={v.car_model_id}")
         if v.vin_code:
             parts.append(f"vin_code={v.vin_code}")
         if v.mileage_km is not None:

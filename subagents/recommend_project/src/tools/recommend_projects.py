@@ -1,6 +1,6 @@
 """RecommendProject Subagent 工具集。
 
-- recommend_projects: 根据车辆信息和推荐分类，调用 maintainProjectTreeByCarKey 获取推荐项目
+- recommend-projects: 根据车辆信息和推荐分类，获取推荐项目
 """
 
 from __future__ import annotations
@@ -14,7 +14,12 @@ import httpx
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
-from agent_sdk.logging import log_tool_start, log_tool_end, log_http_request, log_http_response
+from agent_sdk.logging import (
+    log_tool_start,
+    log_tool_end,
+    log_http_request,
+    log_http_response,
+)
 from src.recommend_context import VehicleInfo
 
 _API_PATH: str = "/project/maintainProjectTreeByCarKey"
@@ -24,7 +29,10 @@ def _get_datamanager_url() -> str:
     """从环境变量获取 datamanager 服务地址（Nacos 会自动注入）。"""
     return os.getenv(
         "service.ai.datamanager.url",
-        os.getenv("SERVICE_AI_DATAMANAGER_URL", "http://192.168.100.108:50400/service_ai_datamanager"),
+        os.getenv(
+            "SERVICE_AI_DATAMANAGER_URL",
+            "http://192.168.100.108:50400/service_ai_datamanager",
+        ),
     )
 
 
@@ -46,10 +54,17 @@ async def recommend_projects(
         推荐的养车项目树 JSON。
     """
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
-    log_tool_start("recommend_projects", sid, rid, {
-        "car_key": vehicle_info.car_key, "mileage": vehicle_info.mileage_km,
-        "age": vehicle_info.car_age_year, "categories": category_ids,
-    })
+    log_tool_start(
+        "recommend_projects",
+        sid,
+        rid,
+        {
+            "car_model_id": vehicle_info.car_model_id,
+            "mileage": vehicle_info.mileage_km,
+            "age": vehicle_info.car_age_year,
+            "categories": category_ids,
+        },
+    )
 
     try:
         # 将车龄（年）转换为月
@@ -64,7 +79,7 @@ async def recommend_projects(
 
         # 调用 maintainProjectTreeByCarKey 接口
         tree: dict[str, Any] = await _query_maintain_project_tree(
-            car_key=vehicle_info.car_key,
+            car_key=vehicle_info.car_model_id,
             category_ids=category_ids,
             month=month,
             mileage=mileage,
@@ -130,10 +145,18 @@ async def _query_maintain_project_tree(
         "mileage": mileage,
     }
 
-    log_http_request(url, "POST", session_id, request_id, {
-        "carKey": car_key, "categoryIds": category_ids,
-        "month": month, "mileage": mileage,
-    })
+    log_http_request(
+        url,
+        "POST",
+        session_id,
+        request_id,
+        {
+            "carKey": car_key,
+            "categoryIds": category_ids,
+            "month": month,
+            "mileage": mileage,
+        },
+    )
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
         try:
@@ -150,7 +173,7 @@ async def _query_maintain_project_tree(
             raise RuntimeError(f"查询推荐项目接口调用失败: {exc}") from exc
 
     response_json: dict[str, Any] = resp.json()
-    log_http_response(url, resp.status_code, session_id, request_id)
+    log_http_response(resp.status_code, session_id, request_id)
 
     status: int | None = response_json.get("status")
     if status != 0:
@@ -164,10 +187,6 @@ RECOMMEND_PROJECT_TOOLS: list[str] = ["recommend_projects"]
 
 
 def create_recommend_project_tool_map() -> dict[str, Any]:
-    """创建 recommend_project 工具映射。"""
-    from src.tools.query_car_key import query_car_key
-
     return {
-        "query_car_key": query_car_key,
-        "recommend_projects": recommend_projects,
+        "recommend-projects": recommend_projects,
     }
