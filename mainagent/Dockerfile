@@ -39,16 +39,14 @@ COPY mainagent/server.py mainagent/
 COPY mainagent/src mainagent/src
 COPY mainagent/prompts mainagent/prompts
 
-# Skills（内置到镜像，生产环境可通过 NFS 覆盖挂载）
-COPY mainagent/.chatagent mainagent/.chatagent
-
 # 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
 # 不拷贝 .env.local（开发用）
 COPY mainagent/.env.test mainagent/.env.test.nacos mainagent/
 COPY mainagent/.env.uat mainagent/.env.uat.nacos mainagent/
 
 # 运行时目录（生产环境应挂载为 volume）
-RUN mkdir -p mainagent/logs mainagent/data/inner
+# 运行时目录（.chatagent 和 data 生产环境通过 NFS 挂载，skills 通过 Web 上传）
+RUN mkdir -p mainagent/.chatagent/fstools/skills mainagent/logs mainagent/data/inner
 
 WORKDIR /app/mainagent
 
