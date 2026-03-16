@@ -649,6 +649,13 @@ function InterruptBlock({ card, onReply, disabled }: {
 }) {
   const [replyText, setReplyText] = useState('')
   const [replied, setReplied] = useState(false)
+  // select_car fields
+  const [carModelId, setCarModelId] = useState('')
+  const [carModelName, setCarModelName] = useState('')
+  // select_location fields
+  const [address, setAddress] = useState('')
+  const [lat, setLat] = useState('')
+  const [lng, setLng] = useState('')
 
   const handleReply = (text: string) => {
     onReply(text)
@@ -671,6 +678,86 @@ function InterruptBlock({ card, onReply, disabled }: {
     )
   }
 
+  const renderActions = () => {
+    if (card.type === 'confirm') {
+      return (
+        <>
+          <button className="btn-confirm" onClick={() => handleReply('确认')} disabled={disabled}>确认</button>
+          <button className="btn-cancel" onClick={() => handleReply('取消')} disabled={disabled}>取消</button>
+        </>
+      )
+    }
+
+    if (card.type === 'select_car') {
+      const canSubmit = carModelId.trim() && carModelName.trim()
+      const handleSubmit = () => {
+        if (!canSubmit) return
+        handleReply(JSON.stringify({ car_model_id: carModelId.trim(), car_model_name: carModelName.trim() }))
+      }
+      return (
+        <div className="interrupt-form">
+          <div className="interrupt-form-field">
+            <label>车型编码 (car_model_id)</label>
+            <input placeholder="如 bmw-325li-2024" value={carModelId} onChange={e => setCarModelId(e.target.value)} disabled={disabled} />
+          </div>
+          <div className="interrupt-form-field">
+            <label>车型名称 (car_model_name)</label>
+            <input placeholder="如 2024款 宝马 325Li" value={carModelName} onChange={e => setCarModelName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleSubmit() }} disabled={disabled} />
+          </div>
+          <div className="interrupt-form-buttons">
+            <button className="btn-confirm" onClick={handleSubmit} disabled={disabled || !canSubmit}>确认车型</button>
+            <button className="btn-cancel" onClick={() => handleReply('取消')} disabled={disabled}>取消</button>
+          </div>
+        </div>
+      )
+    }
+
+    if (card.type === 'select_location') {
+      const canSubmit = address.trim() && lat.trim() && lng.trim()
+      const handleSubmit = () => {
+        if (!canSubmit) return
+        handleReply(JSON.stringify({ address: address.trim(), lat: parseFloat(lat), lng: parseFloat(lng) }))
+      }
+      return (
+        <div className="interrupt-form">
+          <div className="interrupt-form-field">
+            <label>地址</label>
+            <input placeholder="如 上海市浦东新区张江高科" value={address} onChange={e => setAddress(e.target.value)} disabled={disabled} />
+          </div>
+          <div className="interrupt-form-field">
+            <label>纬度 (lat)</label>
+            <input type="number" step="any" placeholder="如 31.2304" value={lat} onChange={e => setLat(e.target.value)} disabled={disabled} />
+          </div>
+          <div className="interrupt-form-field">
+            <label>经度 (lng)</label>
+            <input type="number" step="any" placeholder="如 121.4737" value={lng} onChange={e => setLng(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleSubmit() }} disabled={disabled} />
+          </div>
+          <div className="interrupt-form-buttons">
+            <button className="btn-confirm" onClick={handleSubmit} disabled={disabled || !canSubmit}>确认位置</button>
+            <button className="btn-cancel" onClick={() => handleReply('取消')} disabled={disabled}>取消</button>
+          </div>
+        </div>
+      )
+    }
+
+    // 默认：通用文本输入
+    return (
+      <>
+        <input
+          className="interrupt-input"
+          placeholder="输入回复..."
+          value={replyText}
+          onChange={e => setReplyText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && replyText.trim()) handleReply(replyText.trim()) }}
+          disabled={disabled}
+        />
+        <button className="btn-confirm" onClick={() => handleReply(replyText.trim() || '确认')} disabled={disabled}>发送</button>
+      </>
+    )
+  }
+
   return (
     <div className="interrupt-block" data-interrupt-type={card.type} data-interrupt-key={card.interruptKey}>
       <div className="interrupt-header">
@@ -682,24 +769,7 @@ function InterruptBlock({ card, onReply, disabled }: {
       {renderData()}
       {!replied && (
         <div className="interrupt-actions">
-          {card.type === 'confirm' ? (
-            <>
-              <button className="btn-confirm" onClick={() => handleReply('确认')} disabled={disabled}>确认</button>
-              <button className="btn-cancel" onClick={() => handleReply('取消')} disabled={disabled}>取消</button>
-            </>
-          ) : (
-            <>
-              <input
-                className="interrupt-input"
-                placeholder="输入回复..."
-                value={replyText}
-                onChange={e => setReplyText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && replyText.trim()) handleReply(replyText.trim()) }}
-                disabled={disabled}
-              />
-              <button className="btn-confirm" onClick={() => handleReply(replyText.trim() || '确认')} disabled={disabled}>发送</button>
-            </>
-          )}
+          {renderActions()}
         </div>
       )}
     </div>

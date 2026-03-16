@@ -72,11 +72,12 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
             invoked_at=datetime.now(timezone.utc),
         ))
 
-    # {baseDir} 变量替换 + config.env 加载
+    # config.env 加载
     content = entry.content
+    skill_dir_hint = ""
     if entry.source_path is not None:
         skill_dir = entry.source_path.parent.resolve()
-        content = content.replace("{baseDir}", str(skill_dir))
+        skill_dir_hint = f"\n\n<skill-dir>{skill_dir}</skill-dir>"
         # 加载 skill 环境变量到 deps（bash 执行时注入）
         skill_env = _load_config_env(skill_dir)
         if skill_env:
@@ -92,6 +93,7 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
         "\n\n<execution-hint>"
         "立即按上述步骤调用工具执行。不要输出文字向用户确认或解释。"
         "能从上下文推断的参数直接用。"
+        "当 skill 提到脚本文件时，使用 skill-dir 中的路径拼接完整绝对路径。"
         "</execution-hint>"
     )
-    return f"{metadata_tag}\n\n{content}{execution_hint}"
+    return f"{metadata_tag}{skill_dir_hint}\n\n{content}{execution_hint}"
