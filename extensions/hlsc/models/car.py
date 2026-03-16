@@ -11,3 +11,5 @@ class CarInfo(BaseModel):
     car_model_id: str                   # 车型编码，用于 API 精准查询
     car_model_name: str                 # 车型名称，用于展示
     vin_code: Optional[str] = None      # VIN 码
+    mileage_km: Optional[float] = None  # 里程数（千米）
+    car_age_year: Optional[float] = None  # 车龄（年）
