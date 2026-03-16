@@ -51,8 +51,13 @@ async def bash(
 ) -> str:
     """在 shell 中执行命令，返回输出结果。
 
+    当执行 skill 中提到的脚本时，必须使用 <skill-dir> 拼接的绝对路径。
+    例如 skill 提到 `scripts/run.py`，<skill-dir> 为 `/app/.chatagent/fstools/skills/my-skill`，
+    则 command 应为 `python /app/.chatagent/fstools/skills/my-skill/scripts/run.py`。
+    不允许使用相对路径执行脚本。
+
     Args:
-        command: 要执行的 shell 命令。
+        command: 要执行的 shell 命令。脚本文件必须使用绝对路径。
         timeout: 超时秒数（默认 120，最大 600）。
 
     Returns:

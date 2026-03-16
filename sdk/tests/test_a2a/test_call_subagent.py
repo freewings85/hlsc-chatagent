@@ -542,6 +542,7 @@ class TestDataclasses:
 
 class TestContextPassing:
     @respx.mock
+    @respx.mock
     @pytest.mark.anyio
     async def test_a2a_send_with_metadata(self) -> None:
         """_a2a_send 传入 metadata 时，请求体应包含 metadata 字段。"""

@@ -314,16 +314,14 @@ async def _a2a_send(
     }
     if task_id:
         msg["taskId"] = task_id
-
-    params: dict[str, Any] = {"message": msg}
     if metadata:
-        params["metadata"] = metadata
+        msg["metadata"] = metadata
 
     request_body = {
         "jsonrpc": "2.0",
         "id": str(uuid4()),
         "method": "message/send",
-        "params": params,
+        "params": {"message": msg},
     }
 
     resp = await client.post(f"{url}/a2a", json=request_body)
