@@ -3,6 +3,8 @@
 自动提供的端点：
 - GET  /health
 - POST /chat/stream (SSE)
+- POST /chat/async (Kafka 异步)
+- POST /chat/stop
 - POST /chat/interrupt-reply
 - GET  /.well-known/agent.json (A2A)
 - POST /a2a (A2A JSON-RPC)
@@ -39,6 +41,8 @@ class AgentApp:
         self._config = config or AgentAppConfig()
         self._temporal_client: Any = None
         self._interrupt_worker: Any = None
+        # 运行中的任务注册表：task_id → asyncio.Task
+        self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self.app = self._build_fastapi()
 
     def _build_fastapi(self) -> Any:
@@ -129,6 +133,9 @@ class AgentApp:
                 name=f"agent-loop-{session_id}",
             )
 
+            task_id: str = f"stream-{session_id}-{id(loop_task)}"
+            self._running_tasks[task_id] = loop_task
+
             def _ensure_sentinel(fut: asyncio.Task[None]) -> None:
                 queue.put_nowait(None)
 
@@ -140,7 +147,7 @@ class AgentApp:
                         session_id=session_id,
                         request_id="",
                         type=EventType.CHAT_REQUEST_START,
-                        data={},
+                        data={"task_id": task_id},
                     )
                     yield f"event: {start_event.type.value}\ndata: {start_event.to_json()}\n\n"
                     while True:
@@ -151,6 +158,7 @@ class AgentApp:
                 except (GeneratorExit, asyncio.CancelledError):
                     pass
                 finally:
+                    self._running_tasks.pop(task_id, None)
                     if not loop_task.done():
                         loop_task.cancel()
 
@@ -163,6 +171,88 @@ class AgentApp:
                     "X-Accel-Buffering": "no",
                 },
             )
+
+        # Async Chat（Kafka）
+        @fastapi_app.post("/chat/async")
+        async def chat_async(request: dict[str, Any]) -> JSONResponse:
+            from agent_sdk._config.settings import get_kafka_config
+            from agent_sdk._event.event_emitter import EventEmitter
+            from agent_sdk._event.event_model import EventModel
+            from agent_sdk._event.event_sinker_kafka import KafkaSinker, get_kafka_producer
+
+            kafka_config = get_kafka_config()
+            if not kafka_config.enabled:
+                return JSONResponse(
+                    status_code=503,
+                    content={"error": "Kafka 未启用，请设置 KAFKA_ENABLED=true"},
+                )
+
+            session_id: str = request.get("session_id", "default")
+            user_id: str = request.get("user_id", "anonymous")
+            message: str = request.get("message", "")
+            context: Any = request.get("context")
+
+            producer = await get_kafka_producer()
+            sinker = KafkaSinker(producer, kafka_config.topic)
+
+            queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+            emitter = EventEmitter(queue)
+
+            loop_task: asyncio.Task[None] = asyncio.create_task(
+                agent.run(
+                    message,
+                    user_id=user_id,
+                    session_id=session_id,
+                    emitter=emitter,
+                    temporal_client=self._temporal_client,
+                    request_context=context,
+                ),
+                name=f"agent-loop-async-{session_id}",
+            )
+
+            # 生成 task_id 用于外部追踪
+            task_id: str = f"async-{session_id}-{id(loop_task)}"
+            self._running_tasks[task_id] = loop_task
+
+            # 后台转发：从 emitter queue 读事件，通过 KafkaSinker 发到 Kafka
+            async def _forward_to_kafka() -> None:
+                try:
+                    while True:
+                        event: EventModel | None = await queue.get()
+                        if event is None:
+                            break
+                        await sinker.send(event)
+                except Exception:
+                    logger.exception("Kafka 转发异常")
+                finally:
+                    self._running_tasks.pop(task_id, None)
+
+            asyncio.create_task(
+                _forward_to_kafka(),
+                name=f"kafka-forward-{task_id}",
+            )
+
+            def _ensure_sentinel(fut: asyncio.Task[None]) -> None:
+                queue.put_nowait(None)
+
+            loop_task.add_done_callback(_ensure_sentinel)
+
+            return JSONResponse({"status": "accepted", "task_id": task_id})
+
+        # Stop
+        @fastapi_app.post("/chat/stop")
+        async def chat_stop(request: dict[str, Any]) -> JSONResponse:
+            task_id: str = request.get("task_id", "")
+            loop_task = self._running_tasks.get(task_id)
+            if loop_task is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"error": "任务不存在或已结束"},
+                )
+            if not loop_task.done():
+                loop_task.cancel()
+            self._running_tasks.pop(task_id, None)
+            return JSONResponse({"status": "cancelled", "task_id": task_id})
 
         # Interrupt Reply
         @fastapi_app.post("/chat/interrupt-reply")
