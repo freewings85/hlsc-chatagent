@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from typing import Any
 
@@ -15,8 +14,7 @@ import httpx
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
-
-logger = logging.getLogger(__name__)
+from agent_sdk.logging import log_tool_start, log_tool_end, log_http_request, log_http_response
 
 _API_PATH: str = "/Auto/getCarModelsByQueryKey"
 
@@ -44,50 +42,60 @@ async def query_car_key(
     Returns:
         最匹配的车型 car_key 和 car_name JSON。
     """
-    logger.info("查询车型编码: query_key=%s", query_key)
+    sid, rid = ctx.deps.session_id, ctx.deps.request_id
+    log_tool_start("query_car_key", sid, rid, {"query_key": query_key})
 
-    url: str = _get_datamanager_url().rstrip("/") + _API_PATH
-    payload: dict[str, Any] = {
-        "queryKey": query_key,
-        "limit": 1,
-    }
+    try:
+        url: str = _get_datamanager_url().rstrip("/") + _API_PATH
+        payload: dict[str, Any] = {
+            "queryKey": query_key,
+            "limit": 1,
+        }
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-        try:
-            resp: httpx.Response = await client.post(
-                url,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "hlsc-recommend-project/1.0",
-                },
-            )
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
-            logger.exception("查询车型编码接口调用失败: query_key=%s", query_key)
-            raise RuntimeError(f"查询车型编码接口调用失败: {exc}") from exc
+        log_http_request(url, "POST", sid, rid, {"queryKey": query_key, "limit": 1})
 
-    response_json: dict[str, Any] = resp.json()
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            try:
+                resp: httpx.Response = await client.post(
+                    url,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "User-Agent": "hlsc-recommend-project/1.0",
+                    },
+                )
+                resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"查询车型编码接口调用失败: {exc}") from exc
 
-    status: int | None = response_json.get("status")
-    if status != 0:
-        message: str = response_json.get("message") or "未知错误"
-        raise RuntimeError(f"查询车型编码失败: {message}")
+        response_json: dict[str, Any] = resp.json()
+        log_http_response(url, resp.status_code, sid, rid)
 
-    results: list[dict[str, Any]] = response_json.get("result") or []
+        status: int | None = response_json.get("status")
+        if status != 0:
+            message: str = response_json.get("message") or "未知错误"
+            raise RuntimeError(f"查询车型编码失败: {message}")
 
-    if not results:
-        logger.warning("未匹配到车型: query_key=%s", query_key)
-        return json.dumps({"car_key": "", "car_name": "", "matched": False}, ensure_ascii=False)
+        results: list[dict[str, Any]] = response_json.get("result") or []
 
-    first: dict[str, Any] = results[0]
-    car_key: str = first.get("car_key", "")
-    car_name: str = first.get("car_name", "")
+        if not results:
+            result = {"car_key": "", "car_name": "", "matched": False}
+            log_tool_end("query_car_key", sid, rid, {"matched": False})
+            return json.dumps(result, ensure_ascii=False)
 
-    logger.info("查询车型编码完成: query_key=%s, car_key=%s, car_name=%s", query_key, car_key, car_name)
+        first: dict[str, Any] = results[0]
+        car_key: str = first.get("car_key", "")
+        car_name: str = first.get("car_name", "")
 
-    return json.dumps({
-        "car_key": car_key,
-        "car_name": car_name,
-        "matched": True,
-    }, ensure_ascii=False)
+        result = {
+            "car_key": car_key,
+            "car_name": car_name,
+            "matched": True,
+        }
+
+        log_tool_end("query_car_key", sid, rid, {"car_key": car_key, "matched": True})
+        return json.dumps(result, ensure_ascii=False)
+
+    except Exception as e:
+        log_tool_end("query_car_key", sid, rid, exc=e)
+        return f"Error: query_car_key failed - {e}"

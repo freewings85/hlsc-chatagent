@@ -7,7 +7,6 @@ MainAgent 从 RequestContext 中提取车辆信息，连同用户问题一起
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 from uuid import uuid4
 
@@ -21,8 +20,6 @@ from agent_sdk._event.event_model import EventModel
 from agent_sdk._event.event_type import EventType
 
 from src.config import RECOMMEND_PROJECT_URL
-
-logger = logging.getLogger(__name__)
 
 
 async def call_recommend_project(

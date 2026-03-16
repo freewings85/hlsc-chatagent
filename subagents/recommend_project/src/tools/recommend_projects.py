@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import math
 import os
 from typing import Any, Optional
@@ -16,8 +15,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
-
-logger = logging.getLogger(__name__)
+from agent_sdk.logging import log_tool_start, log_tool_end, log_http_request, log_http_response
 
 _API_PATH: str = "/project/maintainProjectTreeByCarKey"
 
@@ -56,49 +54,58 @@ async def recommend_projects(
     Returns:
         推荐的养车项目树 JSON。
     """
-    logger.info(
-        "推荐养车项目: car_key=%s, car=%s, mileage=%s, age=%s, categories=%s",
-        vehicle_info.car_key, vehicle_info.car_model_name,
-        vehicle_info.mileage_km, vehicle_info.car_age_year, category_ids,
-    )
+    sid, rid = ctx.deps.session_id, ctx.deps.request_id
+    log_tool_start("recommend_projects", sid, rid, {
+        "car_key": vehicle_info.car_key, "mileage": vehicle_info.mileage_km,
+        "age": vehicle_info.car_age_year, "categories": category_ids,
+    })
 
-    # 将车龄（年）转换为月
-    month: int = 0
-    if vehicle_info.car_age_year is not None:
-        month = int(math.ceil(vehicle_info.car_age_year * 12))
+    try:
+        # 将车龄（年）转换为月
+        month: int = 0
+        if vehicle_info.car_age_year is not None:
+            month = int(math.ceil(vehicle_info.car_age_year * 12))
 
-    # 里程取整
-    mileage: int = 0
-    if vehicle_info.mileage_km is not None:
-        mileage = int(vehicle_info.mileage_km)
+        # 里程取整
+        mileage: int = 0
+        if vehicle_info.mileage_km is not None:
+            mileage = int(vehicle_info.mileage_km)
 
-    # 调用 maintainProjectTreeByCarKey 接口
-    tree: dict[str, Any] = await _query_maintain_project_tree(
-        car_key=vehicle_info.car_key,
-        category_ids=category_ids,
-        month=month,
-        mileage=mileage,
-    )
+        # 调用 maintainProjectTreeByCarKey 接口
+        tree: dict[str, Any] = await _query_maintain_project_tree(
+            car_key=vehicle_info.car_key,
+            category_ids=category_ids,
+            month=month,
+            mileage=mileage,
+            session_id=sid,
+            request_id=rid,
+        )
 
-    # 从项目树中提取 dataType=project 的叶子节点，只保留 id 和 name
-    projects: list[dict[str, Any]] = _extract_projects(tree.get("projectTree", []))
+        # 从项目树中提取 dataType=project 的叶子节点，只保留 id 和 name
+        projects: list[dict[str, Any]] = _extract_projects(tree.get("projectTree", []))
 
-    # 组装推荐理由
-    reasons: list[str] = []
-    if vehicle_info.mileage_km is not None:
-        reasons.append(f"当前里程 {vehicle_info.mileage_km:.0f} 公里")
-    if vehicle_info.car_age_year is not None:
-        reasons.append(f"车龄 {vehicle_info.car_age_year:.1f} 年")
-    if vehicle_info.car_model_name:
-        reasons.append(f"车型 {vehicle_info.car_model_name}")
+        # 组装推荐理由
+        reasons: list[str] = []
+        if vehicle_info.mileage_km is not None:
+            reasons.append(f"当前里程 {vehicle_info.mileage_km:.0f} 公里")
+        if vehicle_info.car_age_year is not None:
+            reasons.append(f"车龄 {vehicle_info.car_age_year:.1f} 年")
+        if vehicle_info.car_model_name:
+            reasons.append(f"车型 {vehicle_info.car_model_name}")
 
-    result: dict[str, Any] = {
-        "vehicle_info": vehicle_info.model_dump(exclude_none=True),
-        "category_ids": category_ids,
-        "recommend_reason": "、".join(reasons) if reasons else "通用推荐",
-        "projects": projects,
-    }
-    return json.dumps(result, ensure_ascii=False)
+        result: dict[str, Any] = {
+            "vehicle_info": vehicle_info.model_dump(exclude_none=True),
+            "category_ids": category_ids,
+            "recommend_reason": "、".join(reasons) if reasons else "通用推荐",
+            "projects": projects,
+        }
+
+        log_tool_end("recommend_projects", sid, rid, {"project_count": len(projects)})
+        return json.dumps(result, ensure_ascii=False)
+
+    except Exception as e:
+        log_tool_end("recommend_projects", sid, rid, exc=e)
+        return f"Error: recommend_projects failed - {e}"
 
 
 def _extract_projects(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -118,6 +125,8 @@ async def _query_maintain_project_tree(
     category_ids: list[int],
     month: int,
     mileage: int,
+    session_id: str = "",
+    request_id: str = "",
 ) -> dict[str, Any]:
     """调用 maintainProjectTreeByCarKey 接口获取推荐项目树。"""
     url: str = _get_datamanager_url().rstrip("/") + _API_PATH
@@ -130,10 +139,10 @@ async def _query_maintain_project_tree(
         "mileage": mileage,
     }
 
-    logger.info(
-        "查询推荐项目树: url=%s, carKey=%s, categoryIds=%s, month=%d, mileage=%d",
-        url, car_key, category_ids, month, mileage,
-    )
+    log_http_request(url, "POST", session_id, request_id, {
+        "carKey": car_key, "categoryIds": category_ids,
+        "month": month, "mileage": mileage,
+    })
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
         try:
@@ -147,17 +156,16 @@ async def _query_maintain_project_tree(
             )
             resp.raise_for_status()
         except httpx.HTTPError as exc:
-            logger.exception("推荐项目接口调用失败: carKey=%s", car_key)
             raise RuntimeError(f"查询推荐项目接口调用失败: {exc}") from exc
 
     response_json: dict[str, Any] = resp.json()
+    log_http_response(url, resp.status_code, session_id, request_id)
 
     status: int | None = response_json.get("status")
     if status != 0:
         message: str = response_json.get("message") or "未知错误"
         raise RuntimeError(f"查询推荐项目失败: {message}")
 
-    logger.info("查询推荐项目完成: carKey=%s", car_key)
     return response_json.get("result", {})
 
 
