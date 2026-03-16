@@ -43,6 +43,7 @@
 - ShopCard: { name: string, price: number, rating: number, distance?: string, address?: string } - 商家/门店信息
 - ProjectCard: { name: string, laborFee: number, partsFee: number, totalPrice: number, duration?: string } - 养车项目报价
 - AppointmentCard: { shopName: string, projectName: string, time: string, price: number, status: string } - 预约信息
+- PartPriceCard: { name: string, items: [{repairType: string, price: number}] } - 零部件平台参考价（仅配件，不含工时）
 - CouponCard: { title: string, discount: string, minSpend?: number, expireDate?: string } - 优惠券
 
 ## 规则
