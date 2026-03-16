@@ -6,29 +6,59 @@
       "type": "debugpy",
       "request": "launch",
       "program": "server.py",
+      "python": "${workspaceFolder}/mainagent/.venv/bin/python",
       "cwd": "${workspaceFolder}/mainagent",
       "console": "integratedTerminal",
       "env": {
         "HTTP_PROXY": "",
         "HTTPS_PROXY": "",
         "http_proxy": "",
-        "https_proxy": "",
-        // "ACTIVE": "test"
+        "https_proxy": ""
       }
     },
     {
-      "name": "DemoPriceFinder",
+      "name": "RecommendProject",
       "type": "debugpy",
       "request": "launch",
       "program": "server.py",
-      "cwd": "${workspaceFolder}/subagents/demo_price_finder",
+      "python": "${workspaceFolder}/subagents/recommend_project/.venv/bin/python",
+      "cwd": "${workspaceFolder}/subagents/recommend_project",
       "console": "integratedTerminal",
       "env": {
         "HTTP_PROXY": "",
         "HTTPS_PROXY": "",
         "http_proxy": "",
-        "https_proxy": "",
-        // "ACTIVE": "test"
+        "https_proxy": ""
+      }
+    },
+    {
+      "name": "DiagnoseAgent",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "server.py",
+      "python": "${workspaceFolder}/subagents/diagnose_agent/.venv/bin/python",
+      "cwd": "${workspaceFolder}/subagents/diagnose_agent",
+      "console": "integratedTerminal",
+      "env": {
+        "HTTP_PROXY": "",
+        "HTTPS_PROXY": "",
+        "http_proxy": "",
+        "https_proxy": ""
+      }
+    },
+    {
+      "name": "CodeAgent",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "server.py",
+      "python": "${workspaceFolder}/subagents/code_agent/.venv/bin/python",
+      "cwd": "${workspaceFolder}/subagents/code_agent",
+      "console": "integratedTerminal",
+      "env": {
+        "HTTP_PROXY": "",
+        "HTTPS_PROXY": "",
+        "http_proxy": "",
+        "https_proxy": ""
       }
     }
   ]

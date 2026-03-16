@@ -1,6 +1,6 @@
 # ============================================================
 # MainAgent Dockerfile
-# Build context: 仓库根目录（需要访问 sdk/）
+# Build context: 仓库根目录（需要访问 sdk/ 和 extensions/）
 #   docker build -f mainagent/Dockerfile -t hlsc-mainagent .
 # ============================================================
 FROM python:3.12-slim
@@ -22,6 +22,10 @@ ENV PYTHONUNBUFFERED=1 \
 COPY sdk/pyproject.toml sdk/uv.lock sdk/
 COPY sdk/agent_sdk sdk/agent_sdk
 
+# Extensions 源码（本地依赖）
+COPY extensions/pyproject.toml extensions/
+COPY extensions/hlsc extensions/hlsc
+
 # MainAgent 依赖文件
 COPY mainagent/pyproject.toml mainagent/uv.lock mainagent/
 
@@ -35,13 +39,16 @@ COPY mainagent/server.py mainagent/
 COPY mainagent/src mainagent/src
 COPY mainagent/prompts mainagent/prompts
 
+# Skills（内置到镜像，生产环境可通过 NFS 覆盖挂载）
+COPY mainagent/.chatagent mainagent/.chatagent
+
 # 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
 # 不拷贝 .env.local（开发用）
 COPY mainagent/.env.test mainagent/.env.test.nacos mainagent/
 COPY mainagent/.env.uat mainagent/.env.uat.nacos mainagent/
 
 # 运行时目录（生产环境应挂载为 volume）
-RUN mkdir -p mainagent/.chatagent mainagent/logs mainagent/data
+RUN mkdir -p mainagent/logs mainagent/data/inner
 
 WORKDIR /app/mainagent
 

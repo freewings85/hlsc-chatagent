@@ -8,8 +8,8 @@
 # MainAgent
 docker build -f mainagent/Dockerfile -t ${dockerimage} .
 
-# DemoPriceFinder Subagent
-docker build -f subagents/demo_price_finder/Dockerfile -t ${dockerimage} .
+# RecommendProject Subagent
+docker build -f subagents/recommend_project/Dockerfile -t ${dockerimage} .
 
 # Web 前端（所有 Agent 共用同一镜像）
 docker build -t ${dockerimage} web/
@@ -23,47 +23,35 @@ docker build -t ${dockerimage} web/
 docker run -d --name hlsc-mainagent \
   -p 8100:8100 \
   -e ACTIVE=test \
-  -v /data/chatagent/mainagent/.chatagent:/app/mainagent/.chatagent -v /data/chatagent/mainagent/logs:/app/mainagent/logs -v /data/chatagent/mainagent/data:/app/mainagent/data \
+  -v /data/chatagent/shared/.chatagent:/app/mainagent/.chatagent \
+  -v /data/chatagent/shared/data:/app/mainagent/data \
+  -v /data/chatagent/mainagent/logs:/app/mainagent/logs \
   ${dockerimage}
 ```
 
-### DemoPriceFinder Subagent
+### RecommendProject Subagent
 
 ```bash
-docker run -d --name hlsc-demo-price-finder \
-  -p 8101:8101 \
+docker run -d --name hlsc-recommend-project \
+  -p 8105:8105 \
   -e ACTIVE=test \
-  -v /data/chatagent/demo_price_finder/.chatagent:/app/subagents/demo_price_finder/.chatagent -v /data/chatagent/demo_price_finder/logs:/app/subagents/demo_price_finder/logs  -v /data/chatagent/demo_price_finder/data:/app/subagents/demo_price_finder/data \
+  -v /data/chatagent/shared/.chatagent:/app/subagents/recommend_project/.chatagent \
+  -v /data/chatagent/shared/data:/app/subagents/recommend_project/data \
+  -v /data/chatagent/recommend_project/logs:/app/subagents/recommend_project/logs \
   ${dockerimage}
 ```
 
 ### Web 前端
 
-同一个 `hlsc-web` 镜像通过环境变量指向不同后端，启动多个实例（Vite dev server 自带 proxy）。
-
-**MainAgent Web**（管理界面 + 对话）：
+同一个 `hlsc-web` 镜像通过环境变量指向不同后端。
 
 ```bash
 docker run -d --name hlsc-web-mainagent \
   -p 3100:3100 \
   -e VITE_PROXY_TARGET=http://<mainagent-host>:8100 \
   -e VITE_PORT=3100 \
-  -v /data/chatagent/web-mainagent/logs:/app/logs \
   ${dockerimage}
 ```
-
-**DemoPriceFinder Web**（subagent 独立调试界面）：
-
-```bash
-docker run -d --name hlsc-web-demo-price-finder \
-  -p 3101:3101 \
-  -e VITE_PROXY_TARGET=http://<subagent-host>:8101 \
-  -e VITE_PORT=3101 \
-  -v /data/chatagent/web-demo-price-finder/logs:/app/logs \
-  ${dockerimage}
-```
-
-> 新增 subagent 时同理：改 `VITE_PROXY_TARGET` 和 `VITE_PORT` 即可。
 
 ## 3. 环境配置
 
@@ -88,9 +76,11 @@ docker run -d --name hlsc-web-demo-price-finder \
 
 | 目录 | 用途 | 必须挂载 |
 |------|------|----------|
-| `.chatagent/` | Agent 文件资源（skills、mcp.json） | 是 |
+| `.chatagent/` | Agent 文件资源（fstools/skills、mcp.json） | 是（NFS 共享，或用镜像内置） |
+| `data/inner/` | SDK 内部存储（消息、transcript、memory） | 是 |
 | `logs/` | 运行日志 | 是 |
-| `data/` | 用户数据（session 对话历史） | 是 |
+
+> **生产部署**：`.chatagent/` 和 `data/` 建议使用 NFS/PVC 共享挂载，所有 Pod 看到同一份 skills 和用户数据。详见 `doc/k8s-部署架构.md`。
 
 ## 4. 基础设施
 
