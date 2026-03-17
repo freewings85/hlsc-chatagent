@@ -318,7 +318,21 @@ class Agent:
             transcript_session_id=transcript_session_id,
         )
 
-        return await run_agent_loop(ctx)
+        # Logfire span：将 session_id/request_id 注入 OpenTelemetry trace，
+        # 所有子 span（LLM 调用、工具调用）自动继承，logfire 里可按 session_id 过滤
+        try:
+            import logfire
+            with logfire.span(
+                "agent_request",
+                session_id=session_id,
+                request_id=request_id,
+                user_id=user_id,
+                agent_name=self._agent_name,
+                is_sub_agent=is_sub_agent,
+            ):
+                return await run_agent_loop(ctx)
+        except ImportError:
+            return await run_agent_loop(ctx)
 
 
 def _create_model_from_config(config: ModelConfig) -> Model:
