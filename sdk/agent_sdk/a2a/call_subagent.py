@@ -317,14 +317,15 @@ async def _a2a_send(
     }
     if task_id:
         msg["taskId"] = task_id
+    params: dict[str, Any] = {"message": msg}
     if metadata:
-        msg["metadata"] = metadata
+        params["metadata"] = metadata
 
     request_body = {
         "jsonrpc": "2.0",
         "id": str(uuid4()),
         "method": "message/send",
-        "params": {"message": msg},
+        "params": params,
     }
 
     # 注入 OpenTelemetry trace context，让 subagent 的 trace 和 mainagent 关联

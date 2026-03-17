@@ -113,6 +113,7 @@ class ChatAgentExecutor(AgentExecutor):
         user_id = metadata.get("user_id", "a2a")
 
         # 从 A2A message metadata 中提取父级信息（由 call_subagent 传入）
+        logger.info("A2A metadata: %s", metadata)
         parent_session_id = metadata.get("parent_session_id", "")
         parent_request_id = metadata.get("parent_request_id", "")
         request_context = metadata.get("request_context")
