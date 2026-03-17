@@ -12,16 +12,15 @@ async def find_best_price_of_project(
     ctx: RunContext[AgentDeps],
     project_name: str,
 ) -> str:
-    """Find the best (cheapest) price for a car repair project across all shops.
+    """查询汽车维修项目的最低报价。
 
-    This tool searches for the best price and asks the user to confirm before
-    returning the final result.
+    在所有合作门店中搜索指定维修项目的最低价格，找到后让用户确认。
 
     Args:
-        project_name: The name of the car repair project to search for.
+        project_name: 维修项目名称，如"更换刹车片"、"更换机油"。
 
     Returns:
-        The best price result as a string.
+        最低报价结果。
     """
     # 模拟：查找到最低价
     mock_price = 500

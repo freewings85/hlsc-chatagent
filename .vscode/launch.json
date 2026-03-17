@@ -60,6 +60,21 @@
         "http_proxy": "",
         "https_proxy": ""
       }
+    },
+    {
+      "name": "DemoAgent",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "server.py",
+      "python": "${workspaceFolder}/subagents/demo_price_finder/.venv/bin/python",
+      "cwd": "${workspaceFolder}/subagents/demo_price_finder",
+      "console": "integratedTerminal",
+      "env": {
+        "HTTP_PROXY": "",
+        "HTTPS_PROXY": "",
+        "http_proxy": "",
+        "https_proxy": ""
+      }
     }
   ]
 }
