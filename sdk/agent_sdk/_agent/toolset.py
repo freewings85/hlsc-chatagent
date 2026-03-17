@@ -13,6 +13,7 @@ from pydantic_ai import ModelRetry, RunContext, Tool
 from pydantic_ai.toolsets.function import FunctionToolset
 
 from agent_sdk._agent.deps import AgentDeps
+from agent_sdk._utils.session_logger import log_info
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,15 @@ def wrap_tool_safe(func: Callable[..., Any]) -> Callable[..., Any]:
 def get_tools(ctx: RunContext[AgentDeps]) -> FunctionToolset:
     """根据 deps.available_tools 和 deps.tool_map 构建当前步的工具集"""
     toolset: FunctionToolset = FunctionToolset()
+    registered: list[str] = []
     for name in ctx.deps.available_tools:
         func = ctx.deps.tool_map.get(name)
         if func is not None:
             toolset.add_tool(Tool(wrap_tool_safe(func), name=name))
+            registered.append(name)
+    log_info(
+        f"[TOOLS] registered={registered}",
+        session_id=ctx.deps.session_id,
+        request_id=ctx.deps.request_id,
+    )
     return toolset

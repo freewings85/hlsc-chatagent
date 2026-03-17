@@ -109,12 +109,22 @@ class ChatAgentExecutor(AgentExecutor):
 
         # 新任务：启动 agent loop
         await updater.start_work()
-        session_id = context_id
         metadata = context.metadata or {}
         user_id = metadata.get("user_id", "a2a")
 
-        # 从 A2A message metadata 中提取 request_context（由 call_subagent 传入）
+        # 从 A2A message metadata 中提取父级信息（由 call_subagent 传入）
+        parent_session_id = metadata.get("parent_session_id", "")
+        parent_request_id = metadata.get("parent_request_id", "")
         request_context = metadata.get("request_context")
+
+        # session_id: 父级 session_id 在前，方便按前缀搜索关联
+        session_id = f"{parent_session_id}|{context_id}" if parent_session_id else context_id
+
+        if parent_session_id:
+            logger.info(
+                "A2A subagent: session=%s, parent_session=%s, parent_request=%s",
+                session_id, parent_session_id, parent_request_id,
+            )
 
         internal_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
 
