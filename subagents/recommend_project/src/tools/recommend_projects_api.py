@@ -1,6 +1,6 @@
 """RecommendProject Subagent 工具集。
 
-- recommend-projects: 根据车辆信息和推荐分类，获取推荐项目
+- recommend_projects_api: 根据车辆信息和推荐分类，获取推荐项目
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ def _get_datamanager_url() -> str:
     )
 
 
-async def recommend_projects(
+async def recommend_projects_api(
     ctx: RunContext[AgentDeps],
     vehicle_info: VehicleInfo,
     category_ids: list[int] = [],
@@ -55,7 +55,7 @@ async def recommend_projects(
     """
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
     log_tool_start(
-        "recommend_projects",
+        "recommend_projects_api",
         sid,
         rid,
         {
@@ -106,12 +106,12 @@ async def recommend_projects(
             "projects": projects,
         }
 
-        log_tool_end("recommend_projects", sid, rid, {"project_count": len(projects)})
+        log_tool_end("recommend_projects_api", sid, rid, {"project_count": len(projects)})
         return json.dumps(result, ensure_ascii=False)
 
     except Exception as e:
-        log_tool_end("recommend_projects", sid, rid, exc=e)
-        return f"Error: recommend_projects failed - {e}"
+        log_tool_end("recommend_projects_api", sid, rid, exc=e)
+        return f"Error: recommend_projects_api failed - {e}"
 
 
 def _extract_projects(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -183,10 +183,7 @@ async def _query_maintain_project_tree(
     return response_json.get("result", {})
 
 
-RECOMMEND_PROJECT_TOOLS: list[str] = ["recommend_projects"]
-
-
 def create_recommend_project_tool_map() -> dict[str, Any]:
     return {
-        "recommend-projects": recommend_projects,
+        "recommend-projects": recommend_projects_api,
     }
