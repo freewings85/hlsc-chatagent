@@ -126,6 +126,13 @@ class ChatAgentExecutor(AgentExecutor):
                 "A2A subagent: session=%s, parent_session=%s, parent_request=%s",
                 session_id, parent_session_id, parent_request_id,
             )
+            # 写入 subagent 的 session execution.log，方便关联
+            from agent_sdk._utils.session_logger import get_session_logger
+            sl = get_session_logger(session_id)
+            sl.info(
+                "[PARENT] parent_session_id=%s, parent_request_id=%s",
+                parent_session_id, parent_request_id,
+            )
 
         internal_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
 
