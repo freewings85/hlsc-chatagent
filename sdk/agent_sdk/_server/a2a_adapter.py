@@ -119,7 +119,7 @@ class ChatAgentExecutor(AgentExecutor):
         request_context = metadata.get("request_context")
 
         # session_id: 父级 session_id 在前，方便按前缀搜索关联
-        session_id = f"{parent_session_id}|{context_id}" if parent_session_id else context_id
+        session_id = f"{parent_session_id}__{context_id}" if parent_session_id else context_id
 
         if parent_session_id:
             logger.info(
