@@ -31,8 +31,8 @@ Example:
 
 ## Allowed card components
 
-- `RecommendCard`
-  - `props`: `{ title: string, items: [{ name: string, icon?: string, projectId?: string }] }`
+- `RecommendProjectsCard`
+  - `props`: `{ vehicle_info?: { car_model_name?: string, mileage_km?: number, car_age_year?: number }, projects: [{ project_name: string, icon?: string, project_id?: string }] }`
 - `ShopCard`
   - `props`: `{ name: string, price: number, rating: number, distance?: string, address?: string }`
 - `ProjectCard`
