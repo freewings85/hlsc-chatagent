@@ -13,10 +13,10 @@ from src.config import RECOMMEND_PROJECT_URL
 async def call_recommend_project(
     ctx: RunContext[AgentDeps],
     query: str,
-    car_model_id: str = "",
-    vin_code: str = "",
-    car_model_name: str = "",
-    mileage_km: float = 0.0,
+    car_model_id: str | None = None,
+    vin_code: str | None = None,
+    car_model_name: str | None = None,
+    mileage_km: float | None = None,
     car_age_year: float = 0.0,
 ) -> str:
     """调用 RecommendProject subagent，根据车辆里程数、车龄、车型推荐养车项目。
