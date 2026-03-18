@@ -90,24 +90,11 @@ async def recommend_projects_api(
         # 从项目树中提取 dataType=project 的叶子节点，只保留 id 和 name
         projects: list[dict[str, Any]] = _extract_projects(tree.get("projectTree", []))
 
-        # 组装推荐理由
-        reasons: list[str] = []
-        if vehicle_info.mileage_km is not None:
-            reasons.append(f"当前里程 {vehicle_info.mileage_km:.0f} 公里")
-        if vehicle_info.car_age_year is not None:
-            reasons.append(f"车龄 {vehicle_info.car_age_year:.1f} 年")
-        if vehicle_info.car_model_name:
-            reasons.append(f"车型 {vehicle_info.car_model_name}")
-
-        result: dict[str, Any] = {
-            "vehicle_info": vehicle_info.model_dump(exclude_none=True),
-            "category_ids": category_ids,
-            "recommend_reason": "、".join(reasons) if reasons else "通用推荐",
-            "projects": projects,
-        }
-
         log_tool_end("recommend_projects_api", sid, rid, {"project_count": len(projects)})
-        return json.dumps(result, ensure_ascii=False)
+        return json.dumps({
+            "vehicle_info": vehicle_info.model_dump(exclude_none=True),
+            "projects": projects,
+        }, ensure_ascii=False)
 
     except Exception as e:
         log_tool_end("recommend_projects_api", sid, rid, exc=e)
@@ -119,7 +106,7 @@ def _extract_projects(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for node in nodes:
         if node.get("dataType") == "project":
-            result.append({"project_id": node["id"], "project_name": node["name"]})
+            result.append({"project_id": str(node["id"]), "project_name": node["name"]})
         children: list[dict[str, Any]] | None = node.get("childList")
         if children:
             result.extend(_extract_projects(children))
