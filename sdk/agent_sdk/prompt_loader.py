@@ -10,9 +10,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Protocol, runtime_checkable
 
 from pydantic_ai.messages import ModelRequest, UserPromptPart
+
+if TYPE_CHECKING:
+    from agent_sdk._agent.deps import AgentDeps
 
 
 @dataclass
@@ -30,7 +34,13 @@ class PromptLoader(Protocol):
     每次对话开始时调用 load()，返回 system_prompt 和 context_messages。
     """
 
-    async def load(self, user_id: str, session_id: str, **kwargs: object) -> PromptResult: ...
+    async def load(
+        self,
+        user_id: str,
+        session_id: str,
+        deps: AgentDeps | None = None,
+        message: str | None = None,
+    ) -> PromptResult: ...
 
 
 class StaticPromptLoader:
@@ -39,7 +49,13 @@ class StaticPromptLoader:
     def __init__(self, system_prompt: str) -> None:
         self._prompt = system_prompt
 
-    async def load(self, user_id: str, session_id: str, **kwargs: object) -> PromptResult:
+    async def load(
+        self,
+        user_id: str,
+        session_id: str,
+        deps: AgentDeps | None = None,
+        message: str | None = None,
+    ) -> PromptResult:
         return PromptResult(system_prompt=self._prompt, context_messages=[])
 
 
@@ -55,16 +71,13 @@ class TemplatePromptLoader:
 
     Args:
         template_parts: 模板文件路径列表，按顺序拼接为 system_prompt
-        agent_md_path: AGENTS.md 路径（项目级业务配置），有则注入为 context_message，None 则跳过
     """
 
     def __init__(
         self,
         template_parts: list[str | Path],
-        agent_md_path: str | Path | None = None,
     ) -> None:
         self._template_parts = [Path(p) for p in template_parts]
-        self._agent_md_path = Path(agent_md_path) if agent_md_path else None
         self._system_prompt_cache: str | None = None
 
     def _load_system_prompt(self) -> str:
@@ -80,21 +93,30 @@ class TemplatePromptLoader:
         self._system_prompt_cache = "\n\n".join(parts)
         return self._system_prompt_cache
 
-    async def load(self, user_id: str, session_id: str, **kwargs: object) -> PromptResult:
+    async def load(
+        self,
+        user_id: str,
+        session_id: str,
+        deps: AgentDeps | None = None,
+        message: str | None = None,
+    ) -> PromptResult:
         system_prompt = self._load_system_prompt()
         context_messages: list[ModelRequest] = []
 
-        # AGENTS.md / agent.md（项目级业务配置）
-        if self._agent_md_path and self._agent_md_path.exists():
-            content = self._agent_md_path.read_text(encoding="utf-8").strip()
-            filename = self._agent_md_path.name
-            if content:
-                context_messages.append(ModelRequest(
-                    parts=[UserPromptPart(
-                        content=f"Contents of {filename} (project instructions):\n\n{content}",
-                    )],
-                    metadata={"is_meta": True, "source": "agent_md"},
-                ))
+        # 动态 agent.md（项目级业务配置，默认不注入，由子类按需实现）
+        agent_md = await self.get_agent_md_content(
+            user_id=user_id,
+            session_id=session_id,
+            deps=deps,
+            message=message,
+        )
+        if agent_md:
+            context_messages.append(ModelRequest(
+                parts=[UserPromptPart(
+                    content=f"Contents of AGENT.md (project instructions):\n\n{agent_md}",
+                )],
+                metadata={"is_meta": True, "source": "agent_md"},
+            ))
 
         # MEMORY.md
         memory_md = await self._read_memory_md(user_id)
@@ -107,6 +129,16 @@ class TemplatePromptLoader:
             ))
 
         return PromptResult(system_prompt=system_prompt, context_messages=context_messages)
+
+    async def get_agent_md_content(
+        self,
+        user_id: str,
+        session_id: str,
+        deps: AgentDeps | None = None,
+        message: str | None = None,
+    ) -> str | None:
+        """返回动态 AGENT.md 内容。默认不注入，子类按需重载。"""
+        return None
 
     async def _read_memory_md(self, user_id: str) -> str | None:
         """从 inner_storage_backend 读取 MEMORY.md"""

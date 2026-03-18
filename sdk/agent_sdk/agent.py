@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.models import Model
@@ -33,6 +33,18 @@ from agent_sdk.config import (
 from agent_sdk.prompt_loader import PromptLoader, PromptResult
 
 logger = logging.getLogger(__name__)
+
+
+class BeforeAgentRunHook(Protocol):
+    """Agent 运行前钩子签名。"""
+
+    async def __call__(
+        self,
+        user_id: str,
+        session_id: str,
+        deps: Any,
+        message: str,
+    ) -> None: ...
 
 
 class Agent:
@@ -56,6 +68,7 @@ class Agent:
         # ── 运行参数 ──
         max_iterations: int = 25,
         agent_name: str | None = None,
+        before_agent_run_hook: BeforeAgentRunHook | None = None,
     ) -> None:
         self._prompt_loader = prompt_loader
         self._tools = tools
@@ -66,6 +79,7 @@ class Agent:
         self._compact_config = compact_config or SdkCompactConfig()
         self._max_iterations = max_iterations
         self._agent_name = agent_name or get_agent_name()
+        self._before_agent_run_hook = before_agent_run_hook
 
         # 延迟构建的内部对象
         self._pydantic_model: Model | None = None
@@ -183,22 +197,16 @@ class Agent:
             get_inner_storage_backend,
         )
 
-        # 1. 加载 prompt
-        prompt_result: PromptResult = await self._prompt_loader.load(user_id, session_id)
-
-        # 2. 构建 model
-        model = self._build_model()
-
-        # 3. 构建工具
+        # 1. 构建工具
         available_tools, tool_map = self._build_tool_map()
 
-        # 4. 构建 fs_tools_backend
+        # 2. 构建 fs_tools_backend
         if fs_tools_backend is None:
             # 默认：session 级隔离（mainagent 场景）
             from agent_sdk.config import create_session_backend
             fs_tools_backend = create_session_backend(user_id, session_id)
 
-        # 5. 构建 deps
+        # 3. 构建 deps
         import uuid
         request_id = uuid.uuid4().hex
         file_state_tracker = FileStateTracker()
@@ -215,6 +223,26 @@ class Agent:
             temporal_client=temporal_client,
             request_context=request_context,
         )
+
+        # 4. Agent 运行前钩子（可用于 scene 判定等预处理）
+        if self._before_agent_run_hook is not None:
+            await self._before_agent_run_hook(
+                user_id,
+                session_id,
+                deps=deps,
+                message=message,
+            )
+
+        # 5. 加载 prompt（依赖 deps，可用于动态 AGENT.md 注入）
+        prompt_result: PromptResult = await self._prompt_loader.load(
+            user_id,
+            session_id,
+            deps=deps,
+            message=message,
+        )
+
+        # 5. 构建 model
+        model = self._build_model()
 
         # 6. 构建服务
         memory_service = self._build_memory_service()

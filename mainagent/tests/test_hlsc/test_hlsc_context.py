@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from hlsc.models import CarInfo, LocationInfo
-from src.hlsc_context import HlscContextFormatter, HlscRequestContext
+from src.hlsc_context import HlscContextFormatter, HlscRequestContext, SceneInfo
 
 
 class TestHlscRequestContext:
@@ -20,6 +20,19 @@ class TestHlscRequestContext:
         )
         assert ctx.current_car.car_model_name == "宝马3系"
         assert ctx.current_location.address == "浦东新区张江"
+
+    def test_with_scene_info(self) -> None:
+        ctx = HlscRequestContext(
+            scene_info=SceneInfo(
+                scene_type="clarify",
+                confidence=0.92,
+                request_id="req-001",
+            ),
+        )
+        assert ctx.scene_info is not None
+        assert ctx.scene_info.scene_type == "clarify"
+        assert ctx.scene_info.confidence == 0.92
+        assert ctx.scene_info.request_id == "req-001"
 
 
 class TestHlscContextFormatter:

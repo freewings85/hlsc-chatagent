@@ -5,9 +5,11 @@ server.py 调用 create_agent_app() 获取 AgentApp，直接启动。
 
 from __future__ import annotations
 
+from typing import Any
+
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
-from src.hlsc_context import HlscContextFormatter
+from src.hlsc_context import HlscContextFormatter, HlscRequestContext, SceneInfo
 from src.prompt_loader import create_main_prompt_loader
 
 # subagent 调用工具
@@ -23,6 +25,37 @@ from hlsc.tools.ask_user_car_info import ask_user_car_info
 from hlsc.tools.fuzzy_match_location import fuzzy_match_location
 from hlsc.tools.ask_user_location import ask_user_location
 from hlsc.tools.match_project import match_project
+
+
+async def _before_agent_run_hook(
+    user_id: str,
+    session_id: str,
+    deps: Any,
+    message: str,
+) -> None:
+    """运行前场景钩子（占位实现）：当前固定判定为 clarify。"""
+    request_id = getattr(deps, "request_id", "")
+    scene_info = SceneInfo(
+        scene_type="clarify",
+        confidence=1.0,
+        request_id=request_id,
+    )
+
+    ctx = getattr(deps, "request_context", None)
+    if isinstance(ctx, dict):
+        ctx["scene_info"] = scene_info.model_dump()
+        return
+    if isinstance(ctx, HlscRequestContext):
+        ctx.scene_info = scene_info
+        return
+    if ctx is None:
+        deps.request_context = HlscRequestContext(scene_info=scene_info)
+        return
+    # 兼容其他 RequestContext 对象
+    try:
+        setattr(ctx, "scene_info", scene_info)
+    except Exception:
+        deps.request_context = HlscRequestContext(scene_info=scene_info)
 
 
 def create_agent_app() -> AgentApp:
@@ -52,6 +85,7 @@ def create_agent_app() -> AgentApp:
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
         context_formatter=HlscContextFormatter(),
+        before_agent_run_hook=_before_agent_run_hook,
     )
 
     return AgentApp(
