@@ -22,11 +22,12 @@ async def call_recommend_project(
     """调用 RecommendProject subagent，根据车辆里程数、车龄、车型推荐养车项目。
 
     当用户想知道车辆需要做什么保养/维修项目时（如"推荐什么项目"、"该做什么保养了"、"跑了xx公里需要做什么"），根据车辆状况智能推荐养车项目。
-    如果用户提到了车型相关信息，调用前应先通过 fuzzy_match_car_info 获取 car_model_id。
+    step 1. 判断如果用户提到了车型相关信息，调用前应先通过 fuzzy_match_car_info 获取 car_model_id。
+    step 2. 如果用户提到车龄，直接换算成年份，调用subagent；否则先问车龄
 
     Args:
         query: 用户的需求描述，如"我的车该做什么保养了"、"推荐养车项目"。
-        car_model_id: 车型编码（car_model_id），用于精确匹配项目。（Optional）
+        car_model_id: 车型编码，用于精确匹配项目。（Optional）
         vin_code: 车辆 VIN 码。（Optional）
         car_model_name: 车型名称，如"2024款 宝马 325Li"。（Optional）
         mileage_km: 当前里程数（千米）。（Optional）
@@ -45,5 +46,5 @@ async def call_recommend_project(
             "car_age_year": car_age_year,
         },
     }
-
     return await call_subagent(ctx, url=RECOMMEND_PROJECT_URL, message=query, context=context)
+

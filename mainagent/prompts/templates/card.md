@@ -39,7 +39,7 @@
 
 ## 可用卡片组件
 
-- RecommendCard: { title: string, items: [{name: string, icon?: string, projectId?: string}] } - 推荐项目圆盘/宫格
+- RecommendProjectsCard: { vehicle_info?: {car_model_name?: string, mileage_km?: number, car_age_year?: number}, projects: [{project_name: string, icon?: string, project_id?: string}] } - 推荐项目圆盘/宫格
 - ShopCard: { name: string, price: number, rating: number, distance?: string, address?: string } - 商家/门店信息
 - ProjectCard: { name: string, laborFee: number, partsFee: number, totalPrice: number, duration?: string } - 养车项目报价
 - AppointmentCard: { shopName: string, projectName: string, time: string, price: number, status: string } - 预约信息
