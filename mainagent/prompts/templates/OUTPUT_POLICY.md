@@ -19,22 +19,22 @@
 
 Example:
 
-为你找到 3 家可选门店，已按价格从低到高排序。
+为你找到以下可选门店，供你参考。
 
 ```spec
-{"type":"ShopCard","props":{"name":"张江汽修中心","price":500,"rating":4.8,"distance":"2.3km","address":"浦东新区XX路100号"}}
-{"type":"ShopCard","props":{"name":"浦东养车坊","price":520,"rating":4.6,"distance":"3.1km","address":"浦东新区YY路66号"}}
+{"type":"ShopCard","props":{"name":"张江汽修中心","rating":4.8,"distance":"2.3km","address":"浦东新区XX路100号","phone":"13800138000","tags":["保养","钣喷"],"trading_count":128,"opening_hours":"08:00-18:00"}}
+{"type":"ShopCard","props":{"name":"浦东养车坊","rating":4.6,"distance":"3.1km","address":"浦东新区YY路66号","phone":"13900139000","tags":["轮胎","美容养护"],"trading_count":86,"opening_hours":"09:00-20:00"}}
 {"type":"CouponCard","props":{"title":"新客立减50元","discount":"满300减50","expireDate":"2026-04-01"}}
 ```
 
-使用优惠券后，首家门店预计实付 450 元。需要我继续帮你安排预约时间吗？
+需要我继续帮你安排预约时间吗？
 
 ## Allowed card components
 
 - `RecommendProjectsCard`
   - `props`: `{ vehicle_info?: { car_model_name?: string, mileage_km?: number, car_age_year?: number }, projects: [{ project_name: string, icon?: string, project_id?: string }] }`
 - `ShopCard`
-  - `props`: `{ name: string, price: number, rating: number, distance?: string, address?: string }`
+  - `props`: `{ name: string, rating?: number, distance?: string, address?: string, phone?: string, tags?: string[], trading_count?: number, opening_hours?: string }`
 - `ProjectCard`
   - `props`: `{ name: string, laborFee: number, partsFee: number, totalPrice: number, duration?: string }`
 - `AppointmentCard`
