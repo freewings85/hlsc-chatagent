@@ -387,6 +387,7 @@ dependencies = [
     { name = "agent-sdk" },
     { name = "hlsc-demo-price-finder" },
     { name = "hlsc-mainagent" },
+    { name = "hlsc-recommend-project" },
 ]
 
 [package.metadata]
@@ -394,6 +395,7 @@ requires-dist = [
     { name = "agent-sdk", editable = "sdk" },
     { name = "hlsc-demo-price-finder", editable = "subagents/demo_price_finder" },
     { name = "hlsc-mainagent", editable = "mainagent" },
+    { name = "hlsc-recommend-project", editable = "subagents/recommend_project" },
 ]
 
 [[package]]
@@ -698,10 +700,21 @@ version = "0.1.0"
 source = { editable = "extensions" }
 dependencies = [
     { name = "agent-sdk" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "agent-sdk", editable = "sdk" }]
+requires-dist = [
+    { name = "agent-sdk", editable = "sdk" },
+    { name = "httpx", specifier = ">=0.27" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-playwright", specifier = ">=0.7.0" },
+]
 
 [[package]]
 name = "hlsc-mainagent"
@@ -727,6 +740,24 @@ dev = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "pytest-playwright", specifier = ">=0.4" },
+]
+
+[[package]]
+name = "hlsc-recommend-project"
+version = "0.1.0"
+source = { editable = "subagents/recommend_project" }
+dependencies = [
+    { name = "agent-sdk" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "agent-sdk", editable = "sdk" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
 ]
 
 [[package]]

@@ -1,39 +1,79 @@
-# System Prompt 模板设计
+# Prompt 设计结论（V2）
 
-系统提示词按关注点拆分为多个文件，由 PromptLoader 按固定顺序拼接后传给 LLM。
+本文档记录当前项目在系统提示词工程上的设计结论。目标是区分“稳定规则”和“动态业务状态”，保证可维护、可运营、可演进。
 
-## 命名规范
+## 1. 分层原则
 
-参考 OpenClaw / Claude Code 社区规范：
+### 1.1 静态系统层（System Prompt 本体）
 
-- **大写 `.md`**（`IDENTITY.md`、`SOUL.md`）— 通用角色级文件，跨项目可复用的命名规范
-- **小写 `.md`**（`card.md`）— 业务特有的机制文件
+静态系统层放置低频变化、跨会话稳定的规则，直接进入 `system`。这部分是 Agent 的“长期行为宪法”。
 
-## 文件结构与拼接顺序
+### 1.2 动态注入层（Runtime Context）
 
-### 静态模板（每个 agent 项目自行决定内容和顺序）
+动态注入层放置高频变化、用户级或运营级内容，不进入固定 `system prompt` 字符串，而是在运行时以 context / meta message / system-reminder 方式注入。
 
-| 顺序 | 文件 | 职责 | 对应 OpenClaw |
-|------|------|------|--------------|
-| 1 | `IDENTITY.md` | 角色声明、服务领域、职责边界 | IDENTITY.md |
-| 2 | `SOUL.md` | 沟通风格、工作方式、拒绝策略 | SOUL.md |
-| 3 | `TOOLS.md` | 工具使用策略、task 工具说明 | TOOLS.md |
-| 4 | `TASK.md` | 多步骤任务的 plan.md 跟踪机制 | — |
-| 5 | `SKILL.md` | Skill 系统的触发和执行规则 | — |
-| 6 | `card.md` | 卡片数据的展示规则（业务特有） | — |
+## 2. 文件分工
 
-### 动态内容（运行时注入，PromptLoader 负责）
+### 2.1 静态系统层文件
 
-| 顺序 | 来源 | 职责 | 对应 OpenClaw |
-|------|------|------|--------------|
-| 7 | `AGENTS.md` | 业务规则、领域知识 | AGENTS.md |
-| 8 | `MEMORY.md` | 跨会话的用户偏好和上下文 | USER.md + MEMORY.md |
-| 9 | system-reminder | Skill 列表、MCP 工具状态等 | — |
+| 顺序 | 文件 | 职责 |
+|------|------|------|
+| 1 | `IDENTITY.md` | 角色身份、能力边界、服务范围 |
+| 2 | `SOUL.md` | 语气风格、沟通纪律、拒绝风格（低频变化） |
+| 3 | `SAFETY_POLICY.md` | 安全红线、风险处理、拒答与拉回 |
+| 4 | `TOOL_POLICY.md` | 工具使用政策（先工具后结论、并行/串行原则、禁止猜测） |
+| 5 | `TASK_POLICY.md` | 复杂任务推进规则（步骤化、状态更新、完成判定） |
+| 6 | `OUTPUT_POLICY.md` | 输出规范（文本/卡片/spec、禁止泄露内部字段） |
+| 7 | `CONTEXT_POLICY.md` | 运行时上下文消费规则（字段解释、缺失值处理原则） |
 
-## 设计原则
+> 说明：`SOUL.md` 明确归入静态系统层，参考 Claude Code 的 tone/style 设计。
 
-1. **从抽象到具体**：身份 → 人格 → 工具 → 流程 → 机制 → 业务
-2. **静态与动态分离**：模板文件是代码的一部分（git 管理），动态内容来自 backend
-3. **每个 agent 自主决定**：拼接哪些文件、什么顺序，由各 agent 的 `prompt_loader.py` 控制
-4. **Prompt Cache 友好**：稳定内容在前（IDENTITY/SOUL 很少变），动态内容在后
-5. **subagent 不注入全部**：子 agent 只用自己的简短 prompt，不继承主 agent 的系统提示词
+### 2.2 动态注入层内容
+
+| 顺序 | 来源 | 职责 |
+|------|------|------|
+| 1 | `AGENT.md` | 业务编排核心：场景判定、流程策略、路由规则、5W+1H 执行框架 |
+| 2 | `USER.md` | 用户画像（用户级） |
+| 3 | `MEMORY.md` + `memory/YYYY-MM-DD.md` | 长短期记忆（用户级） |
+| 4 | `request_context` | 当前请求态上下文（车辆、位置等） |
+| 5 | skill listing | 当前可用技能清单 |
+| 6 | invoked skills | 当前会话已激活技能指令 |
+
+> 说明：`AGENT.md` 是运行时业务指令源，不是 system prompt 本体。
+
+## 3. 注入顺序
+
+推荐顺序如下：
+
+1. 静态 system：`IDENTITY -> SOUL -> SAFETY_POLICY -> TOOL_POLICY -> TASK_POLICY -> OUTPUT_POLICY -> CONTEXT_POLICY`
+2. 动态 context：`AGENT -> USER/MEMORY -> request_context -> skill listing/invoked skills`
+
+## 4. 命名与迁移建议
+
+为避免语义混乱，建议逐步将当前模板命名迁移为策略型命名：
+
+| 现有文件 | 建议文件 |
+|------|------|
+| `TOOLS.md` | `TOOL_POLICY.md` |
+| `TASK.md` | `TASK_POLICY.md` |
+| `card.md` | `OUTPUT_POLICY.md` |
+| `context.md` | `CONTEXT_POLICY.md` |
+| `AGENTS.md` | `AGENT.md` |
+
+并补充：
+
+- `SAFETY_POLICY.md`（新增）
+
+## 5. 与 Claude / OpenClaw 的对齐结论
+
+1. `system prompt` 应尽量保持稳定，承载方法论和规则。
+2. 可变信息（业务策略、记忆、技能状态）应走运行时注入，不混入固定 system 本体。
+3. `SOUL.md` 作为风格规则可放静态层；`AGENT.md` 作为业务编排建议放动态层。
+
+## 6. 后续落地范围
+
+本结论用于指导后续两个方向：
+
+1. 重写 `mainagent/prompts/templates/` 下各文件内容。
+2. 调整 PromptLoader 拼接与动态注入逻辑（如需要）。
+
