@@ -1,6 +1,6 @@
 # ============================================================
 # RecommendProject Subagent Dockerfile
-# Build context: 仓库根目录（需要访问 sdk/）
+# Build context: 仓库根目录（需要访问 sdk/ 和 extensions/）
 #   docker build -f subagents/recommend_project/Dockerfile -t hlsc-recommend-project .
 # ============================================================
 FROM python:3.12-slim
@@ -21,6 +21,10 @@ ENV PYTHONUNBUFFERED=1 \
 # SDK 源码（本地依赖）
 COPY sdk/pyproject.toml sdk/uv.lock sdk/
 COPY sdk/agent_sdk sdk/agent_sdk
+
+# Extensions 源码（本地依赖）
+COPY extensions/pyproject.toml extensions/
+COPY extensions/hlsc extensions/hlsc
 
 # Subagent 依赖文件
 COPY subagents/recommend_project/pyproject.toml subagents/recommend_project/uv.lock subagents/recommend_project/
