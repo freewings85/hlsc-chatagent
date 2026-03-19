@@ -163,6 +163,7 @@ class Agent:
         is_sub_agent: bool = False,
         message_history: list | None = None,
         transcript_session_id: str | None = None,
+        parent_request_id: str | None = None,
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -176,6 +177,7 @@ class Agent:
             fs_tools_backend: fs 工具后端（None 时自动创建 session 级）
             is_sub_agent: 是否子 agent（子 agent 不管理 CHAT_REQUEST_END 等）
             message_history: 消息历史（None 时从持久化加载，[] 表示无历史）
+            parent_request_id: 父级 request_id（subagent 场景，用于 trace 关联）
 
         Returns:
             最终响应文本，或 None
@@ -224,142 +226,147 @@ class Agent:
             request_context=request_context,
         )
 
-        # 4. Agent 运行前钩子（可用于 scene 判定等预处理）
-        if self._before_agent_run_hook is not None:
-            await self._before_agent_run_hook(
+        # Logfire span：将 session_id/request_id 注入 OpenTelemetry trace，
+        # 所有子 span（hook、LLM 调用、工具调用）自动继承
+        async def _run_request() -> str:
+            # 4. Agent 运行前钩子（可用于 scene 判定等预处理）
+            if self._before_agent_run_hook is not None:
+                await self._before_agent_run_hook(
+                    user_id,
+                    session_id,
+                    deps=deps,
+                    message=message,
+                )
+
+            # 5. 加载 prompt（依赖 deps，可用于动态 AGENT.md 注入）
+            prompt_result: PromptResult = await self._prompt_loader.load(
                 user_id,
                 session_id,
                 deps=deps,
                 message=message,
             )
 
-        # 5. 加载 prompt（依赖 deps，可用于动态 AGENT.md 注入）
-        prompt_result: PromptResult = await self._prompt_loader.load(
-            user_id,
-            session_id,
-            deps=deps,
-            message=message,
-        )
+            # 6. 构建 model
+            model = self._build_model()
 
-        # 5. 构建 model
-        model = self._build_model()
+            # 7. 构建服务
+            memory_service = self._build_memory_service()
+            transcript_service = self._build_transcript_service()
+            internal_compact_config = self._build_compact_config()
 
-        # 6. 构建服务
-        memory_service = self._build_memory_service()
-        transcript_service = self._build_transcript_service()
-        internal_compact_config = self._build_compact_config()
+            # 8. 创建 pydantic_ai Agent
+            pydantic_agent = create_agent(
+                model
+            )
 
-        # 7. 创建 pydantic_ai Agent
-        pydantic_agent = create_agent(
-            model
-        )
+            # 9. 构建 Compactor
+            compactor = Compactor(
+                config=internal_compact_config,
+                user_id=user_id,
+                session_id=session_id,
+                summarize_fn=_make_summarize_fn(pydantic_agent),
+            )
 
-        # 8. 构建 Compactor
-        compactor = Compactor(
-            config=internal_compact_config,
-            user_id=user_id,
-            session_id=session_id,
-            summarize_fn=_make_summarize_fn(pydantic_agent),
-        )
+            # 10. Context messages（来自 prompt_loader）
+            context_messages: list[ModelRequest] = list(prompt_result.context_messages)
 
-        # 9. Context messages（来自 prompt_loader）
-        context_messages: list[ModelRequest] = list(prompt_result.context_messages)
+            # 11. 请求上下文（始终注入完整 context，每轮 LLM 调用都能看到）
+            if request_context is not None:
+                if self._context_formatter is not None:
+                    context_text = self._context_formatter.format(request_context)
+                    if context_text:
+                        context_messages.append(ModelRequest(
+                            parts=[UserPromptPart(content=context_text)],
+                            metadata={"is_meta": True, "source": "request_context"},
+                        ))
+                deps.request_context = request_context
 
-        # 10. 请求上下文（始终注入完整 context，每轮 LLM 调用都能看到）
-        if request_context is not None:
-            if self._context_formatter is not None:
-                context_text = self._context_formatter.format(request_context)
-                if context_text:
-                    context_messages.append(ModelRequest(
-                        parts=[UserPromptPart(content=context_text)],
-                        metadata={"is_meta": True, "source": "request_context"},
-                    ))
-            deps.request_context = request_context
+            # 12. Attachment collector
+            attachment_collector = AttachmentCollector(file_state_tracker)
 
-        # 11. Attachment collector
-        attachment_collector = AttachmentCollector(file_state_tracker)
+            # 13. Skill 系统
+            skill_registry: SkillRegistry | None = None
+            invoked_store: InvokedSkillStore | None = None
+            if any(os.path.isdir(d) for d in SKILL_DIRS):
+                skill_registry = SkillRegistry.load(SKILL_DIRS)
+                invoked_store = InvokedSkillStore(get_inner_storage_backend(), user_id, session_id)
+                await invoked_store.load()
+                if skill_registry.has_skills():
+                    deps.skill_registry = skill_registry
+                    deps.invoked_skill_store = invoked_store
+                    deps.available_tools = [
+                        t for t in deps.available_tools if t != "Skill"
+                    ] + ["Skill"]
+                    deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
 
-        # 12. Skill 系统
-        skill_registry: SkillRegistry | None = None
-        invoked_store: InvokedSkillStore | None = None
-        if any(os.path.isdir(d) for d in SKILL_DIRS):
-            skill_registry = SkillRegistry.load(SKILL_DIRS)
-            invoked_store = InvokedSkillStore(get_inner_storage_backend(), user_id, session_id)
-            await invoked_store.load()
-            if skill_registry.has_skills():
-                deps.skill_registry = skill_registry
-                deps.invoked_skill_store = invoked_store
-                deps.available_tools = [
-                    t for t in deps.available_tools if t != "Skill"
-                ] + ["Skill"]
-                deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
+            # 14. PreModelCallMessageService
+            pre_call_service = PreModelCallMessageService(
+                compactor=compactor,
+                context_messages=context_messages,
+                attachment_collector=attachment_collector,
+                skill_registry=skill_registry if skill_registry and skill_registry.has_skills() else None,
+                invoked_skill_store=invoked_store if skill_registry and skill_registry.has_skills() else None,
+                system_prompt=prompt_result.system_prompt,
+            )
 
-        # 13. PreModelCallMessageService
-        pre_call_service = PreModelCallMessageService(
-            compactor=compactor,
-            context_messages=context_messages,
-            attachment_collector=attachment_collector,
-            skill_registry=skill_registry if skill_registry and skill_registry.has_skills() else None,
-            invoked_skill_store=invoked_store if skill_registry and skill_registry.has_skills() else None,
-            system_prompt=prompt_result.system_prompt,
-        )
+            # 15. MCP toolsets
+            mcp_toolsets = None
+            if os.path.isfile(MCP_CONFIG_PATH):
+                from agent_sdk._agent.mcp.loader import load_mcp_toolsets
+                from agent_sdk.config import get_agent_fs_backend
+                mcp_toolsets = await load_mcp_toolsets(get_agent_fs_backend())
 
-        # 14. MCP toolsets
-        mcp_toolsets = None
-        if os.path.isfile(MCP_CONFIG_PATH):
-            from agent_sdk._agent.mcp.loader import load_mcp_toolsets
-            from agent_sdk.config import get_agent_fs_backend
-            mcp_toolsets = await load_mcp_toolsets(get_agent_fs_backend())
+            # 16. 加载历史
+            agent_history: list[AgentMessage] = []
+            if message_history is not None:
+                agent_history = from_model_messages(message_history)
+            else:
+                agent_history = await memory_service.load(user_id, session_id)
 
-        # 15. 加载历史
-        agent_history: list[AgentMessage] = []
-        if message_history is not None:
-            agent_history = from_model_messages(message_history)
-        else:
-            agent_history = await memory_service.load(user_id, session_id)
+            # 17. 创建 task（共用 request_id）
+            task = SessionRequestTask(
+                session_id=session_id,
+                message=message,
+                user_id=user_id,
+                sinker=None,  # type: ignore[arg-type]
+                request_id=request_id,
+                context=request_context,
+            )
 
-        # 16. 创建 task（共用 request_id）
-        task = SessionRequestTask(
-            session_id=session_id,
-            message=message,
-            user_id=user_id,
-            sinker=None,  # type: ignore[arg-type]
-            request_id=request_id,
-            context=request_context,
-        )
+            # 18. 组装 LoopContext 并运行
+            ctx = LoopContext(
+                agent=pydantic_agent,
+                deps=deps,
+                emitter=emitter,
+                task=task,
+                pre_call_service=pre_call_service,
+                memory_service=memory_service,
+                transcript_service=transcript_service,
+                agent_history=agent_history,
+                mcp_toolsets=mcp_toolsets if mcp_toolsets else None,
+                max_iterations=self._max_iterations,
+                agent_name=self._agent_name or "main",
+                is_sub_agent=is_sub_agent,
+                transcript_session_id=transcript_session_id,
+            )
 
-        # 17. 组装 LoopContext 并运行
-        ctx = LoopContext(
-            agent=pydantic_agent,
-            deps=deps,
-            emitter=emitter,
-            task=task,
-            pre_call_service=pre_call_service,
-            memory_service=memory_service,
-            transcript_service=transcript_service,
-            agent_history=agent_history,
-            mcp_toolsets=mcp_toolsets if mcp_toolsets else None,
-            max_iterations=self._max_iterations,
-            agent_name=self._agent_name or "main",
-            is_sub_agent=is_sub_agent,
-            transcript_session_id=transcript_session_id,
-        )
+            return await run_agent_loop(ctx)
 
-        # Logfire span：将 session_id/request_id 注入 OpenTelemetry trace，
-        # 所有子 span（LLM 调用、工具调用）自动继承，logfire 里可按 session_id 过滤
         try:
             import logfire
-            with logfire.span(
-                "agent_request",
-                session_id=session_id,
-                request_id=request_id,
-                user_id=user_id,
-                agent_name=self._agent_name,
-                is_sub_agent=is_sub_agent,
-            ):
-                return await run_agent_loop(ctx)
+            span_attrs: dict[str, Any] = {
+                "session_id": session_id,
+                "request_id": request_id,
+                "user_id": user_id,
+                "agent_name": self._agent_name,
+                "is_sub_agent": is_sub_agent,
+            }
+            if parent_request_id:
+                span_attrs["parent_request_id"] = parent_request_id
+            with logfire.span("agent_request", **span_attrs):
+                return await _run_request()
         except ImportError:
-            return await run_agent_loop(ctx)
+            return await _run_request()
 
 
 def _create_model_from_config(config: ModelConfig) -> Model:

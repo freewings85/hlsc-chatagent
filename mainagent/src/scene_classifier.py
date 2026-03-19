@@ -195,12 +195,27 @@ async def before_agent_run_hook(
     if isinstance(existing, SceneInfo) and existing.request_id == request_id:
         return
 
-    scene_info = await _CLASSIFIER.classify(
-        user_id=user_id,
-        session_id=session_id,
-        message=message,
-        request_id=request_id,
-    )
+    try:
+        import logfire
+        with logfire.span(
+            "scene_classify",
+            user_id=user_id,
+            session_id=session_id,
+            request_id=request_id,
+        ):
+            scene_info = await _CLASSIFIER.classify(
+                user_id=user_id,
+                session_id=session_id,
+                message=message,
+                request_id=request_id,
+            )
+    except ImportError:
+        scene_info = await _CLASSIFIER.classify(
+            user_id=user_id,
+            session_id=session_id,
+            message=message,
+            request_id=request_id,
+        )
 
     if isinstance(ctx, dict):
         ctx["scene_info"] = scene_info.model_dump()

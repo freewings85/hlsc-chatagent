@@ -114,24 +114,17 @@ class ChatAgentExecutor(AgentExecutor):
 
         # 从 A2A message metadata 中提取父级信息（由 call_subagent 传入）
         logger.info("A2A metadata: %s", metadata)
-        parent_session_id = metadata.get("parent_session_id", "")
-        parent_request_id = metadata.get("parent_request_id", "")
+        parent_session_id: str = metadata.get("parent_session_id", "")
+        parent_request_id: str = metadata.get("parent_request_id", "")
         request_context = metadata.get("request_context")
 
-        # session_id: 父级 session_id 在前，方便按前缀搜索关联
-        session_id = f"{parent_session_id}__{context_id}" if parent_session_id else context_id
+        # session_id：和 mainagent 保持一致，便于按 session 检索全链路
+        session_id: str = parent_session_id if parent_session_id else context_id
 
         if parent_session_id:
             logger.info(
-                "A2A subagent: session=%s, parent_session=%s, parent_request=%s",
-                session_id, parent_session_id, parent_request_id,
-            )
-            # 写入 subagent 的 session execution.log，方便关联
-            from agent_sdk._utils.session_logger import get_session_logger
-            sl = get_session_logger(session_id)
-            sl.info(
-                "[PARENT] parent_session_id=%s, parent_request_id=%s",
-                parent_session_id, parent_request_id,
+                "A2A subagent: session=%s, parent_request=%s",
+                session_id, parent_request_id,
             )
 
         internal_queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
@@ -162,6 +155,8 @@ class ChatAgentExecutor(AgentExecutor):
                 temporal_client=temporal_client,
                 fs_tools_backend=fs_tools_backend,
                 request_context=request_context,
+                is_sub_agent=True,
+                parent_request_id=parent_request_id or None,
             ),
             name=f"a2a-agent-{context.task_id}",
         )

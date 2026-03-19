@@ -57,6 +57,7 @@ def main() -> None:
             logfire.configure(
                 service_name=get_agent_name(),
                 send_to_logfire=False,
+                scrubbing=False,
                 additional_span_processors=[
                     BatchSpanProcessor(OTLPSpanExporter(endpoint=logfire_config.endpoint)),
                 ],
