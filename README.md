@@ -71,3 +71,6 @@ cd mainagent && uv run pytest tests/ -v
 - [SDK README](sdk/README.md)
 - [MainAgent README](mainagent/README.md)
 - [DemoPriceFinder README](subagents/demo_price_finder/README.md)
+
+
+每个项目本身的.chatagent目录下的fstools是可访问的文件清单，运行时导入需要访问的内容，目前包括skills目录(可上传)以及docs目录(resources中的)
