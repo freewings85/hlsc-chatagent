@@ -1,39 +1,16 @@
-"""RecommendProject Subagent 工具集。
-
-- recommend_projects_api: 根据车辆信息和推荐分类，获取推荐项目
-"""
+"""recommend_projects_api 工具：根据车辆信息和推荐分类获取推荐项目。"""
 
 from __future__ import annotations
 
 import json
-import math
-import os
 from typing import Any
 
-import httpx
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
-from agent_sdk.logging import (
-    log_tool_start,
-    log_tool_end,
-    log_http_request,
-    log_http_response,
-)
+from agent_sdk.logging import log_tool_start, log_tool_end
 from src.recommend_context import VehicleInfo
-
-_API_PATH: str = "/project/maintainProjectTreeByCarKey"
-
-
-def _get_datamanager_url() -> str:
-    """从环境变量获取 datamanager 服务地址（Nacos 会自动注入）。"""
-    return os.getenv(
-        "service.ai.datamanager.url",
-        os.getenv(
-            "SERVICE_AI_DATAMANAGER_URL",
-            "http://192.168.100.108:50400/service_ai_datamanager",
-        ),
-    )
+from src.services.restful.recommend_projects_service import query_recommend_projects
 
 
 async def recommend_projects_api(
@@ -43,21 +20,28 @@ async def recommend_projects_api(
 ) -> str:
     """根据车辆信息和推荐分类，调用项目推荐接口获取推荐养车项目。
 
-    调用前应先通过 recommend_policy skill 根据车龄确定 category_ids。
+    调用前置规则：
+    1. car_age_year 必须有值。用户未提及车龄时先询问。
+    2. category_ids 根据 car_age_year 确定（严格按以下规则，不可自行编造）：
+       - car_age_year < 3 → category_ids = [5]
+       - 3 <= car_age_year < 6 → category_ids = [3,4]
+       - car_age_year >= 6 → category_ids = [2]
+    3. car_model_id 可选但建议获取：
+       - 上下文中已有 car_model_id → 直接填入 vehicle_info
+       - 用户提到了车型信息（如品牌、车系） → 先调用 fuzzy_match_car_info 获取，再填入
+       - 都没有 → 留空即可，不影响推荐
 
     Args:
         vehicle_info: 车辆信息，包含车型编码、里程数、车龄等。
-        category_ids: 项目分类 ID 列表，由 recommend_policy skill 确定。
-            如 [3] 改装升级、[2] 美容养护、[1] 维修保养。为空则不限分类。
+        category_ids: 项目分类 ID 列表，按上述规则确定。
 
     Returns:
-        推荐的养车项目树 JSON。
+        推荐的养车项目 JSON。
     """
-    sid, rid = ctx.deps.session_id, ctx.deps.request_id
+    sid: str = ctx.deps.session_id
+    rid: str = ctx.deps.request_id
     log_tool_start(
-        "recommend_projects_api",
-        sid,
-        rid,
+        "recommend_projects_api", sid, rid,
         {
             "car_model_id": vehicle_info.car_model_id,
             "mileage": vehicle_info.mileage_km,
@@ -67,28 +51,12 @@ async def recommend_projects_api(
     )
 
     try:
-        # 将车龄（年）转换为月
-        month: int = 0
-        if vehicle_info.car_age_year is not None:
-            month = int(math.ceil(vehicle_info.car_age_year * 12))
-
-        # 里程取整
-        mileage: int = 0
-        if vehicle_info.mileage_km is not None:
-            mileage = int(vehicle_info.mileage_km)
-
-        # 调用 maintainProjectTreeByCarKey 接口
-        tree: dict[str, Any] = await _query_maintain_project_tree(
+        projects: list[dict[str, Any]] = await query_recommend_projects(
             car_key=vehicle_info.car_model_id,
             category_ids=category_ids,
-            month=month,
-            mileage=mileage,
-            session_id=sid,
-            request_id=rid,
+            car_age_year=vehicle_info.car_age_year,
+            mileage_km=vehicle_info.mileage_km,
         )
-
-        # 从项目树中提取 dataType=project 的叶子节点，只保留 id 和 name
-        projects: list[dict[str, Any]] = _extract_projects(tree.get("projectTree", []))
 
         log_tool_end("recommend_projects_api", sid, rid, {"project_count": len(projects)})
         return json.dumps({
@@ -99,78 +67,3 @@ async def recommend_projects_api(
     except Exception as e:
         log_tool_end("recommend_projects_api", sid, rid, exc=e)
         return f"Error: recommend_projects_api failed - {e}"
-
-
-def _extract_projects(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """递归提取 dataType=project 的叶子节点，只保留 id 和 name。"""
-    result: list[dict[str, Any]] = []
-    for node in nodes:
-        if node.get("dataType") == "project":
-            result.append({"project_id": str(node["id"]), "project_name": node["name"]})
-        children: list[dict[str, Any]] | None = node.get("childList")
-        if children:
-            result.extend(_extract_projects(children))
-    return result
-
-
-async def _query_maintain_project_tree(
-    car_key: str,
-    category_ids: list[int],
-    month: int,
-    mileage: int,
-    session_id: str = "",
-    request_id: str = "",
-) -> dict[str, Any]:
-    """调用 maintainProjectTreeByCarKey 接口获取推荐项目树。"""
-    url: str = _get_datamanager_url().rstrip("/") + _API_PATH
-    payload: dict[str, Any] = {
-        "carKey": car_key,
-        "primaryPartIds": [],
-        "packageIds": [],
-        "categoryIds": category_ids,
-        "month": month,
-        "mileage": mileage,
-    }
-
-    log_http_request(
-        url,
-        "POST",
-        session_id,
-        request_id,
-        {
-            "carKey": car_key,
-            "categoryIds": category_ids,
-            "month": month,
-            "mileage": mileage,
-        },
-    )
-
-    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-        try:
-            resp: httpx.Response = await client.post(
-                url,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "hlsc-recommend-project/1.0",
-                },
-            )
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise RuntimeError(f"查询推荐项目接口调用失败: {exc}") from exc
-
-    response_json: dict[str, Any] = resp.json()
-    log_http_response(resp.status_code, session_id, request_id)
-
-    status: int | None = response_json.get("status")
-    if status != 0:
-        message: str = response_json.get("message") or "未知错误"
-        raise RuntimeError(f"查询推荐项目失败: {message}")
-
-    return response_json.get("result", {})
-
-
-def create_recommend_project_tool_map() -> dict[str, Any]:
-    return {
-        "recommend-projects": recommend_projects_api,
-    }

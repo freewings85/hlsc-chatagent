@@ -14,39 +14,23 @@ async def call_recommend_project(
     ctx: RunContext[AgentDeps],
     query: str,
     car_model_id: str | None = None,
-    vin_code: str | None = None,
-    car_model_name: str | None = None,
-    mileage_km: float | None = None,
-    car_age_year: float = 0.0,
 ) -> str:
-    """调用 RecommendProject subagent，根据车辆里程数、车龄、车型推荐养车项目。
+    """调用养车服务 subagent，处理两类场景：
 
-    当用户想知道车辆需要做什么保养/维修项目时（如"推荐什么项目"、"该做什么保养了"、"跑了xx公里需要做什么"），根据车辆状况智能推荐养车项目。
+    1. 推荐养车项目：用户不确定需要做什么，想根据车辆状况获取保养/维修建议。
+       示例："推荐什么项目"、"该做什么保养了"、"跑了3万公里需要做什么"
 
-    调用前置条件：
-    - car_model_id 不是必填项。仅当用户主动提到车型相关信息（品牌、车系、车型）时，
-      先通过 fuzzy_match_car_info 获取 car_model_id 后传入。
-    - car_age_year 必填。用户提到车龄则直接换算后传入；未提及则先向用户询问。
+    2. 故障诊断：用户描述了车辆异常现象或故障症状，需要分析原因并推荐维修项目。
+       示例："刹车有异响"、"方向盘抖"、"发动机故障灯亮了"、"过减速带咚咚响"
 
     Args:
-        query: 用户的需求描述，如"我的车该做什么保养了"、"推荐养车项目"。
-        car_model_id: 车型编码。用户未提及车型信息时不传。
-        vin_code: 车辆 VIN 码。用户未提及时不传。
-        car_model_name: 车型名称，如"2024款 宝马 325Li"。用户未提及时不传。
-        mileage_km: 当前里程数（千米）。用户未提及时不传。
-        car_age_year: 车龄（年），必填。
+        query: 用户的完整需求描述，应包含用户提到的所有车辆信息（如里程、车龄、故障症状等）。
+        car_model_id: 车型编码。如果上下文中已有（如 current_car），直接传入；没有则不传，subagent 会自行处理。
 
     Returns:
-        推荐的养车项目信息 JSON。
+        subagent 的响应结果。
     """
-    # 车辆信息通过 context 传递，subagent 的 ContextFormatter 负责注入 LLM
-    context = {
-        "vehicle_info": {
-            "car_model_id": car_model_id,
-            "vin_code": vin_code,
-            "car_model_name": car_model_name,
-            "mileage_km": mileage_km,
-            "car_age_year": car_age_year,
-        },
-    }
-    return await call_subagent(ctx, url=RECOMMEND_PROJECT_URL, message=query, context=context)
+    context: dict = {"car_model_id": car_model_id}
+    return await call_subagent(
+        ctx, url=RECOMMEND_PROJECT_URL, message=query, context=context
+    )

@@ -25,6 +25,6 @@ def create_agent_app() -> AgentApp:
     return AgentApp(
         agent,
         AgentAppConfig(
-            description="根据车辆里程数、车龄、车型智能推荐养车项目",
+            description="汽车养车服务专家 — 推荐养车项目、诊断故障并推荐维修项目",
         ),
     )
