@@ -23,7 +23,6 @@ from hlsc.tools.ask_user_car_info import ask_user_car_info
 from hlsc.tools.fuzzy_match_location import fuzzy_match_location
 from hlsc.tools.ask_user_location import ask_user_location
 from hlsc.tools.match_project import match_project
-from hlsc.tools.get_project_price import get_project_price
 
 
 def create_agent_app() -> AgentApp:
@@ -47,7 +46,6 @@ def create_agent_app() -> AgentApp:
         "ask_user_location": ask_user_location,
         # 项目 & 报价
         "match_project": match_project,
-        "get_project_price": get_project_price,
     }
 
     agent = Agent(

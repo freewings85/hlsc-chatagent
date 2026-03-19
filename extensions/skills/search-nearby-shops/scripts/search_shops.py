@@ -11,7 +11,8 @@ import os
 
 import httpx
 
-SHOP_SERVICE_URL = os.getenv("SHOP_SERVICE_URL", "")
+DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
+NEARBY_SHOPS_PATH: str = "/service_ai_datamanager/shop/getNearbyShops"
 
 
 async def search(
@@ -22,10 +23,10 @@ async def search(
     radius: int,
     order_by: str,
 ) -> dict:
-    if not SHOP_SERVICE_URL:
-        return {"error": "SHOP_SERVICE_URL 未配置"}
+    if not DATA_MANAGER_URL:
+        return {"error": "DATA_MANAGER_URL 未配置"}
 
-    url = f"{SHOP_SERVICE_URL}/shop/getNearbyShops"
+    url: str = f"{DATA_MANAGER_URL}{NEARBY_SHOPS_PATH}"
     payload: dict = {
         "latitude": lat,
         "longitude": lng,
