@@ -42,6 +42,8 @@ def base_url() -> str:  # type: ignore[return]
         **clean_env,
         "SERVER_PORT": str(PLAYWRIGHT_PORT),
         "DATA_DIR": str(TEST_DATA_DIR),
+        "INNER_STORAGE_DIR": str(TEST_DATA_DIR / "inner"),
+        "FS_TOOLS_DIR": str(TEST_DATA_DIR),
         "USE_NACOS": "FALSE",
         # E2E 使用 20k compact 阈值（接近真实使用场景）
         # effective_window = 20000 - 2000 = 18000
@@ -116,9 +118,13 @@ def send_and_wait(page: Page, message: str) -> None:
     input_box.fill(message)
     page.locator("#send-btn").click()
 
-    # 等待流式响应结束（send-btn 不再 disabled）
+    # 新版 UI 在流式期间切换为 “停止”按钮；结束后 input 重新可用
     page.wait_for_function(
-        "() => !document.getElementById('send-btn').disabled",
+        "() => { "
+        "const input = document.getElementById('input-box'); "
+        "const stop = document.querySelector('.btn-stop'); "
+        "return !!input && !input.disabled && !stop; "
+        "}",
         timeout=RESPONSE_TIMEOUT_MS,
     )
 

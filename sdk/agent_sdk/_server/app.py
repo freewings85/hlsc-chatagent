@@ -39,7 +39,11 @@ def _get_agent():
         from agent_sdk.prompt_loader import StaticPromptLoader
 
         _agent_instance = Agent(
-            prompt_loader=StaticPromptLoader("You are a helpful assistant."),
+            prompt_loader=StaticPromptLoader(
+                "You are a helpful assistant.\n"
+                "If user explicitly asks to use a tool, you should call that tool.\n"
+                "For file operations (read/write/edit/glob/grep/bash), prefer tool calls over guessing.\n"
+            ),
             tools=ToolConfig(manual=create_default_tool_map()),
         )
     return _agent_instance
@@ -174,6 +178,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     from agent_sdk._event.event_emitter import EventEmitter
     from agent_sdk._event.event_model import EventModel
     from agent_sdk._event.event_type import EventType
+    from agent_sdk._config.settings import get_fs_tools_backend
 
     queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
     emitter: EventEmitter = EventEmitter(queue)
@@ -189,6 +194,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             emitter=emitter,
             temporal_client=_get_temporal_client(),
             request_context=request.context,
+            fs_tools_backend=get_fs_tools_backend(),
         ),
         name=f"agent-loop-{task_id}",
     )
@@ -204,10 +210,10 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     async def generate() -> object:
         try:
             start_event = EventModel(
-                session_id=task.session_id,
-                request_id=task.request_id,
+                session_id=request.session_id,
+                request_id=task_id,
                 type=EventType.CHAT_REQUEST_START,
-                data={"task_id": task.task_id},
+                data={"task_id": task_id},
             )
             yield f"event: {start_event.type.value}\ndata: {start_event.to_json()}\n\n"
             while True:
@@ -216,9 +222,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                     break
                 yield f"event: {event.type.value}\ndata: {event.to_json()}\n\n"
         except (GeneratorExit, asyncio.CancelledError):
-            task.cancelled = True
+            pass
         finally:
-            _running_tasks.pop(task.task_id, None)
+            _running_tasks.pop(task_id, None)
             if not loop_task.done():
                 loop_task.cancel()
                 try:
@@ -245,7 +251,8 @@ async def chat_stop(request: StopRequest) -> JSONResponse:
         return JSONResponse(status_code=404, content={"error": "任务不存在或已结束"})
 
     task_obj, loop_task = entry
-    task_obj.cancelled = True  # type: ignore[union-attr]
+    if task_obj is not None and hasattr(task_obj, "cancelled"):
+        task_obj.cancelled = True  # type: ignore[union-attr]
     if not loop_task.done():
         loop_task.cancel()
 

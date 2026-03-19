@@ -68,7 +68,7 @@ def main() -> None:
     from hlsc.tools.fuzzy_match_car_info import fuzzy_match_car_info
     from hlsc.tools.list_user_cars import list_user_cars
     from hlsc.tools.ask_user_car_info import ask_user_car_info
-    from hlsc.tools.fuzzy_match_location import fuzzy_match_location
+    from hlsc.tools.geocode_location import geocode_location
     from hlsc.tools.ask_user_location import ask_user_location
 
     # Context formatter
@@ -140,7 +140,7 @@ def main() -> None:
         "fuzzy_match_car_info": fuzzy_match_car_info,
         "list_user_cars": list_user_cars,
         "ask_user_car_info": ask_user_car_info,
-        "fuzzy_match_location": fuzzy_match_location,
+        "geocode_location": geocode_location,
         "ask_user_location": ask_user_location,
     }
     if diagnose_tool:

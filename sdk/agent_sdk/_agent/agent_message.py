@@ -78,6 +78,7 @@ class AssistantMessage(BaseModel):
     role: Literal["assistant"] = "assistant"
     content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     timestamp: str = Field(default_factory=_now_iso)
 
 
@@ -152,6 +153,7 @@ def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
             result.append(AssistantMessage(
                 content=content,
                 tool_calls=tool_calls,
+                metadata=dict(msg.metadata) if msg.metadata else {},
             ))
 
     return result
@@ -189,7 +191,10 @@ def to_model_messages(messages: list[AgentMessage]) -> list[ModelMessage]:
                     args=tc.args,
                 ))
             if parts_resp:
-                result.append(ModelResponse(parts=parts_resp))  # type: ignore[arg-type]
+                result.append(ModelResponse(
+                    parts=parts_resp,  # type: ignore[arg-type]
+                    metadata=msg.metadata if msg.metadata else None,
+                ))
 
     return result
 

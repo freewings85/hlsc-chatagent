@@ -251,8 +251,7 @@ class Agent:
 
         # 7. 创建 pydantic_ai Agent
         pydantic_agent = create_agent(
-            model,
-            system_prompt=prompt_result.system_prompt if prompt_result.system_prompt else None,
+            model
         )
 
         # 8. 构建 Compactor

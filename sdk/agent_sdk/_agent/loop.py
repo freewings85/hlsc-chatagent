@@ -46,6 +46,7 @@ from agent_sdk._utils.session_logger import (
 
 from agent_sdk._agent.agent_message import (
     AgentMessage,
+    AssistantMessage,
     UserMessage,
     from_model_messages,
     to_model_messages,
@@ -63,6 +64,31 @@ from agent_sdk._event.event_emitter import EventEmitter
 from agent_sdk._agent.card_parser import make_card_reminder, parse_card
 from agent_sdk._event.event_model import EventModel
 from agent_sdk._event.event_type import EventType
+
+
+def _tag_request_phase(messages: list[AgentMessage], request_id: str) -> None:
+    """为本次 request 产生的消息打上 request_id/request_phase。"""
+    if not messages:
+        return
+
+    if len(messages) == 1:
+        msg = messages[0]
+        if isinstance(msg, (UserMessage, AssistantMessage)):
+            msg.metadata["request_id"] = request_id
+            msg.metadata["request_phase"] = "request_end"
+        return
+
+    last_idx = len(messages) - 1
+    for idx, msg in enumerate(messages):
+        if not isinstance(msg, (UserMessage, AssistantMessage)):
+            continue
+        msg.metadata["request_id"] = request_id
+        if idx == 0:
+            msg.metadata["request_phase"] = "request_start"
+        elif idx == last_idx:
+            msg.metadata["request_phase"] = "request_end"
+        else:
+            msg.metadata["request_phase"] = "request_inner"
 
 
 # ── LoopContext ────────────────────────────────────────────────────────────
@@ -452,6 +478,7 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
             appended = new_messages[_base_len:]
             # 转换为 AgentMessage 后持久化
             new_agent_messages = from_model_messages(appended)
+            _tag_request_phase(new_agent_messages, task.request_id)
             await transcript_service.append(task.user_id, _transcript_sid, new_agent_messages)
             if not is_sub_agent:
                 # 子 agent 不写 messages.jsonl（fresh context，无需工作集持久化）
@@ -495,4 +522,3 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
             await emitter.close()
 
     return final_response
-
