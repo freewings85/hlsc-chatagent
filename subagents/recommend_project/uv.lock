@@ -658,34 +658,11 @@ wheels = [
 ]
 
 [[package]]
-name = "hlsc-extensions"
-version = "0.1.0"
-source = { editable = "../../extensions" }
-dependencies = [
-    { name = "agent-sdk" },
-    { name = "httpx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "agent-sdk", editable = "../../sdk" },
-    { name = "httpx", specifier = ">=0.27" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.24.0" },
-    { name = "pytest-playwright", specifier = ">=0.7.0" },
-]
-
-[[package]]
 name = "hlsc-recommend-project"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "agent-sdk" },
-    { name = "hlsc-extensions" },
 ]
 
 [package.dev-dependencies]
@@ -696,10 +673,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "agent-sdk", editable = "../../sdk" },
-    { name = "hlsc-extensions", editable = "../../extensions" },
-]
+requires-dist = [{ name = "agent-sdk", editable = "../../sdk" }]
 
 [package.metadata.requires-dev]
 dev = [
