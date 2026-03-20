@@ -87,6 +87,7 @@ def _simplify_shops(raw_shops: list[dict]) -> list[dict]:
                 plans.append({
                     "name": plan.get("name", ""),
                     "price": plan.get("price", ""),
+                    "partPrice": plan.get("partPrice", ""),
                 })
             shop_map[shop_id]["quotationProjectList"].append({
                 "id": project_id,

@@ -33,20 +33,20 @@ def create_agent_app() -> AgentApp:
 
     # SDK 内置工具 + subagent 调用 + extensions 业务工具
     tool_map = {
-        # **create_default_tool_map(),
-        # # subagent 调用
-        # "call_code_agent": call_code_agent,
+        **create_default_tool_map(),
+        # subagent 调用
+        "call_code_agent": call_code_agent,
         "call_demo_price_finder": call_demo_price_finder,
-        # "call_recommend_project": call_recommend_project,
-        # # 车辆信息
-        # "fuzzy_match_car_info": fuzzy_match_car_info,
-        # "list_user_cars": list_user_cars,
-        # "ask_user_car_info": ask_user_car_info,
-        # # 位置信息
-        # "geocode_location": geocode_location,
-        # "ask_user_location": ask_user_location,
-        # # 项目 & 报价
-        # "match_project": match_project,
+        "call_recommend_project": call_recommend_project,
+        # 车辆信息
+        "fuzzy_match_car_info": fuzzy_match_car_info,
+        "list_user_cars": list_user_cars,
+        "ask_user_car_info": ask_user_car_info,
+        # 位置信息
+        "geocode_location": geocode_location,
+        "ask_user_location": ask_user_location,
+        # 项目 & 报价
+        "match_project": match_project,
     }
 
     agent = Agent(

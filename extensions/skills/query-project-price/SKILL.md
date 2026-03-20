@@ -30,12 +30,10 @@ cd <skill-dir> && python scripts/get_project_price.py --project_ids 101,102 --ca
 可选参数：
 - `--sort_by`：排序方式 — distance（默认）/ rating / price
 
-### Step 2：展示结果
+### Step 2：返回结果
 
-将报价结果整理后回复用户。每个门店下会列出各项目的报价方案，包含：
-- 方案名称和价格（含工时和配件）
-- 方案类型（如国际大厂、国产品质、原厂等）
-- 保质期信息（如有）
+查询结果为 JSON 格式，直接将完整 JSON 返回给用户，不要做任何整理或转换。
+
 
 ## 规则
 
