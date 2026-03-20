@@ -26,39 +26,11 @@ SYSTEM_PROMPT_PARTS: list[Path] = [
     _TEMPLATES_DIR / "OUTPUT_POLICY.md",
 ]
 
-_SCENE_AGENT_FILES: dict[str, Path] = {
-    "chat": _TEMPLATES_DIR / "AGENT_CHAT.md",
-    "clarify": _TEMPLATES_DIR / "AGENT_CLARIFY.md",
-    "execute": _TEMPLATES_DIR / "AGENT_EXECUTE.md",
-}
-
-
-def _resolve_scene_type(request_context: Any) -> str:
-    """从 request_context 解析 scene_type，默认返回 clarify。"""
-    if request_context is None:
-        return "clarify"
-
-    value: Any = None
-    if isinstance(request_context, dict):
-        scene_info = request_context.get("scene_info")
-        if isinstance(scene_info, dict):
-            value = scene_info.get("scene_type")
-        elif scene_info is not None:
-            value = getattr(scene_info, "scene_type", None)
-    else:
-        scene_info = getattr(request_context, "scene_info", None)
-        if scene_info is not None:
-            value = getattr(scene_info, "scene_type", None)
-
-    if isinstance(value, str):
-        scene = value.strip().lower()
-        if scene in _SCENE_AGENT_FILES:
-            return scene
-    return "clarify"
+_AGENT_MD_PATH: Path = _TEMPLATES_DIR / "AGENT.md"
 
 
 class MainPromptLoader(TemplatePromptLoader):
-    """MainAgent PromptLoader：按 scene_type 动态注入 AGENT 指令。"""
+    """MainAgent PromptLoader：加载统一 AGENT.md 作为业务指令。"""
 
     async def get_agent_md_content(
         self,
@@ -67,16 +39,9 @@ class MainPromptLoader(TemplatePromptLoader):
         deps: Any | None = None,
         message: str | None = None,
     ) -> str | None:
-        request_context = getattr(deps, "request_context", None) if deps is not None else None
-        scene_type = _resolve_scene_type(request_context)
-
-        agent_path = _SCENE_AGENT_FILES.get(scene_type, _SCENE_AGENT_FILES["clarify"])
-        if not agent_path.exists():
-            agent_path = _SCENE_AGENT_FILES["clarify"]
-        if not agent_path.exists():
+        if not _AGENT_MD_PATH.exists():
             return None
-
-        content = agent_path.read_text(encoding="utf-8").strip()
+        content: str = _AGENT_MD_PATH.read_text(encoding="utf-8").strip()
         return content or None
 
 

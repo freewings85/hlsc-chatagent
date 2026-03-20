@@ -9,7 +9,7 @@ from agent_sdk import Agent, AgentApp, AgentAppConfig, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
 from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
-from src.scene_classifier import before_agent_run_hook
+
 
 # subagent 调用工具
 from src.tools.call_code_agent import call_code_agent
@@ -58,7 +58,6 @@ def create_agent_app() -> AgentApp:
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
         context_formatter=HlscContextFormatter(),
-        before_agent_run_hook=before_agent_run_hook,
     )
 
     return AgentApp(

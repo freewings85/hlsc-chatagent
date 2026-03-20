@@ -58,8 +58,18 @@ async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -
     content = entry.content
     skill_dir_hint = ""
     if entry.source_path is not None:
-        skill_dir = str(entry.source_path.parent.resolve())
+        skill_dir_path = entry.source_path.parent.resolve()
+        skill_dir = str(skill_dir_path)
         skill_dir_hint = f"\n\n<skill-dir>{skill_dir}</skill-dir>"
+
+        # 计算 fs 工具（read/glob/grep）可用的虚拟路径
+        backend = ctx.deps.fs_tools_backend
+        if backend is not None and hasattr(backend, "cwd"):
+            try:
+                rel: Path = skill_dir_path.relative_to(backend.cwd)
+                skill_dir_hint += f"\n<skill-fs-dir>/{rel}</skill-fs-dir>"
+            except ValueError:
+                pass
 
     # metadata tag（参照 Claude Code nI8()）
     metadata_tag = (

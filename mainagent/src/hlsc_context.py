@@ -2,29 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
-from pydantic import BaseModel, Field
-
 from agent_sdk._common.request_context import ContextFormatter, RequestContext
 from hlsc.models import CarInfo, LocationInfo
-
-
-class SceneInfo(BaseModel):
-    """场景判定信息（由外部小模型产出并写入 request_context）。"""
-
-    scene_type: Literal["chat", "clarify", "execute"] = Field(
-        default="clarify",
-        description="当前场景类型",
-    )
-    confidence: float = Field(
-        default=0.0,
-        description="场景判定置信度（0~1）",
-    )
-    request_id: str = Field(
-        default="",
-        description="该场景判定对应的 request_id",
-    )
 
 
 class HlscRequestContext(RequestContext):
@@ -32,7 +11,6 @@ class HlscRequestContext(RequestContext):
 
     current_car: CarInfo | None = None
     current_location: LocationInfo | None = None
-    scene_info: SceneInfo | None = None
 
 
 class HlscContextFormatter(ContextFormatter):
