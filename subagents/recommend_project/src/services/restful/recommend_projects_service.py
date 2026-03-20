@@ -15,9 +15,9 @@ _API_PATH: str = "/service_ai_datamanager/project/maintainProjectTreeByCarKey"
 
 def _get_datamanager_url() -> str:
     """从环境变量获取 datamanager 服务地址。"""
-    url: str | None = os.getenv("DATAMANAGER_URL")
+    url: str | None = os.getenv("DATA_MANAGER_URL")
     if not url:
-        raise RuntimeError("DATAMANAGER_URL 未配置")
+        raise RuntimeError("DATA_MANAGER_URL 未配置")
     return url
 
 

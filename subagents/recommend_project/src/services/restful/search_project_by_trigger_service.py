@@ -17,7 +17,7 @@ _PACKAGE_API_PATH: str = (
 
 def _get_datamanager_url() -> str:
     """从环境变量获取 datamanager 服务地址。"""
-    return os.getenv("DATAMANAGER_URL")
+    return os.getenv("DATA_MANAGER_URL")
 
 
 async def search_project_by_trigger(
