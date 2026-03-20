@@ -96,13 +96,24 @@ class SubagentSession:
 
         context_id = f"sa-{session_id}-{uuid4().hex[:8]}"
 
-        # 构造 metadata（首次调用带 context + 父级 session/request ID）
+        # 构造 metadata（首次调用带 context + 父级 session/request ID + trace context）
         metadata: dict[str, Any] = {
             "parent_session_id": session_id,
             "parent_request_id": ctx.deps.request_id,
         }
         if self._context:
             metadata["request_context"] = self._context
+
+        # 将当前 OTel trace context 序列化到 metadata，供 subagent 还原 parent
+        try:
+            from opentelemetry.context import get_current
+            from opentelemetry.propagate import inject
+            _carrier: dict[str, str] = {}
+            inject(_carrier, context=get_current())
+            if _carrier:
+                metadata["_otel_carrier"] = _carrier
+        except ImportError:
+            pass
 
         # 使用自定义 transport 绕过 HTTP_PROXY（A2A 调用都是内网地址）
         transport = httpx.AsyncHTTPTransport()
@@ -328,16 +339,7 @@ async def _a2a_send(
         "params": params,
     }
 
-    # 注入 OpenTelemetry trace context，让 subagent 的 trace 和 mainagent 关联
-    headers: dict[str, str] = {}
-    try:
-        from opentelemetry.context import get_current
-        from opentelemetry.propagate import inject
-        inject(headers, context=get_current())
-    except ImportError:
-        pass
-
-    resp = await client.post(f"{url}/a2a", json=request_body, headers=headers)
+    resp = await client.post(f"{url}/a2a", json=request_body)
     resp.raise_for_status()
     data = resp.json()
 

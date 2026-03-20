@@ -164,6 +164,7 @@ class Agent:
         message_history: list | None = None,
         transcript_session_id: str | None = None,
         parent_request_id: str | None = None,
+        parent_otel_context: Any = None,
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -178,6 +179,7 @@ class Agent:
             is_sub_agent: 是否子 agent（子 agent 不管理 CHAT_REQUEST_END 等）
             message_history: 消息历史（None 时从持久化加载，[] 表示无历史）
             parent_request_id: 父级 request_id（subagent 场景，用于 trace 关联）
+            parent_otel_context: 父级 OTel context（subagent 场景，实现跨服务 trace 关联）
 
         Returns:
             最终响应文本，或 None
@@ -363,8 +365,19 @@ class Agent:
             }
             if parent_request_id:
                 span_attrs["parent_request_id"] = parent_request_id
-            with logfire.span("agent_request", **span_attrs):
-                return await _run_request()
+
+            if parent_otel_context is not None:
+                # 在父级 OTel context 下创建 span，实现跨服务 trace 关联
+                from opentelemetry.context import attach, detach
+                token = attach(parent_otel_context)
+                try:
+                    with logfire.span("agent_request", **span_attrs):
+                        return await _run_request()
+                finally:
+                    detach(token)
+            else:
+                with logfire.span("agent_request", **span_attrs):
+                    return await _run_request()
         except ImportError:
             return await _run_request()
 
