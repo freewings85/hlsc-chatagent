@@ -23,6 +23,8 @@ from hlsc.tools.ask_user_car_info import ask_user_car_info
 from hlsc.tools.geocode_location import geocode_location
 from hlsc.tools.ask_user_location import ask_user_location
 from hlsc.tools.match_project import match_project
+# from hlsc.tools.get_project_price import get_project_price
+from hlsc.tools.get_visited_shops import get_visited_shops
 
 
 
@@ -36,7 +38,7 @@ def create_agent_app() -> AgentApp:
         **create_default_tool_map(),
         # subagent 调用
         "call_code_agent": call_code_agent,
-        "call_demo_price_finder": call_demo_price_finder,
+        # "call_demo_price_finder": call_demo_price_finder,
         "call_recommend_project": call_recommend_project,
         # 车辆信息
         "fuzzy_match_car_info": fuzzy_match_car_info,
@@ -47,6 +49,9 @@ def create_agent_app() -> AgentApp:
         "ask_user_location": ask_user_location,
         # 项目 & 报价
         "match_project": match_project,
+        # "get_project_price": get_project_price,
+        # 商户查询
+        "get_visited_shops": get_visited_shops,
     }
 
     agent = Agent(
