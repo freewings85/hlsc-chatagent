@@ -20,3 +20,6 @@ iterations/
 # 运行时配置
 **/.chatagent/
 nacos-data/
+
+# 方案文档（不入库）
+*.txt

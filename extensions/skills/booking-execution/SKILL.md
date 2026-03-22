@@ -1,0 +1,57 @@
+---
+name: booking-execution
+description: 执行车主已确认的预订方案——按 plan_mode 分流，走不同执行路径。
+when_to_use: 车主已确认预订方案（T7 完成），需要执行最终预订动作时使用。
+---
+
+# 预订执行 Skill（T8）
+
+## 职责
+
+执行车主已确认的预订方案，按 plan_mode 分流走不同执行路径。
+
+## 执行步骤
+
+1. 先阅读 `read <skill-fs-dir>/references/执行流程与异常处理.md`
+2. 确认方案已被车主明确同意（PLAN-THEN-ACTION 原则）
+3. 读取 T7 方案中的 plan_mode，按模式分流：
+   - **T7-A 过渡型** → 生成简化执行请求
+   - **T7-B 标准** → 提交标准预订订单
+   - **T7-C 竞标** → 提交竞标订单 + 监控抢单
+   - **T7-D 保险竞标** → 对应保险执行流程
+   - **T7-E 管家服务** → 对应管家执行流程
+   - **T7-F 打包拆解** → 按子项目分别执行
+4. 向车主确认执行请求已提交
+5. 处理执行异常
+
+## Tools（T8 执行有副作用的动作）
+
+- `purchase_coupon`（待注册）：真实购券动作（T7 只做校验，T8 才执行购券）
+- `create_booking_order`（待注册）：生成预订订单
+- `push_order_to_merchant`（待注册）：推送订单给商户
+- `create_bidding_order`（待注册）：生成竞标抢单订单
+- `handle_bidding_timeout`（待注册）：竞标超时处理/重新议价
+- `submit_execution_request`（待注册）：提交执行请求，含完整性校验
+- `query_execution_status`（待注册）：查询执行状态
+
+## 未实现能力（设计预留）
+
+- execution-planner-agent：T7-E/F 复杂编排 subagent 未实现
+
+## 注意
+
+"当前执行请求是否完整""是否满足提交条件"等，
+由 submit_execution_request tool 校验返回。
+skill 不写死各模式的提交前置条件，接住 tool 返回后处理。
+
+## 硬规则
+
+- **PLAN-THEN-ACTION**：必须先有车主确认的方案，才能执行
+- **不能跳过确认**：即使方案看起来很明显，也要车主说"确认"才执行
+- **执行结果必须反馈**：预订成功/失败都要告知车主
+
+## 完成标准
+
+- 预订执行请求已生成并提交（或提交到执行系统）
+- 执行请求提交结果已反馈给车主
+- 如执行请求生成失败，已告知原因并给出下一步建议
