@@ -13,7 +13,8 @@ import httpx
 from agent_sdk.logging import log_http_request, log_http_response
 from hlsc.models import CarInfo
 
-FUZZY_MATCH_CAR_URL = os.getenv("FUZZY_MATCH_CAR_URL", "")
+DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
+_FUZZY_MATCH_CAR_PATH: str = "/service_ai_datamanager/Auto/getCarModelByQueryKey"
 
 
 class FuzzyMatchCarService:
@@ -30,9 +31,9 @@ class FuzzyMatchCarService:
         if not query:
             return None
 
-        url = FUZZY_MATCH_CAR_URL
-        if not url:
-            raise RuntimeError("FUZZY_MATCH_CAR_URL 未配置")
+        if not DATA_MANAGER_URL:
+            raise RuntimeError("DATA_MANAGER_URL 未配置")
+        url: str = f"{DATA_MANAGER_URL}{_FUZZY_MATCH_CAR_PATH}"
 
         payload = {"queryKey": query, "conversationId": session_id}
         log_http_request(url, "POST", session_id, request_id, payload)
