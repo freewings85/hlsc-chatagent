@@ -16,8 +16,8 @@ when_to_use: 项目已确认，需要明确省钱目标时使用。
    - `read <skill-fs-dir>/references/省钱目标确认方法.md`
    - `read <skill-fs-dir>/references/对比基准类型与处理方式.md`
 2. 按 3 步与车主确认省钱目标
-3. 如车主目标不清晰，可调用 `get_project_price` tool 先试探行情再反向确认
-4. 输出明确的省钱目标供 T4 使用
+3. 如车主目标不清晰，可调用报价查询 tool 先试探行情再反向确认
+4. 输出明确的省钱目标供后续省钱方法选择使用
 
 ## Tools
 
