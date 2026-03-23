@@ -17,6 +17,13 @@ from hlsc.tools.prompt_loader import load_tool_prompt
 DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 SEARCH_PROJECT_PATH: str = "/service_ai_datamanager/project/searchProjectPackageByKeyword"
 
+_CAR_PRECISION_MAP: dict[str, str] = {
+    "no_need_car": "none",
+    "brand_series": "L1",
+    "car_and_param": "L2",
+    "need_vin": "L3",
+}
+
 _DESCRIPTION: str = load_tool_prompt("match_project")
 
 
@@ -53,6 +60,9 @@ async def match_project(
             {
                 "project_id": item.get("packageId", 0),
                 "name": item.get("packageName", ""),
+                "car_precision": _CAR_PRECISION_MAP.get(
+                    item.get("chooseCar", ""), "unknown"
+                ),
             }
             for item in raw_list
         ]
@@ -62,8 +72,10 @@ async def match_project(
 
         # 业务提示
         if projects:
-            names: str = "、".join(p["name"] for p in projects)
-            notice: str = f"\n[业务提示] 匹配到项目：{names}"
+            parts: list[str] = [
+                f"{p['name']}({p['car_precision']})" for p in projects
+            ]
+            notice: str = f"\n[业务提示] 匹配到项目：{'、'.join(parts)}"
         else:
             notice = f"\n[业务提示] 「{keyword}」未匹配到相关项目"
 
