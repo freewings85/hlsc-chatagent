@@ -21,29 +21,34 @@ _DESCRIPTION = load_tool_prompt("ask_user_car_info")
 
 async def ask_user_car_info(
     ctx: RunContext[AgentDeps],
-    reason: Annotated[str, Field(description="需要车辆信息的原因，如'查询洗车价格需要知道您的车型'")],
+    reason: Annotated[str, Field(description="需要车辆信息的原因，如'查询报价需要知道您的车型'")],
+    allow_select: Annotated[bool, Field(description="是否允许从车库选择。True=需要精确车型(L2)，False=需要VIN码(L3)")] = True,
 ) -> str:
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
-    log_tool_start("ask_user_car_info", sid, rid, {"reason": reason})
+    log_tool_start("ask_user_car_info", sid, rid, {"reason": reason, "allow_select": allow_select})
 
     try:
         reply = await call_interrupt(ctx, {
             "type": "select_car",
             "question": reason,
+            "allowSelect": allow_select,
         })
 
-        # 前端回复格式：JSON 字符串 {"car_model_id": "xxx", "car_model_name": "xxx"}
+        # 前端回复格式：JSON 字符串 {"car_model_id": "xxx", "car_model_name": "xxx", "vin_code": "xxx"}
         import json
         try:
             data = json.loads(reply)
-            car_model_id = data.get("car_model_id", "")
-            car_model_name = data.get("car_model_name", "")
+            car_model_id: str = data.get("car_model_id", "")
+            car_model_name: str = data.get("car_model_name", "")
+            vin_code: str = data.get("vin_code", "")
             if car_model_id:
-                log_tool_end("ask_user_car_info", sid, rid, {"car_model_id": car_model_id})
-                return (
-                    f"用户选择车型：car_model_id={car_model_id}, "
-                    f"car_model_name={car_model_name}"
-                )
+                log_tool_end("ask_user_car_info", sid, rid, {
+                    "car_model_id": car_model_id, "vin_code": vin_code,
+                })
+                result: str = f"用户选择车型：car_model_id={car_model_id}, car_model_name={car_model_name}"
+                if vin_code:
+                    result += f", vin_code={vin_code}"
+                return result
         except (json.JSONDecodeError, AttributeError):
             pass
 
