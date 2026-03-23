@@ -1,5 +1,5 @@
 ---
-name: service-demand-clarifier
+name: project-demand-clarifier
 description: 确认车主的真实养车项目和要求，覆盖直接表达、潜在需求、模糊意图（含知识库辅助）、现场检查、事故碰撞分流、管家服务项目提取等场景。
 when_to_use: 用户提到任何养车项目需求（明确或模糊），需要识别、确认、诊断具体项目时使用。
 ---
