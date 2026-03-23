@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_ai import Agent
 from pydantic_ai.agent import ModelRequestNode, CallToolsNode
@@ -89,6 +89,21 @@ def _tag_request_phase(messages: list[AgentMessage], request_id: str) -> None:
             msg.metadata["request_phase"] = "request_end"
         else:
             msg.metadata["request_phase"] = "request_inner"
+
+
+FinishReason = Literal["completed", "cancelled", "max_iterations", "error"]
+
+
+@dataclass
+class RunLoopResult:
+    """run_agent_loop 的统一返回结果。
+
+    所有结束语义收敛于此，上层（hook / 前端事件 / 日志）统一消费。
+    """
+
+    final_response: str | None = None
+    finish_reason: FinishReason = "completed"
+    transcript_persisted: bool = False
 
 
 # ── LoopContext ────────────────────────────────────────────────────────────
@@ -343,11 +358,11 @@ async def _emit_tool_events(
 # ── 核心引擎 ───────────────────────────────────────────────────────────────
 
 
-async def run_agent_loop(ctx: LoopContext) -> str | None:
+async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
     """核心引擎：iter/next 循环 + 流式事件 + compact + 持久化。
 
     不做任何初始化决策，只消费 LoopContext 中构建好的 services。
-    返回 final_response 文本（或 None）。
+    返回 RunLoopResult，上层根据 finish_reason / transcript_persisted 统一决策。
     """
     agent = ctx.agent
     deps = ctx.deps
@@ -362,6 +377,8 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
     agent_name = ctx.agent_name
     is_sub_agent = ctx.is_sub_agent
     _transcript_sid = ctx.transcript_session_id or task.session_id
+
+    result = RunLoopResult()
 
     # 请求上下文：子 agent 不管理（父 agent 已设置）
     if not is_sub_agent:
@@ -381,32 +398,27 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
         async with agent.iter(
             task.message,
             deps=deps,
-            message_history=[],  # 空历史，由我们在 ModelRequestNode 前注入
+            message_history=[],
             toolsets=mcp_toolsets if mcp_toolsets else None,
         ) as run:
             node = run.next_node
 
             while not isinstance(node, End):
                 if task.cancelled:
+                    result.finish_reason = "cancelled"
                     break
 
                 if isinstance(node, ModelRequestNode):
                     if _first_llm_call:
-                        # 首次 LLM 调用：将 AgentMessage 历史转为 ModelMessage 注入
-                        # 追加当前用户消息，使 to_model_messages 能校验交替 + 最后为 user
                         full_session = list(agent_history) + [
                             UserMessage(content=task.message),
                         ]
                         model_messages = to_model_messages(full_session)
-                        # 去掉最后一个 ModelRequest（当前用户消息），Pydantic AI 会自动追加
                         run._graph_run.state.message_history[:] = model_messages[:-1] if model_messages else []
 
                     history: list[ModelMessage] = run._graph_run.state.message_history
-
-                    # 每轮 LLM 前：context injection + attachment + compact
                     pre_result = await pre_call_service.handle(history)
 
-                    # 若 compact 发生，转换为 AgentMessage 后更新工作集
                     if pre_result.compacted:
                         log_info(f"[COMPACT] iteration={iteration}")
                         agent_working = from_model_messages(pre_result.working_messages)
@@ -418,14 +430,8 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
                     if _base_len == 0:
                         _base_len = len(pre_result.model_messages)
 
-                    # 注入处理后的消息到 run 内部状态
                     run._graph_run.state.message_history[:] = pre_result.model_messages
 
-                    # 校验消息交替（所有处理完成后、模型调用前）
-                    # Pydantic AI _prepare_request() 会追加 user turn：
-                    # - 首次调用：追加 UserPromptPart（用户原始消息）
-                    # - 后续调用：追加 ToolReturnPart（工具返回结果）
-                    # 此处用 pending_user 告知校验器"将会有一个 user turn 被追加"
                     if _first_llm_call:
                         pending_user: str | None = task.message
                     else:
@@ -441,7 +447,6 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
                             f"(iteration={iteration}): {alt_errors}"
                         )
 
-                    # 流式处理 LLM 响应（node.stream 内部完成 LLM 调用并缓存结果）
                     await _emit_model_stream(
                         node, run.ctx, emitter, task,
                         messages_count=len(pre_result.model_messages),
@@ -450,41 +455,34 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
                         agent_name=agent_name,
                     )
                     _first_llm_call = False
-                    # stream 已完成，next() 只做状态转移（不会重复调 LLM）
                     node = await run.next(node)
 
                 elif isinstance(node, CallToolsNode):
-                    # 工具执行（node.stream 内部完成工具调用并缓存结果）
                     await _emit_tool_events(node, run.ctx, emitter, task, agent_name=agent_name)
-                    # stream 已完成，next() 只做状态转移（不会重复执行工具）
                     node = await run.next(node)
 
                 else:
-                    # 未知 node 类型，直接推进
                     node = await run.next(node)
 
                 iteration += 1
                 if iteration >= max_iterations:
+                    result.finish_reason = "max_iterations"
                     break
 
-        # 持久化新消息：ModelMessage → AgentMessage，写 messages.jsonl 和 transcript.jsonl
-        # offset = _base_len：跳过 context + 已持久化历史（user prompt 在 _base_len 之后
-        # 由 _prepare_request 追加，不包含在 _base_len 中）
-        # 注意：持久化在 CHAT_REQUEST_END 之前，确保客户端收到结束事件时数据已落盘
-        final_response: str | None = None
+        # 持久化：确保客户端收到 CHAT_REQUEST_END 时数据已落盘
         if run.result is not None:
-            final_response = run.result.output
+            result.final_response = run.result.output
             new_messages: list[ModelMessage] = run.result.all_messages()
             appended = new_messages[_base_len:]
-            # 转换为 AgentMessage 后持久化
             new_agent_messages = from_model_messages(appended)
             _tag_request_phase(new_agent_messages, task.request_id)
             await transcript_service.append(task.user_id, _transcript_sid, new_agent_messages)
+            result.transcript_persisted = True
             if not is_sub_agent:
-                # 子 agent 不写 messages.jsonl（fresh context，无需工作集持久化）
                 await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
 
     except Exception as exc:
+        result.finish_reason = "error"
         log_error(f"Agent loop 异常 (agent={agent_name}): {exc}", exc=exc)
         log_request_end(
             session_id=task.session_id,
@@ -492,7 +490,6 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
             error=str(exc),
             request_id=task.request_id,
         )
-        # 发送错误事件通知客户端
         await emitter.emit(EventModel(
             session_id=task.session_id,
             request_id=task.request_id,
@@ -504,21 +501,21 @@ async def run_agent_loop(ctx: LoopContext) -> str | None:
     else:
         log_request_end(
             session_id=task.session_id,
-            success=True,
+            success=result.finish_reason == "completed",
             request_id=task.request_id,
-            response=final_response,
+            response=result.final_response,
         )
     finally:
         if not is_sub_agent:
             clear_request_context()
-            # 发送 chat_request_end 事件，通知前端流结束
             await emitter.emit(EventModel(
                 session_id=task.session_id,
                 request_id=task.request_id,
                 type=EventType.CHAT_REQUEST_END,
-                data={},
+                data={"user_id": task.user_id},
+                finish_reason=result.finish_reason,
                 agent_name=agent_name,
             ))
             await emitter.close()
 
-    return final_response
+    return result

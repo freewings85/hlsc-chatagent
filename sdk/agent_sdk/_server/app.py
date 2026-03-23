@@ -339,7 +339,6 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
     )
     _running_tasks[task_id] = (None, loop_task)
 
-    # 后台转发：从 emitter queue 读事件，通过 KafkaSinker 发到 Kafka
     async def _forward_to_kafka() -> None:
         try:
             while True:
@@ -350,11 +349,11 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
         except Exception:
             logger.exception("Kafka 转发异常")
         finally:
-            _running_tasks.pop(task.task_id, None)
+            _running_tasks.pop(task_id, None)
 
     asyncio.create_task(
         _forward_to_kafka(),
-        name=f"kafka-forward-{task.task_id}",
+        name=f"kafka-forward-{task_id}",
     )
 
     # loop_task 完成后确保 queue 有 sentinel
@@ -363,4 +362,4 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
 
     loop_task.add_done_callback(_ensure_sentinel)
 
-    return JSONResponse({"status": "accepted", "task_id": task.task_id})
+    return JSONResponse({"status": "accepted", "task_id": task_id})

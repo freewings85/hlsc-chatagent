@@ -47,6 +47,16 @@ class BeforeAgentRunHook(Protocol):
     ) -> None: ...
 
 
+class AfterRunHook(Protocol):
+    """Agent 成功运行后钩子签名。
+
+    仅在主 agent 请求成功完成且 transcript 持久化后调用。
+    失败、取消、子 agent 均不触发。
+    """
+
+    async def __call__(self, context: Any) -> None: ...
+
+
 class Agent:
     """纯逻辑层 Agent，封装 agent loop + 所有核心服务。
 
@@ -69,6 +79,7 @@ class Agent:
         max_iterations: int = 25,
         agent_name: str | None = None,
         before_agent_run_hook: BeforeAgentRunHook | None = None,
+        after_run_hooks: list[AfterRunHook] | None = None,
     ) -> None:
         self._prompt_loader = prompt_loader
         self._tools = tools
@@ -80,6 +91,7 @@ class Agent:
         self._max_iterations = max_iterations
         self._agent_name = agent_name or get_agent_name()
         self._before_agent_run_hook = before_agent_run_hook
+        self._after_run_hooks: list[AfterRunHook] = after_run_hooks or []
 
         # 延迟构建的内部对象
         self._pydantic_model: Model | None = None
@@ -352,7 +364,30 @@ class Agent:
                 transcript_session_id=transcript_session_id,
             )
 
-            return await run_agent_loop(ctx)
+            from agent_sdk._agent.loop import RunLoopResult
+
+            loop_result: RunLoopResult = await run_agent_loop(ctx)
+
+            if not is_sub_agent and self._after_run_hooks:
+                from agent_sdk._agent.hooks import AfterRunContext
+
+                hook_ctx = AfterRunContext(
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                    result=loop_result,
+                )
+                for hook in self._after_run_hooks:
+                    try:
+                        await hook(hook_ctx)
+                    except Exception:
+                        logger.warning(
+                            "after_run_hook %s 执行异常，已跳过",
+                            type(hook).__name__,
+                            exc_info=True,
+                        )
+
+            return loop_result.final_response
 
         try:
             import logfire

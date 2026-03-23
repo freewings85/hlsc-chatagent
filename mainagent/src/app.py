@@ -5,7 +5,7 @@ server.py 调用 create_agent_app() 获取 AgentApp，直接启动。
 
 from __future__ import annotations
 
-from agent_sdk import Agent, AgentApp, AgentAppConfig, ToolConfig
+from agent_sdk import Agent, AgentApp, AgentAppConfig, ProfileTriggerHook, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
 from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
@@ -85,6 +85,7 @@ def create_agent_app() -> AgentApp:
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
         context_formatter=HlscContextFormatter(),
+        after_run_hooks=[ProfileTriggerHook()],
     )
 
     return AgentApp(

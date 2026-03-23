@@ -102,6 +102,7 @@ class KafkaConfig:
     enabled: bool = field(default_factory=lambda: os.getenv("KAFKA_ENABLED", "false").lower() == "true")
     bootstrap_servers: str = field(default_factory=lambda: os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
     topic: str = field(default_factory=lambda: os.getenv("KAFKA_TOPIC", "chat-events"))
+    profile_topic: str = field(default_factory=lambda: os.getenv("KAFKA_PROFILE_TOPIC", "profile-extract-events"))
 
 
 # 延迟初始化单例

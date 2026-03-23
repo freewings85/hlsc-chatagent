@@ -26,6 +26,8 @@
 
 from agent_sdk.agent import Agent
 from agent_sdk.agent_app import AgentApp
+from agent_sdk._agent.hooks import AfterRunContext, AfterRunHook, ProfileTriggerHook
+from agent_sdk._agent.loop import RunLoopResult
 from agent_sdk.config import (
     AgentAppConfig,
     CompactConfig,
@@ -45,6 +47,11 @@ __all__ = [
     # 核心
     "Agent",
     "AgentApp",
+    # Hooks
+    "AfterRunContext",
+    "AfterRunHook",
+    "ProfileTriggerHook",
+    "RunLoopResult",
     # Config
     "AgentAppConfig",
     "CompactConfig",
