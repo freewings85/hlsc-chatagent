@@ -55,9 +55,16 @@ async def recommend_projects(
             vehicle_info.car_model_name = result.vehicle_info.auto_text
         if result.vehicle_info.vin_code and not vehicle_info.vin_code:
             vehicle_info.vin_code = result.vehicle_info.vin_code
+        if vehicle_info.car_age_year is None and result.vehicle_info.month > 0:
+            vehicle_info.car_age_year = round(result.vehicle_info.month / 12, 1)
+
+        vehicle_dict: dict[str, Any] = vehicle_info.model_dump(exclude_none=True)
+        if result.vehicle_info.auto_logo:
+            vehicle_dict["auto_logo"] = result.vehicle_info.auto_logo
+        vehicle_dict["random_vin"] = result.vehicle_info.random_vin
 
         output: dict[str, Any] = {
-            "vehicle_info": vehicle_info.model_dump(exclude_none=True),
+            "vehicle_info": vehicle_dict,
             "projects": projects,
         }
         return json.dumps(output, ensure_ascii=False)

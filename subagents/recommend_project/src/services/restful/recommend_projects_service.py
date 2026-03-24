@@ -26,7 +26,9 @@ def _get_datamanager_url() -> str:
 class RecommendVehicleInfo:
     """API 返回的车辆信息"""
     auto_text: str = ""
+    auto_logo: Optional[str] = None
     vin_code: Optional[str] = None
+    random_vin: bool = False
     month: int = 0
 
 
@@ -105,7 +107,9 @@ def _parse_result(raw: dict[str, Any]) -> RecommendResult:
     raw_vehicle: dict[str, Any] = raw.get("vehicleInfo") or {}
     vehicle_info: RecommendVehicleInfo = RecommendVehicleInfo(
         auto_text=raw_vehicle.get("autoText", ""),
+        auto_logo=raw_vehicle.get("autoLogo") or None,
         vin_code=raw_vehicle.get("vinCode") or None,
+        random_vin=bool(raw.get("randomVin", False)),
         month=raw_vehicle.get("month", 0),
     )
 
