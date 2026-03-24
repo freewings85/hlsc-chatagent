@@ -12,7 +12,7 @@ when_to_use: 用户问"推荐什么项目"、"该做什么保养了"、"跑了xx
 
 从用户描述和 request_context 中提取 VehicleInfo：
 
-- **car_model_id**：上下文已有 → 直接用；用户提到车型 → 调 fuzzy_match_car_info；都没有 → 可选
+- **car_model_id**：上下文已有 → 直接用；用户只给了较粗的车型线索且当前需要具体车型 → 调 `get_representative_car_model`；都没有 → 留空
 - **car_age_year**：用户提到 → 直接换算成年份；没有 → 可选
 - **mileage_km**：用户提到 → 直接使用；没有 → 可选
 

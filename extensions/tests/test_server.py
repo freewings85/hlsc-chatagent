@@ -65,7 +65,7 @@ def main() -> None:
     from agent_sdk.prompt_loader import TemplatePromptLoader
 
     # Extension tools（真实 tool，service 层在无 URL 时会抛异常被 tool 捕获）
-    from hlsc.tools.fuzzy_match_car_info import fuzzy_match_car_info
+    from hlsc.tools.get_representative_car_model import get_representative_car_model
     from hlsc.tools.list_user_cars import list_user_cars
     from hlsc.tools.ask_user_car_info import ask_user_car_info
     from hlsc.tools.geocode_location import geocode_location
@@ -137,7 +137,7 @@ def main() -> None:
     tool_map = {
         **create_default_tool_map(),
         "get_car_price": mock_get_car_price,
-        "fuzzy_match_car_info": fuzzy_match_car_info,
+        "get_representative_car_model": get_representative_car_model,
         "list_user_cars": list_user_cars,
         "ask_user_car_info": ask_user_car_info,
         "geocode_location": geocode_location,

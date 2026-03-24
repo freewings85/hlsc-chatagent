@@ -54,7 +54,7 @@ plan_mode 不应只靠模型凭感觉判断，必须有 tool 参与校验。
 ## 车型精度不足时的处理
 
 若方案校验过程中 tool 返回 missing_fields 包含车型相关字段，
-则回溯车型信息引导（vehicle-info-guide）。
+则先补齐当前步骤所需的车型信息。
 本 skill 不自行判断车型精度规则，由 tool 返回的业务事实裁决。
 
 ## Tools（只使用只读工具）

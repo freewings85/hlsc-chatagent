@@ -172,7 +172,7 @@ class TestCarContextFlow:
         # 不应触发任何 confirm 工具
         assert "ask_user_car_info" not in tool_calls
         assert "ask_user_location" not in tool_calls
-        assert "fuzzy_match_car_info" not in tool_calls
+        assert "get_representative_car_model" not in tool_calls
         assert "geocode_location" not in tool_calls
 
         # 应有价格相关文本
