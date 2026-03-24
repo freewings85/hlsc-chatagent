@@ -24,7 +24,7 @@ async def search_nearby_shops(
     top: Annotated[int, Field(description="返回数量")] = 5,
     radius: Annotated[int, Field(description="搜索半径（米）")] = 10000,
     order_by: Annotated[str, Field(description="排序方式：distance/rating/tradingCount，可组合")] = "distance",
-    commercial_type: Annotated[list[int] | None, Field(description="商户类型列表，如 [1,2,3]（1=汽修门店）")] = None,
+    commercial_type: Annotated[list[int] | None, Field(description="商户类型列表，用户未指定时不传")] = None,
     opening_hour: Annotated[str | None, Field(description="营业时间筛选，格式 HH:MM")] = None,
     province_id: Annotated[int | None, Field(description="省份ID")] = None,
     city_id: Annotated[int | None, Field(description="城市ID")] = None,

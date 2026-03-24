@@ -14,7 +14,7 @@ import httpx
 
 from agent_sdk.logging import log_http_request, log_http_response
 
-SHOP_SERVICE_URL = os.getenv("SHOP_SERVICE_URL", "")
+DATA_MANAGER_URL = os.getenv("DATA_MANAGER_URL", "http://192.168.100.108:50400")
 
 
 class ShopService:
@@ -28,9 +28,9 @@ class ShopService:
         request_id: str = "",
     ) -> dict:
         """获取上次去过的商户。"""
-        url = f"{SHOP_SERVICE_URL}/shop/getLatestVisitedShops"
-        if not SHOP_SERVICE_URL:
-            raise RuntimeError("SHOP_SERVICE_URL 未配置")
+        url = f"{DATA_MANAGER_URL}/service_ai_datamanager/shop/getLatestVisitedShops"
+        if not DATA_MANAGER_URL:
+            raise RuntimeError("DATA_MANAGER_URL 未配置")
 
         payload = {"ownerId": int(owner_id), "top": top}
         log_http_request(url, "POST", session_id, request_id, payload)
@@ -55,9 +55,9 @@ class ShopService:
         request_id: str = "",
     ) -> dict:
         """获取历史服务商户。"""
-        url = f"{SHOP_SERVICE_URL}/shop/getHistoryVisitedShops"
-        if not SHOP_SERVICE_URL:
-            raise RuntimeError("SHOP_SERVICE_URL 未配置")
+        url = f"{DATA_MANAGER_URL}/service_ai_datamanager/shop/getHistoryVisitedShops"
+        if not DATA_MANAGER_URL:
+            raise RuntimeError("DATA_MANAGER_URL 未配置")
 
         payload = {"ownerId": int(owner_id), "top": top}
         log_http_request(url, "POST", session_id, request_id, payload)
@@ -96,9 +96,9 @@ class ShopService:
         request_id: str = "",
     ) -> dict:
         """搜索附近门店。"""
-        url = f"{SHOP_SERVICE_URL}/shop/getNearbyShops"
-        if not SHOP_SERVICE_URL:
-            raise RuntimeError("SHOP_SERVICE_URL 未配置")
+        url = f"{DATA_MANAGER_URL}/service_ai_datamanager/shop/getNearbyShops"
+        if not DATA_MANAGER_URL:
+            raise RuntimeError("DATA_MANAGER_URL 未配置")
 
         payload: dict = {
             "latitude": lat,
