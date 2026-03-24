@@ -86,6 +86,7 @@ async def search_nearby_shops(
                 "trading_count": item.get("tradingCount", 0),
                 "phone": item.get("phone", ""),
                 "tags": tag_list,
+                "images": item.get("imageObject", []),
                 "opening_hours": item.get("openingHours", ""),
             })
 

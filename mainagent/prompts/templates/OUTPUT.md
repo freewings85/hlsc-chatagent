@@ -11,7 +11,7 @@ Supported `spec` types:
 - `RecommendProjectsCard`
   - `props`: `{ vehicle_info?: { car_model_name?: string, mileage_km?: number, car_age_year?: number }, projects: [{ project_name: string, icon?: string, project_id?: string }] }`
 - `ShopCard`
-  - `props`: `{ shop_id: number, name: string, rating?: number, distance?: string, address?: string, phone?: string, tags?: string[], trading_count?: number, opening_hours?: string }`
+  - `props`: `{ shop_id: number, name: string, rating?: number, distance?: string, address?: string, phone?: string, tags?: string[], trading_count?: number, opening_hours?: string, images?: string[] }`
 - `ProjectCard`
   - `props`: `{ name: string, laborFee: number, partsFee: number, totalPrice: number, duration?: string }`
 - `AppointmentCard`
@@ -26,7 +26,7 @@ Example:
 你附近这两家可以看看。
 
 ```spec
-{"type":"ShopCard","props":{"shop_id":48,"name":"张江汽修中心","rating":4.8,"distance":"2.3km","address":"浦东新区XX路100号"}}
+{"type":"ShopCard","props":{"shop_id":48,"name":"张江汽修中心","rating":4.8,"distance":"2.3km","address":"浦东新区XX路100号","images":["https://example.com/shop48-1.jpg"]}}
 {"type":"CouponCard","props":{"title":"新客立减50元","discount":"满300减50","expireDate":"2026-04-01"}}
 ```
 
