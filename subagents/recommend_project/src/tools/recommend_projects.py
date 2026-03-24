@@ -34,7 +34,7 @@ async def recommend_projects(
     try:
         result = await query_recommend_projects(
             car_key=vehicle_info.car_model_id,
-            car_age_year=vehicle_info.car_age_year,
+            car_age_year=vehicle_info.car_age_year if vehicle_info.car_age_year is not None else 1.0,
             mileage_km=vehicle_info.mileage_km,
             session_id=sid,
             request_id=rid,
@@ -55,8 +55,11 @@ async def recommend_projects(
             vehicle_info.car_model_name = result.vehicle_info.auto_text
         if result.vehicle_info.vin_code and not vehicle_info.vin_code:
             vehicle_info.vin_code = result.vehicle_info.vin_code
-        if vehicle_info.car_age_year is None and result.vehicle_info.month > 0:
-            vehicle_info.car_age_year = round(result.vehicle_info.month / 12, 1)
+        if vehicle_info.car_age_year is None:
+            if result.vehicle_info.month > 0:
+                vehicle_info.car_age_year = round(result.vehicle_info.month / 12, 1)
+            else:
+                vehicle_info.car_age_year = 1.0
 
         vehicle_dict: dict[str, Any] = vehicle_info.model_dump(exclude_none=True)
         if result.vehicle_info.auto_logo:

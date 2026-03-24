@@ -127,37 +127,31 @@ async def _search_by_fault(
 
     raw_items: list[dict[str, Any]] = data.get("result", [])
 
-    all_primary_part_ids: set[int] = set()
-    for item in raw_items:
-        part_ids: list[int] = item.get("primary_part_ids") or []
-        all_primary_part_ids.update(part_ids)
-
-    package_by_primary: dict[int, list[dict[str, Any]]] = {}
-    if all_primary_part_ids:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
-            resp = await client.post(
-                base_url + _FAULT_PACKAGE_PATH,
-                json={"primaryNameIds": list(all_primary_part_ids)},
-            )
-            resp.raise_for_status()
-
-        package_data: dict[str, Any] = resp.json()
-        if package_data.get("status") != 0:
-            raise RuntimeError(f"项目套餐查询失败: {package_data.get('message', '未知错误')}")
-
-        for pkg in package_data.get("result", []):
-            pid: int = pkg.get("projectId", 0)
-            package_by_primary.setdefault(pid, []).append({
-                "project_id": str(pkg.get("packageId", "")),
-                "project_name": pkg.get("packageName", ""),
-            })
-
+    # 按每条故障记录的 primary_part_ids 单独查询关联套餐
     result: list[dict[str, Any]] = []
     for item in raw_items:
-        part_ids = item.get("primary_part_ids") or []
+        part_ids: list[int] = item.get("primary_part_ids") or []
         projects: list[dict[str, Any]] = []
-        for pid in part_ids:
-            projects.extend(package_by_primary.get(pid, []))
+        if part_ids:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+                resp = await client.post(
+                    base_url + _FAULT_PACKAGE_PATH,
+                    json={"primaryNameIds": part_ids},
+                )
+                resp.raise_for_status()
+
+            package_data: dict[str, Any] = resp.json()
+            if package_data.get("status") == 0:
+                seen_pkg: set[int] = set()
+                for pkg in package_data.get("result", []):
+                    pkg_id: int = pkg.get("packageId", 0)
+                    if pkg_id and pkg_id not in seen_pkg:
+                        seen_pkg.add(pkg_id)
+                        projects.append({
+                            "project_id": str(pkg_id),
+                            "project_name": pkg.get("packageName", ""),
+                        })
+
         result.append({
             "title": item.get("title", ""),
             "content": item.get("content", ""),
