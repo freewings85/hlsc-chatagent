@@ -14,6 +14,7 @@ class VehicleInfo(BaseModel):
 
     car_model_name: str = Field(default="", description="车型名称，如 2024款 宝马 325Li")
     car_model_id: str = Field(default="", description="车型编码，用于精确匹配项目")
+    vin_code: Optional[str] = Field(default=None, description="VIN 码（17 位），如 LSVFA49J952001313")
     mileage_km: Optional[float] = Field(default=None, description="当前里程数（千米），如 35000.0")
     car_age_year: Optional[float] = Field(default=None, description="车龄（年），如 2.5")
 
