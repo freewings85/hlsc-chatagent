@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -306,7 +307,13 @@ class SubagentSession:
             task_queue=config.interrupt_task_queue,
         )
 
-        return response.get("reply", "")
+        # 提取用户回复：优先取 "reply" 键，否则序列化整个 response
+        user_reply: Any = response.get("reply", "")
+        if not user_reply and response:
+            user_reply = json.dumps(response, ensure_ascii=False)
+        elif isinstance(user_reply, dict):
+            user_reply = json.dumps(user_reply, ensure_ascii=False)
+        return str(user_reply)
 
 
 async def _fetch_agent_name(url: str, timeout: float = 10.0) -> str:

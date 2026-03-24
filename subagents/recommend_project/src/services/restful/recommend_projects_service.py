@@ -98,10 +98,10 @@ async def query_recommend_projects(
         error_msg: str = data.get("message") or "未知错误"
         raise RuntimeError(f"查询推荐项目失败: {error_msg}")
 
-    return _parse_result(data.get("result", {}))
+    return _parse_result(data.get("result", {}), random_vin=random_vin)
 
 
-def _parse_result(raw: dict[str, Any]) -> RecommendResult:
+def _parse_result(raw: dict[str, Any], *, random_vin: bool = False) -> RecommendResult:
     """解析 API 响应。"""
     # 解析车辆信息
     raw_vehicle: dict[str, Any] = raw.get("vehicleInfo") or {}
@@ -109,7 +109,7 @@ def _parse_result(raw: dict[str, Any]) -> RecommendResult:
         auto_text=raw_vehicle.get("autoText", ""),
         auto_logo=raw_vehicle.get("autoLogo") or None,
         vin_code=raw_vehicle.get("vinCode") or None,
-        random_vin=bool(raw.get("randomVin", False)),
+        random_vin=random_vin,
         month=raw_vehicle.get("month", 0),
     )
 
