@@ -112,13 +112,13 @@ def _parse_result(raw: dict[str, Any]) -> RecommendResult:
     # 解析项目列表并去重
     seen: set[str] = set()
     projects: List[RecommendProject] = []
-    for p in (raw.get("projects") or []):
-        pid: str = str(p.get("projectId", ""))
+    for p in (raw.get("packages") or []):
+        pid: str = str(p.get("packageId", ""))
         if pid and pid not in seen:
             seen.add(pid)
             projects.append(RecommendProject(
                 project_id=pid,
-                project_name=p.get("projectName", ""),
+                project_name=p.get("packageName", ""),
             ))
 
     return RecommendResult(vehicle_info=vehicle_info, projects=projects)

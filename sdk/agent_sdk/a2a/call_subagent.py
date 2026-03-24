@@ -42,6 +42,7 @@ class SubagentEvent:
     state: str  # "completed" | "failed" | "input-required" | "working"
     task_id: str
     question: str | None = None  # input-required 时的问题文本（可修改）
+    interrupt_metadata: dict[str, Any] = field(default_factory=dict)  # input-required 时的结构化数据
     result_text: str | None = None  # completed 时的结果文本
     artifacts: list[dict[str, Any]] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
@@ -158,13 +159,17 @@ class SubagentSession:
                 elif task_state == "input-required":
                     status_msg = result.get("status", {}).get("message", {})
                     question = _extract_text(status_msg)
+                    interrupt_metadata = _extract_metadata(status_msg)
                     event.question = question
+                    event.interrupt_metadata = interrupt_metadata
 
-                    # yield 给开发者，开发者可修改 event.question
+                    # yield 给开发者，开发者可修改 event.question / event.interrupt_metadata
                     yield event
 
-                    # 默认行为：interrupt 中继
-                    user_reply = await self._relay_interrupt(event.question or question)
+                    # 默认行为：interrupt 中继（透传 metadata）
+                    user_reply = await self._relay_interrupt(
+                        event.question or question, event.interrupt_metadata
+                    )
 
                     # 用 reply 继续 A2A
                     result = await _a2a_send(
@@ -253,12 +258,24 @@ class SubagentSession:
             parent_tool_call_id=self._parent_tool_call_id,
         ))
 
-    async def _relay_interrupt(self, question: str) -> str:
-        """中继 interrupt：subagent input-required → mainagent interrupt → 用户回复。"""
+    async def _relay_interrupt(
+        self, question: str, metadata: dict[str, Any] | None = None,
+    ) -> str:
+        """中继 interrupt：subagent input-required → mainagent interrupt → 用户回复。
+
+        metadata 透传 subagent 中断的结构化数据（type、projects、vehicle_info 等）。
+        """
         ctx = self._ctx
         session_id = ctx.deps.session_id
         temporal_client = ctx.deps.temporal_client
         emitter = ctx.deps.emitter
+        # 从 metadata 中提取业务字段，排除会与 mainagent 生成的字段冲突的 key
+        _reserved_keys: set[str] = {"type", "interrupt_key", "interrupt_id", "source"}
+        raw_meta: dict[str, Any] = metadata or {}
+        interrupt_type: str = raw_meta.get("type", "confirm")
+        extra: dict[str, Any] = {
+            k: v for k, v in raw_meta.items() if k not in _reserved_keys
+        }
 
         main_interrupt_key = f"interrupt-{session_id}-{uuid4().hex[:8]}"
 
@@ -269,11 +286,12 @@ class SubagentSession:
                     request_id="",
                     type=EventType.INTERRUPT,
                     data={
-                        "type": "confirm",
+                        "type": interrupt_type,
                         "question": question,
                         "interrupt_id": interrupt_id,
                         "interrupt_key": main_interrupt_key,
                         "source": self.agent_name,
+                        **extra,
                     },
                     agent_path=self._agent_path,
                     parent_tool_call_id=self._parent_tool_call_id,
@@ -284,7 +302,7 @@ class SubagentSession:
             temporal_client,
             key=main_interrupt_key,
             callback=_emit_interrupt,
-            data={"question": question, "type": "confirm"},
+            data={"question": question, "type": interrupt_type, **extra},
             task_queue=config.interrupt_task_queue,
         )
 
@@ -362,6 +380,13 @@ def _extract_text(msg: Any) -> str:
                 texts.append(part.get("text", ""))
         return "\n".join(texts) if texts else str(msg)
     return str(msg)
+
+
+def _extract_metadata(msg: Any) -> dict[str, Any]:
+    """从 A2A Message 中提取 metadata（interrupt 结构化数据）。"""
+    if isinstance(msg, dict):
+        return dict(msg.get("metadata", {}) or {})
+    return {}
 
 
 @asynccontextmanager

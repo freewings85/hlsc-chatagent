@@ -1,6 +1,6 @@
 ---
 name: recommend_projects
-description: 当用户想知道车辆需要做什么保养/维修项目时，根据车辆状况智能推荐养车项目并引导用户选择。
+description: 当用户想知道车辆需要做什么保养/维修项目时，智能推荐养车项目并引导用户选择。
 when_to_use: 用户问"推荐什么项目"、"该做什么保养了"、"跑了xx公里需要做什么"等。
 ---
 
@@ -12,7 +12,7 @@ when_to_use: 用户问"推荐什么项目"、"该做什么保养了"、"跑了xx
 
 从用户描述和 request_context 中提取 VehicleInfo：
 
-- **car_model_id**：上下文已有 → 直接用；用户提到车型 → 调 fuzzy_match_car_info；都没有 → 留空
+- **car_model_id**：上下文已有 → 直接用；用户提到车型 → 调 fuzzy_match_car_info；都没有 → 可选
 - **car_age_year**：用户提到 → 直接换算成年份；没有 → 可选
 - **mileage_km**：用户提到 → 直接使用；没有 → 可选
 

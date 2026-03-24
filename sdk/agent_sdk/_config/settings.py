@@ -19,9 +19,13 @@ if TYPE_CHECKING:
     from agent_sdk._agent.message.transcript_service import TranscriptService
     from agent_sdk._common.filesystem_backend import BackendProtocol
 
-# Fallback：如果 nacos 没有预先加载环境变量，确保 .env 至少被读取
-# load_dotenv 不会覆盖已存在的环境变量，所以与 nacos 预加载不冲突
-load_dotenv()
+# Fallback：如果 nacos 没有预先加载环境变量，确保当前目录的 .env 至少被读取
+# 使用 Path(".env") 限定为当前工作目录，避免向上搜索到父目录的 .env
+from pathlib import Path as _Path
+
+_local_env: _Path = _Path(".env")
+if _local_env.is_file():
+    load_dotenv(_local_env)
 
 
 @dataclass
