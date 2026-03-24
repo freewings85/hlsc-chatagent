@@ -14,7 +14,7 @@ from src.prompt_loader import create_main_prompt_loader
 # subagent 调用工具
 from src.tools.call_code_agent import call_code_agent
 from src.tools.call_demo_price_finder import call_demo_price_finder
-from src.tools.call_recommend_project import call_recommend_project
+from hlsc.tools.call_recommend_project import call_recommend_project
 
 # extensions 业务工具
 from hlsc.tools.fuzzy_match_car_info import fuzzy_match_car_info
