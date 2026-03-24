@@ -12,16 +12,23 @@ from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end
+from hlsc.enums import (
+    CAR_PRECISION_L1,
+    CAR_PRECISION_L2,
+    CAR_PRECISION_L3,
+    CAR_PRECISION_NONE,
+    to_project_required_precision,
+)
 from hlsc.tools.prompt_loader import load_tool_prompt
 
 DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 SEARCH_PROJECT_PATH: str = "/service_ai_datamanager/project/searchProjectPackageByKeyword"
 
 _CAR_PRECISION_MAP: dict[str, str] = {
-    "no_need_car": "none",
-    "brand_series": "L1",
-    "car_and_param": "L2",
-    "need_vin": "L3",
+    "no_need_car": CAR_PRECISION_NONE,
+    "brand_series": CAR_PRECISION_L1,
+    "car_and_param": CAR_PRECISION_L2,
+    "need_vin": CAR_PRECISION_L3,
 }
 
 _DESCRIPTION: str = load_tool_prompt("match_project")
@@ -60,8 +67,8 @@ async def match_project(
             {
                 "project_id": item.get("packageId", 0),
                 "name": item.get("packageName", ""),
-                "car_precision": _CAR_PRECISION_MAP.get(
-                    item.get("chooseCar", ""), "unknown"
+                "required_precision": to_project_required_precision(
+                    _CAR_PRECISION_MAP.get(item.get("chooseCar", ""), CAR_PRECISION_NONE)
                 ),
             }
             for item in raw_list
@@ -70,20 +77,11 @@ async def match_project(
         data: dict = {"keyword": keyword, "projects": projects}
         result_json: str = json.dumps(data, ensure_ascii=False)
 
-        # 业务提示
-        if projects:
-            parts: list[str] = [
-                f"{p['name']}({p['car_precision']})" for p in projects
-            ]
-            notice: str = f"\n[业务提示] 匹配到项目：{'、'.join(parts)}"
-        else:
-            notice = f"\n[业务提示] 「{keyword}」未匹配到相关项目"
-
         log_tool_end("match_project", sid, rid, {
             "matched": [p["name"] for p in projects],
         })
 
-        return result_json + notice
+        return result_json
 
     except Exception as e:
         log_tool_end("match_project", sid, rid, exc=e)

@@ -208,6 +208,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     loop_task.add_done_callback(_ensure_sentinel)
 
     async def generate() -> object:
+        saw_request_end: bool = False
         try:
             start_event = EventModel(
                 session_id=request.session_id,
@@ -220,15 +221,20 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 event: EventModel | None = await queue.get()
                 if event is None:
                     break
+                if event.type == EventType.CHAT_REQUEST_END:
+                    saw_request_end = True
                 yield f"event: {event.type.value}\ndata: {event.to_json()}\n\n"
         except (GeneratorExit, asyncio.CancelledError):
             pass
         finally:
             _running_tasks.pop(task_id, None)
             if not loop_task.done():
-                loop_task.cancel()
                 try:
-                    await loop_task
+                    if saw_request_end:
+                        await asyncio.shield(loop_task)
+                    else:
+                        loop_task.cancel()
+                        await loop_task
                 except (asyncio.CancelledError, Exception):
                     pass
 

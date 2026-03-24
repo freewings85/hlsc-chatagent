@@ -1,8 +1,12 @@
-向用户请求提供车辆信息（car_model_id / car_model_name / vin_code），让用户选择或录入车型。
+向用户正式收集缺失的车辆信息。这是补齐车型信息的标准工具。
 
-当car_precision 为 L2 或 L3，车型信息不足时，调用此工具收集车辆信息。
+当当前业务步骤所需精度高于当前已知精度时，调用此工具。
+当当前已知精度已满足要求时，不要调用此工具，也不要重复确认。
 
-- car_precision=L2（需要精确车型）→ allow_select=true，用户可从车库选择或手动输入
-- car_precision=L3（需要 VIN 码）→ allow_select=false，仅允许输入 VIN
+- `required_precision="exact_model"`：需要精确车型，允许从车库选择或补充更完整的车型信息
+- `required_precision="vin"`：需要 VIN，只收集 VIN 相关信息
 
-用户完成选择后返回 car_model_id 和 car_model_name（L3 还会返回 vin_code）。
+调用后：
+
+- 若返回 `car_model_id`，可继续后续流程
+- 若当前要求为 `vin` 且未返回 `vin_code`，仍视为精度不足

@@ -1,8 +1,4 @@
-"""ask_user_car_info 工具：让用户提供车辆信息。
-
-场景：需要 car_model_id 但 request_context 中未设置，用户也未提到任何车型。
-通过 interrupt 弹框让用户选择/录入车型。
-"""
+"""ask_user_car_info 工具：按所需精度向用户收集车辆信息。"""
 
 from __future__ import annotations
 
@@ -14,6 +10,11 @@ from pydantic_ai import RunContext
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk._agent.tools.call_interrupt import call_interrupt
 from agent_sdk.logging import log_tool_start, log_tool_end
+from hlsc.enums import (
+    REQUIRED_PRECISION_EXACT_MODEL,
+    REQUIRED_PRECISION_VIN,
+    RequiredCarPrecision,
+)
 from hlsc.tools.prompt_loader import load_tool_prompt
 
 _DESCRIPTION = load_tool_prompt("ask_user_car_info")
@@ -22,10 +23,19 @@ _DESCRIPTION = load_tool_prompt("ask_user_car_info")
 async def ask_user_car_info(
     ctx: RunContext[AgentDeps],
     reason: Annotated[str, Field(description="需要车辆信息的原因，如'查询报价需要知道您的车型'")],
-    allow_select: Annotated[bool, Field(description="是否允许从车库选择。True=需要精确车型(L2)，False=需要VIN码(L3)")] = True,
+    required_precision: Annotated[
+        RequiredCarPrecision,
+        Field(description="当前需要补齐到的车型精度。exact_model=精确车型，vin=VIN"),
+    ] = REQUIRED_PRECISION_EXACT_MODEL,
 ) -> str:
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
-    log_tool_start("ask_user_car_info", sid, rid, {"reason": reason, "allow_select": allow_select})
+    allow_select: bool = required_precision == REQUIRED_PRECISION_EXACT_MODEL
+    log_tool_start(
+        "ask_user_car_info",
+        sid,
+        rid,
+        {"reason": reason, "required_precision": required_precision, "allow_select": allow_select},
+    )
 
     try:
         reply = await call_interrupt(ctx, {
@@ -41,9 +51,14 @@ async def ask_user_car_info(
             car_model_id: str = data.get("car_model_id", "")
             car_model_name: str = data.get("car_model_name", "")
             vin_code: str = data.get("vin_code", "")
-            if car_model_id:
+            precision_ok: bool = (
+                bool(car_model_id)
+                if required_precision == REQUIRED_PRECISION_EXACT_MODEL
+                else required_precision == REQUIRED_PRECISION_VIN and bool(car_model_id and vin_code)
+            )
+            if precision_ok:
                 log_tool_end("ask_user_car_info", sid, rid, {
-                    "car_model_id": car_model_id, "vin_code": vin_code,
+                    "car_model_id": car_model_id, "vin_code": vin_code, "required_precision": required_precision,
                 })
                 result: str = f"用户选择车型：car_model_id={car_model_id}, car_model_name={car_model_name}"
                 if vin_code:

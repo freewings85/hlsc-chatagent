@@ -20,7 +20,7 @@ class KafkaSinker:
 
     async def send(self, event: EventModel) -> None:
         """发布事件到 Kafka。"""
-        await self._producer.send(
+        await self._producer.send_and_wait(
             self._topic,
             key=event.session_id.encode("utf-8"),
             value=event.to_json().encode("utf-8"),
@@ -44,10 +44,18 @@ async def get_kafka_producer() -> AIOKafkaProducer:
         from agent_sdk._config.settings import get_kafka_config
 
         config = get_kafka_config()
-        _producer = AIOKafkaProducer(
+        producer = AIOKafkaProducer(
             bootstrap_servers=config.bootstrap_servers,
         )
-        await _producer.start()
+        try:
+            await producer.start()
+        except BaseException:
+            try:
+                await producer.stop()
+            except Exception:
+                pass
+            raise
+        _producer = producer
         logger.info("Kafka producer 已启动: %s", config.bootstrap_servers)
     return _producer
 

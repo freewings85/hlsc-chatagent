@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any, Protocol
@@ -378,8 +379,17 @@ class Agent:
                     result=loop_result,
                 )
                 for hook in self._after_run_hooks:
+                    hook_task = asyncio.create_task(
+                        hook(hook_ctx),
+                        name=f"after-run-hook-{type(hook).__name__}-{request_id[:8]}",
+                    )
                     try:
-                        await hook(hook_ctx)
+                        await asyncio.shield(hook_task)
+                    except asyncio.CancelledError:
+                        logger.warning(
+                            "after_run_hook %s 在外层任务取消后继续后台执行",
+                            type(hook).__name__,
+                        )
                     except Exception:
                         logger.warning(
                             "after_run_hook %s 执行异常，已跳过",

@@ -77,7 +77,7 @@ class ProfileTriggerHook:
             "request_id": context.request_id,
             "timestamp": int(time.time() * 1000),
         }
-        await self._producer.send(
+        await self._producer.send_and_wait(
             topic,
             key=context.user_id.encode("utf-8"),
             value=json.dumps(payload).encode("utf-8"),
