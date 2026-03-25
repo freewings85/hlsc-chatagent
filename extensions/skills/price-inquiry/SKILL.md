@@ -40,10 +40,8 @@ cd <skill-dir> && python scripts/query_market_price.py --project-ids 502 505 --c
 需要 shop_ids（门店 ID 列表），可从 search_nearby_shops 或 get_visited_shops 获取。
 
 ```bash
-cd <skill-dir> && python scripts/get_project_price.py --project-ids 502 505 --car-model-id "xxx" --shop-ids S001 S002
+cd <skill-dir> && python scripts/query_shop_price.py --project-ids 502 505 --car-model-id "xxx" --shop-ids S001 S002
 ```
-
-可选参数：`--lat 31.23 --lng 121.47 --distance-km 10 --min-rating 4.8 --sort-by distance`
 
 ## 返回格式
 
