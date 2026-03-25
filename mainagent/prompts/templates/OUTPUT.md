@@ -21,16 +21,16 @@ Supported `spec` types:
 - `CouponCard`
   - `props`: `{ title: string, discount: string, minSpend?: number, expireDate?: string }`
 
-Example:
-
+<example>
 你附近这两家可以看看。
 
 ```spec
-{"type":"ShopCard","props":{"shop_id":48,"name":"张江汽修中心"}}
-{"type":"CouponCard","props":{"title":"新客立减50元","discount":"满300减50","expireDate":"2026-04-01"}}
+{"type":"ShopCard","props":{"shop_id":*,"name":"******"}}
+{"type":"CouponCard","props":{"title":"*","discount":"*","expireDate":"****-**-**"}}
 ```
 
 要我帮你继续看哪家？
+</example>
 
 ## `action`
 
@@ -46,20 +46,22 @@ Supported `action` types:
   - Guide the user to invite the shop to join.
   - fields: `{ "action": "invite_shop", "shop_name": string }`
 
-Examples:
-
+<example>
 那我按 `2021款大众朗逸 1.5L` 继续帮你看。
 
 ```action
-{"action":"change_car","current_car_model_id":"lavida_2021_15l"}
+{"action":"change_car","current_car_model_id":"******"}
 ```
 
 接下来帮你估个价。
+</example>
 
 ---
 
-很抱歉，"朱德保修理厂"目前还没有入驻话痨说车平台。您可以邀请他们加入，入驻后预订还能享受话痨预订9折优惠哦！
+很抱歉，"***修理厂"目前还没有入驻话痨说车平台。您可以邀请他们加入，入驻后预订还能享受话痨预订9折优惠哦！
 
+<example>
 ```action
-{"action":"invite_shop","shop_name":"朱德保修理厂"}
+{"action":"invite_shop","shop_name":"******"}
 ```
+</example>
