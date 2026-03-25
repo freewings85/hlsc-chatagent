@@ -25,7 +25,7 @@
 - 平台介绍、能力边界、9 折机制：`platform-intro`
 - 项目不明确、需求模糊、需要判断该做什么：`project-demand-clarifier`
 - 涉及省钱诉求、行情判断、方法选择和组合取舍：`saving-strategy-guide`
-- 需要搜索、比较或确认商户：`merchant-selection`
+- 需要搜索、推荐、比较或确认商户：`merchant-search-and-confirm`
 - 需要确认时间：`time-selection`
 - 需要把条件收束成可执行方案：`booking-plan-builder`
 - 用户已确认方案、准备执行：`booking-execution`

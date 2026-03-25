@@ -12,8 +12,8 @@ from src.prompt_loader import create_main_prompt_loader
 
 
 # subagent 调用工具
-from src.tools.call_code_agent import call_code_agent
 from src.tools.call_demo_price_finder import call_demo_price_finder
+from hlsc.tools.call_query_codingagent import call_query_codingagent
 from hlsc.tools.call_recommend_project import call_recommend_project
 
 # extensions 业务工具
@@ -28,7 +28,7 @@ from hlsc.tools.get_shop_types import get_shop_types
 
 # 新版业务工具（stub，待实现）
 from hlsc.tools.knowledge_base_search import knowledge_base_search
-from hlsc.tools.search_nearby_shops import search_nearby_shops
+from hlsc.tools.search_nearby_shops import search_shops
 from hlsc.tools.invite_merchant import invite_merchant
 from hlsc.tools.check_coupon_eligibility import check_coupon_eligibility
 from hlsc.tools.purchase_coupon import purchase_coupon
@@ -51,7 +51,7 @@ def create_agent_app() -> AgentApp:
     tool_map = {
         **create_default_tool_map(),
         # subagent 调用
-        # "call_code_agent": call_code_agent,
+        "call_query_codingagent": call_query_codingagent,
         # "call_demo_price_finder": call_demo_price_finder,
         "call_recommend_project": call_recommend_project,
         # 车辆信息
@@ -68,7 +68,7 @@ def create_agent_app() -> AgentApp:
         "get_shop_types": get_shop_types,
         # 新版业务工具（stub，待实现真实逻辑）
         "knowledge_base_search": knowledge_base_search,
-        "search_nearby_shops": search_nearby_shops,
+        "search_shops": search_shops,
         "invite_merchant": invite_merchant,
         "check_coupon_eligibility": check_coupon_eligibility,
         "purchase_coupon": purchase_coupon,

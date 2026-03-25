@@ -15,6 +15,59 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
+from pathlib import Path
+
+
+_ENV_PLACEHOLDER_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
+
+
+def _render_api_docs() -> None:
+    """将 fstools/apis 下的占位符替换为当前环境变量。"""
+    fs_tools_dir = os.getenv("FS_TOOLS_DIR", ".chatagent/fstools").strip()
+    apis_dir = Path(fs_tools_dir) / "apis"
+    code_runs_dir = Path(fs_tools_dir) / os.getenv("CODING_AGENT_CODE_BASE_DIR", "code_runs").strip()
+
+    if not apis_dir.exists():
+        return
+
+    code_runs_dir.mkdir(parents=True, exist_ok=True)
+
+    for path in sorted(apis_dir.rglob("*")):
+        if not path.is_file():
+            continue
+
+        original = path.read_text(encoding="utf-8")
+
+        def _replace(match: re.Match[str]) -> str:
+            env_name = match.group(1)
+            value = os.getenv(env_name)
+            if value is None:
+                raise RuntimeError(f"API 文档占位符缺少环境变量：{env_name}（文件: {path}）")
+            return value
+
+        rendered = _ENV_PLACEHOLDER_RE.sub(_replace, original)
+        unresolved = _ENV_PLACEHOLDER_RE.findall(rendered)
+        if unresolved:
+            names = ", ".join(sorted(set(unresolved)))
+            raise RuntimeError(f"API 文档仍存在未替换占位符：{names}（文件: {path}）")
+
+        if rendered != original:
+            path.write_text(rendered, encoding="utf-8")
+
+
+def _refresh_sdk_config_state() -> None:
+    """清理已缓存的 SDK 配置单例，确保使用 .env / Nacos 最新值。"""
+    from agent_sdk._config import settings as sdk_settings
+
+    sdk_settings._fs_config = None
+    sdk_settings._server_config = None
+    sdk_settings._llm_config = None
+    sdk_settings._temporal_config = None
+    sdk_settings._kafka_config = None
+    sdk_settings._fs_tools_backend = None
+    sdk_settings._inner_storage_backend = None
+    sdk_settings._agent_fs_backend = None
 
 
 def main() -> None:
@@ -36,6 +89,9 @@ def main() -> None:
         os.environ["SERVER_PORT"] = str(args.port)
     if args.host is not None:
         os.environ["SERVER_HOST"] = args.host
+
+    _refresh_sdk_config_state()
+    _render_api_docs()
 
     register_service()
 

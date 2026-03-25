@@ -45,6 +45,26 @@ class AgentApp:
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self.app = self._build_fastapi()
 
+    def _resolve_chat_fs_tools_backend(
+        self,
+        user_id: str,
+        session_id: str,
+    ) -> Any:
+        """为 /chat/stream 和 /chat/async 选择 fs backend。
+
+        默认使用 session 级隔离目录；配置为 global 时使用 FS_TOOLS_DIR 全局目录。
+        """
+        mode = self._config.chat_fs_backend_mode
+        if mode == "session":
+            from agent_sdk.config import create_session_backend
+
+            return create_session_backend(user_id, session_id)
+        if mode == "global":
+            from agent_sdk._config.settings import get_fs_tools_backend
+
+            return get_fs_tools_backend()
+        raise ValueError(f"Unsupported chat_fs_backend_mode: {mode}")
+
     def _build_fastapi(self) -> Any:
         """构建 FastAPI 应用"""
         from contextlib import asynccontextmanager
@@ -120,6 +140,7 @@ class AgentApp:
 
             queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
             emitter = EventEmitter(queue)
+            fs_tools_backend = self._resolve_chat_fs_tools_backend(user_id, session_id)
 
             loop_task = asyncio.create_task(
                 agent.run(
@@ -129,6 +150,7 @@ class AgentApp:
                     emitter=emitter,
                     temporal_client=self._temporal_client,
                     request_context=context,
+                    fs_tools_backend=fs_tools_backend,
                 ),
                 name=f"agent-loop-{session_id}",
             )
@@ -197,6 +219,7 @@ class AgentApp:
 
             queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
             emitter = EventEmitter(queue)
+            fs_tools_backend = self._resolve_chat_fs_tools_backend(user_id, session_id)
 
             loop_task: asyncio.Task[None] = asyncio.create_task(
                 agent.run(
@@ -206,6 +229,7 @@ class AgentApp:
                     emitter=emitter,
                     temporal_client=self._temporal_client,
                     request_context=context,
+                    fs_tools_backend=fs_tools_backend,
                 ),
                 name=f"agent-loop-async-{session_id}",
             )

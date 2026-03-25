@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Literal, cast
 
 if TYPE_CHECKING:
     from agent_sdk._common.filesystem_backend import BackendProtocol
@@ -140,6 +140,12 @@ class AgentAppConfig:
     temporal_host: str = field(default_factory=lambda: os.getenv("TEMPORAL_HOST", "localhost:7233"))
     temporal_task_queue: str = field(
         default_factory=lambda: os.getenv("TEMPORAL_INTERRUPT_QUEUE", "interrupt-queue")
+    )
+    chat_fs_backend_mode: Literal["session", "global"] = field(
+        default_factory=lambda: cast(
+            Literal["session", "global"],
+            os.getenv("CHAT_FS_BACKEND_MODE", "session"),
+        )
     )
     cors_origins: list[str] = field(default_factory=lambda: ["*"])
     a2a_skills: list[Any] | None = None  # list[AgentSkill]

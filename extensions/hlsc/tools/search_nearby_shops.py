@@ -1,4 +1,4 @@
-"""search_nearby_shops 工具：按位置搜索附近商户。"""
+"""search_shops 工具：按标准条件搜索商户并返回商户详情列表。"""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from agent_sdk.logging import log_tool_start, log_tool_end
 from hlsc.services.restful.shop_service import shop_service
 from hlsc.tools.prompt_loader import load_tool_prompt
 
-_DESCRIPTION = load_tool_prompt("search_nearby_shops")
+_DESCRIPTION = load_tool_prompt("search_shops")
 
 
-async def search_nearby_shops(
+async def search_shops(
     ctx: RunContext[AgentDeps],
     latitude: Annotated[float, Field(description="纬度")],
     longitude: Annotated[float, Field(description="经度")],
@@ -35,7 +35,7 @@ async def search_nearby_shops(
     min_trading_count: Annotated[int | None, Field(description="最低成交量")] = None,
 ) -> str:
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
-    log_tool_start("search_nearby_shops", sid, rid, {
+    log_tool_start("search_shops", sid, rid, {
         "lat": latitude, "lng": longitude, "keyword": keyword,
         "top": top, "radius": radius, "order_by": order_by,
     })
@@ -63,25 +63,46 @@ async def search_nearby_shops(
 
         commercials = result.get("commercials", []) if isinstance(result, dict) else []
         if not commercials:
-            log_tool_end("search_nearby_shops", sid, rid, {"shop_count": 0})
+            log_tool_end("search_shops", sid, rid, {"shop_count": 0})
             return "未找到附近的门店，建议扩大搜索范围或调整关键词"
 
         shops = []
         for item in commercials:
+            distance_m = item.get("distance", 0)
+            distance_km = round(distance_m / 1000, 1) if distance_m else 0
+
+            svc = item.get("serviceScope", "")
+            tag_list = [t.strip() for t in svc.split(",") if t.strip()] if svc else []
+
             shops.append({
                 "shop_id": item.get("commercialId", ""),
                 "name": item.get("commercialName", ""),
+                "address": item.get("address", ""),
+                "province": item.get("provinceName", ""),
+                "city": item.get("cityName", ""),
+                "district": item.get("districtName", ""),
+                "commercial_type": item.get("commercialType"),
+                "latitude": item.get("latitude"),
+                "longitude": item.get("longitude"),
+                "distance_m": distance_m,
+                "distance": f"{distance_km}km",
+                "rating": item.get("rating"),
+                "trading_count": item.get("tradingCount", 0),
+                "phone": item.get("phone", ""),
+                "tags": tag_list,
+                "images": item.get("imageObject", []),
+                "opening_hours": item.get("openingHours", ""),
             })
 
-        log_tool_end("search_nearby_shops", sid, rid, {
+        log_tool_end("search_shops", sid, rid, {
             "shop_count": len(shops),
             "shops": [s["name"] for s in shops],
         })
         return json.dumps({"total": len(shops), "shops": shops}, ensure_ascii=False)
 
     except Exception as e:
-        log_tool_end("search_nearby_shops", sid, rid, exc=e)
-        return f"Error: search_nearby_shops failed - {e}"
+        log_tool_end("search_shops", sid, rid, exc=e)
+        return f"Error: search_shops failed - {e}"
 
 
-search_nearby_shops.__doc__ = _DESCRIPTION
+search_shops.__doc__ = _DESCRIPTION

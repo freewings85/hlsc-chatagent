@@ -160,3 +160,110 @@ class TestAgentAppInit:
         # 验证路由包含 /health
         routes = [r.path for r in agent_app.app.routes if hasattr(r, 'path')]
         assert "/health" in routes
+
+    def test_chat_fs_backend_mode_defaults_to_session(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """AgentApp 默认使用 session 级 fs backend"""
+        from agent_sdk import AgentApp, AgentAppConfig
+
+        agent = Agent(
+            prompt_loader=StaticPromptLoader("test"),
+            model=_make_text_model("ok"),
+        )
+        agent_app = AgentApp(agent, AgentAppConfig(temporal_enabled=False))
+
+        sentinel = object()
+        captured: dict[str, str] = {}
+
+        def fake_create_session_backend(user_id: str, session_id: str) -> object:
+            captured["user_id"] = user_id
+            captured["session_id"] = session_id
+            return sentinel
+
+        monkeypatch.setattr("agent_sdk.config.create_session_backend", fake_create_session_backend)
+
+        backend = agent_app._resolve_chat_fs_tools_backend("u1", "s1")
+
+        assert backend is sentinel
+        assert captured == {"user_id": "u1", "session_id": "s1"}
+
+    def test_chat_fs_backend_mode_global_uses_global_backend(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """配置为 global 时，AgentApp 使用全局 fs backend"""
+        from agent_sdk import AgentApp, AgentAppConfig
+
+        agent = Agent(
+            prompt_loader=StaticPromptLoader("test"),
+            model=_make_text_model("ok"),
+        )
+        agent_app = AgentApp(
+            agent,
+            AgentAppConfig(
+                temporal_enabled=False,
+                chat_fs_backend_mode="global",
+            ),
+        )
+
+        sentinel = object()
+        monkeypatch.setattr(
+            "agent_sdk._config.settings.get_fs_tools_backend",
+            lambda: sentinel,
+        )
+
+        backend = agent_app._resolve_chat_fs_tools_backend("u1", "s1")
+
+        assert backend is sentinel
+
+    def test_chat_stream_passes_resolved_fs_backend(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """chat/stream 将解析出的 fs backend 传给 Agent.run"""
+        from agent_sdk import AgentApp, AgentAppConfig
+
+        agent = Agent(
+            prompt_loader=StaticPromptLoader("test"),
+            model=_make_text_model("ok"),
+        )
+        run_mock = AsyncMock(return_value="ok")
+        agent.run = run_mock  # type: ignore[method-assign]
+
+        agent_app = AgentApp(agent, AgentAppConfig(temporal_enabled=False))
+        sentinel = object()
+        agent_app._resolve_chat_fs_tools_backend = lambda user_id, session_id: sentinel  # type: ignore[method-assign]
+
+        class DummyTask:
+            def add_done_callback(self, callback: Any) -> None:
+                self._callback = callback
+
+            def done(self) -> bool:
+                return False
+
+            def cancel(self) -> None:
+                return None
+
+        def fake_create_task(coro: Any, name: str | None = None) -> DummyTask:
+            coro.close()
+            return DummyTask()
+
+        monkeypatch.setattr("asyncio.create_task", fake_create_task)
+
+        endpoint = next(
+            route.endpoint
+            for route in agent_app.app.routes
+            if getattr(route, "path", None) == "/chat/stream"
+        )
+        response = asyncio.run(
+            endpoint(
+                {
+                    "user_id": "u1",
+                    "session_id": "s1",
+                    "message": "hello",
+                }
+            )
+        )
+
+        assert response.status_code == 200
+        assert run_mock.call_count == 1
+        assert run_mock.call_args.kwargs["fs_tools_backend"] is sentinel
