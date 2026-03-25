@@ -56,4 +56,4 @@ EXPOSE 8100
 # nacos.py 在 import 时自动读取 .env.{ACTIVE} 并从 Nacos 拉取配置
 ENV ACTIVE=test
 
-CMD ["uv", "run", "python", "server.py"]
+CMD ["uv", "run", "--no-dev", "python", "server.py"]
