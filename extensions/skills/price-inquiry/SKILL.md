@@ -45,7 +45,8 @@ cd <skill-dir> && python scripts/query_shop_price.py --project-ids 502 505 --car
 
 ## 返回格式
 
-必须严格返回纯 JSON，不要包含任何额外文字、markdown 标记或解释说明。
+- 门店报价（query_shop_price）：直接用文字描述结果，不要使用任何 spec 卡片
+- 行情参考价（query_market_price）：直接用文字描述结果，不要使用任何 spec 卡片
 
 ## 完成标准
 
