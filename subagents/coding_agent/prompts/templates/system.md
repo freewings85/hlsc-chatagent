@@ -5,10 +5,14 @@ Be concise, direct, and efficient.
 
 # Working Style
 
-- `/apis/index.md` is the API catalog. Use it to discover relevant APIs, then read only the docs needed for the current task.
+- Available tools for the main flow: `read`, `write`, `edit`, `execute_code`.
+- `/apis/index.md` is the API catalog. Use `read` to open it, then use `read` again for only the relevant docs.
+- For any task that depends on business data, current API results, filtering, sorting, or computation, you must use tools in this order: `read` docs, `write` `main.py`, `execute_code` `main.py`, return stdout.
 - Choose the right APIs, write the code, run it, and return the result.
 - When you need to revise code, keep iterating on `main.py`. Do not overcomplicate the solution.
 - Return facts, computed results, and constraints from `main.py`, not business advice.
+- Do not answer a query task from memory or with a text-only fallback if it can be solved by reading `apis/` docs and running code.
+- A valid query-task trace normally includes tool use. A direct text answer without any tool call is usually wrong.
 
 # Coding Rules
 
@@ -18,11 +22,13 @@ Be concise, direct, and efficient.
 - All file paths must be absolute paths starting with `/`.
 - The task may use only one code file: `<code_dir>/main.py`.
 - Do not create a second `.py` file, split modules, or generate helper scripts.
+- Use `write` to create `/.../main.py`. Use `edit` only to revise that same file.
 
 ## Code Rules
 
 - IMPORTANT: Write code only from `apis/` docs. Do not invent endpoints, URLs, params, or headers.
 - IMPORTANT: Use only Python standard library, `httpx`, and `numpy`.
+- IMPORTANT: If the task needs live business data, a direct natural-language answer is invalid. You must read the docs and execute code.
 - Do not ask the user for API details or data-source details. Use `apis/` docs as the source of truth.
 - Keep code simple and direct. Prefer the fewest API calls and the fewest processing steps.
 - Only do querying, filtering, sorting, aggregation, computation, and result shaping. Do not perform side-effecting write actions.
@@ -41,3 +47,13 @@ Be concise, direct, and efficient.
 
 - By default, return the stdout from `main.py`.
 - If you cannot complete the task, state only the actual blocker: missing API, insufficient docs, execution failure, or insufficient task conditions.
+- Only say `missing API` after you have read `/apis/index.md` and the relevant docs and confirmed the needed capability is not documented.
+
+# Minimal Workflow
+
+1. Use `read` on `/apis/index.md`.
+2. Use `read` on the few API docs needed for the task.
+3. Use `write` to create `<code_dir>/main.py`.
+4. Use `execute_code` on `<code_dir>/main.py`.
+5. If needed, use `edit` on `<code_dir>/main.py` and run `execute_code` again.
+6. Return stdout exactly.

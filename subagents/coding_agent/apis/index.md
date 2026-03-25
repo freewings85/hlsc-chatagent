@@ -1,21 +1,75 @@
 # 业务 API 索引
 
-以下是所有可用的业务 API。根据用户需求选择需要的 API，然后读取对应的详情文件获取参数和返回值。
+目标：
+- 帮你快速判断当前任务该读哪份 API 文档
+- 帮你理解每类 API 解决什么问题
+- 帮你拿到更适合任务结果组织的数据结构
 
-## 工单系统
+原则：
+- 只读当前任务真正需要的文档，不要把整个 `/apis` 目录都读一遍
+- 优先按“任务”选文档，不要先按“后端接口名”选文档
+- 返回结果优先组织成业务结果，不要直接回传后端原始大对象
 
-- GET /api/orders/search — 按条件搜索工单（支持时间范围、状态、客户、门店筛选）→ 详情：`/orders/search.md`
-- GET /api/orders/{id} — 获取工单详情（含维修项目、零件、金额明细）→ 详情：`/orders/get_detail.md`
-- GET /api/orders/{id}/timeline — 工单进度时间线（各状态变更记录）→ 详情：`/orders/timeline.md`
-- GET /api/orders/stats — 工单统计（按时间段汇总数量和金额）→ 详情：`/orders/stats.md`
+## 统一命名
 
-## 库存系统
+这组文档统一使用下面这些业务命名：
 
-- GET /api/inventory/parts — 查询零件库存和价格（支持名称/编号/分类筛选）→ 详情：`/inventory/parts.md`
-- GET /api/inventory/suppliers — 查询供应商列表及评级 → 详情：`/inventory/suppliers.md`
+- `project_id / project_ids`：业务里的项目 id
+- `car_model_id`：业务里的车型 id
+- `shop_id / shop_ids`：商户 id
+- `user_id`：用户 id
+- `shop_type_id / shop_type_ids`：商户类型 id
+- `primary_part_id / primary_part_ids`：标准词 / 标准配件 id
+- `source_project_id / source_project_ids`：另一套上游项目 id，仅在做映射时使用
 
-## 客户系统
+如果某个真实接口暂时还在使用旧命名，那只是实现细节；在这些文档里统一按上面的业务命名理解和组织。
 
-- GET /api/customers/search — 搜索客户（按姓名、手机号、车牌号）→ 详情：`/customers/search.md`
-- GET /api/customers/{id}/vehicles — 获取客户名下车辆列表 → 详情：`/customers/vehicles.md`
-- GET /api/customers/{id}/repair_history — 获取客户维修历史记录 → 详情：`/customers/repair_history.md`
+## 按任务选择文档
+
+### 一、商户相关
+
+适用场景：
+- 搜索附近商户
+- 根据已有商户 id 补商户详情
+- 查用户历史商户
+- 理解商户类型差异
+
+读取顺序：
+- 标准商户搜索 / 商户详情：
+  - `/apis/shops/search.md`
+- 用户历史商户：
+  - `/apis/shops/history.md`
+- 商户类型知识：
+  - `/apis/shops/types.md`
+
+### 二、项目相关
+
+适用场景：
+- 从用户描述里匹配项目
+- 查项目树 / 项目分类
+- 查项目详情
+- 查项目关系、历史项目、待服务项目
+
+读取顺序：
+- 项目检索：
+  - `/apis/projects/search.md`
+- 项目树 / 项目目录：
+  - `/apis/projects/catalog.md`
+- 项目详情：
+  - `/apis/projects/details.md`
+- 项目关系 / 用户项目历史：
+  - `/apis/projects/relations.md`
+
+### 三、报价相关
+
+适用场景：
+- 查附近商户报价
+- 比较哪家更便宜
+- 查行业参考价
+- 查轮胎报价
+
+读取顺序：
+- 附近商户报价 / 价格比较：
+  - `/apis/quotations/nearby_shops.md`
+- 行情参考价 / 轮胎报价：
+  - `/apis/quotations/market_reference.md`
