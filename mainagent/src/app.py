@@ -50,7 +50,7 @@ def create_agent_app() -> AgentApp:
     tool_map = {
         **create_default_tool_map(),
         # subagent 调用
-        "call_code_agent": call_code_agent,
+        # "call_code_agent": call_code_agent,
         # "call_demo_price_finder": call_demo_price_finder,
         "call_recommend_project": call_recommend_project,
         # 车辆信息
