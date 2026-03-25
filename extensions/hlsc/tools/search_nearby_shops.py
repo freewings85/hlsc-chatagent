@@ -20,7 +20,7 @@ async def search_nearby_shops(
     ctx: RunContext[AgentDeps],
     latitude: Annotated[float, Field(description="纬度")],
     longitude: Annotated[float, Field(description="经度")],
-    keyword: Annotated[str, Field(description="搜索关键词，如门店名称、品牌、服务类型")] = "",
+    keyword: Annotated[str, Field(description="商户名称关键词，仅用户明确按名称搜索时传入")] = "",
     top: Annotated[int, Field(description="返回数量")] = 5,
     radius: Annotated[int, Field(description="搜索半径（米）")] = 10000,
     order_by: Annotated[str, Field(description="排序方式：distance/rating/tradingCount，可组合")] = "distance",
