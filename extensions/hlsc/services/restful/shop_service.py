@@ -1,9 +1,10 @@
 """商户查询服务 — 封装商户相关 API 调用。
 
-支持三个接口：
+支持四个接口：
 - getLatestVisitedShops: 上次去过的商户
 - getHistoryVisitedShops: 历史服务商户
 - getNearbyShops: 附近门店搜索
+- getAllShopType: 获取所有商户类型
 """
 
 from __future__ import annotations
@@ -141,6 +142,32 @@ class ShopService:
                 return data.get("result", {})
             raise RuntimeError(
                 f"搜索附近门店失败: {data.get('message', '未知错误')}"
+            )
+
+
+    async def get_all_shop_types(
+        self,
+        session_id: str = "",
+        request_id: str = "",
+    ) -> list:
+        """获取所有商户类型列表。"""
+        url = f"{DATA_MANAGER_URL}/service_ai_datamanager/shop/getAllShopType"
+        if not DATA_MANAGER_URL:
+            raise RuntimeError("DATA_MANAGER_URL 未配置")
+
+        payload: dict = {}
+        log_http_request(url, "POST", session_id, request_id, payload)
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            log_http_response(response.status_code, session_id, request_id, data)
+
+            if data.get("status") == 0:
+                return data.get("result", [])
+            raise RuntimeError(
+                f"获取商户类型失败: {data.get('message', '未知错误')}"
             )
 
 

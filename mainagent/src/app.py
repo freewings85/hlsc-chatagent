@@ -24,6 +24,7 @@ from hlsc.tools.geocode_location import geocode_location
 from hlsc.tools.ask_user_location import ask_user_location
 from hlsc.tools.match_project import match_project
 from hlsc.tools.get_visited_shops import get_visited_shops
+from hlsc.tools.get_shop_types import get_shop_types
 
 # 新版业务工具（stub，待实现）
 from hlsc.tools.knowledge_base_search import knowledge_base_search
@@ -64,6 +65,7 @@ def create_agent_app() -> AgentApp:
         "match_project": match_project,
         # 商户查询
         "get_visited_shops": get_visited_shops,
+        "get_shop_types": get_shop_types,
         # 新版业务工具（stub，待实现真实逻辑）
         "knowledge_base_search": knowledge_base_search,
         "search_nearby_shops": search_nearby_shops,
@@ -75,7 +77,7 @@ def create_agent_app() -> AgentApp:
         "create_bidding_order": create_bidding_order,
         "handle_bidding_timeout": handle_bidding_timeout,
         "submit_execution_request": submit_execution_request,
-        "query_execution_status": query_execution_status,
+        # "query_execution_status": query_execution_status,
         "tire_image_recognize": tire_image_recognize,
     }
 

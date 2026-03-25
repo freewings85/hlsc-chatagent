@@ -24,6 +24,8 @@
 - "现在还营业的店" → opening_hour="14:30"（传入当前时间）
 - "近一点的" → radius=3000
 - "评分4.0以上的" → min_rating=4.0
+- "找附近的4S店" → 先调用 get_shop_types 获取4S店对应的 typeId，再传 commercial_type=[typeId]
+- "综合修理厂" → 先调用 get_shop_types 获取综合修理厂对应的 typeId，再传 commercial_type=[typeId]
 
 IMPORTANT: 此工具需要用户位置信息（latitude/longitude）才能搜索。如果没有位置信息，需先通过其他方式获取。
 
