@@ -68,26 +68,9 @@ async def search_nearby_shops(
 
         shops = []
         for item in commercials:
-            distance_m = item.get("distance", 0)
-            distance_km = round(distance_m / 1000, 1) if distance_m else 0
-
-            svc = item.get("serviceScope", "")
-            tag_list = [t.strip() for t in svc.split(",") if t.strip()] if svc else []
-
             shops.append({
                 "shop_id": item.get("commercialId", ""),
                 "name": item.get("commercialName", ""),
-                "address": item.get("address", ""),
-                "province": item.get("provinceName", ""),
-                "city": item.get("cityName", ""),
-                "district": item.get("districtName", ""),
-                "distance": f"{distance_km}km",
-                "rating": item.get("rating"),
-                "trading_count": item.get("tradingCount", 0),
-                "phone": item.get("phone", ""),
-                "tags": tag_list,
-                "images": item.get("imageObject", []),
-                "opening_hours": item.get("openingHours", ""),
             })
 
         log_tool_end("search_nearby_shops", sid, rid, {

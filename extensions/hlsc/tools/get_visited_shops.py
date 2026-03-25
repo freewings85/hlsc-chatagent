@@ -53,17 +53,9 @@ async def get_visited_shops(
 
         shops = []
         for item in raw_list:
-            svc = item.get("serviceScope", "")
-            tag_list = [t.strip() for t in svc.split(",") if t.strip()] if svc else []
             shops.append({
                 "shop_id": item.get("commercialId", ""),
                 "name": item.get("commercialName", ""),
-                "address": item.get("address", ""),
-                "rating": item.get("rating"),
-                "trading_count": item.get("tradingCount", 0),
-                "phone": item.get("phone", ""),
-                "tags": tag_list,
-                "opening_hours": item.get("openingHours", ""),
             })
 
         log_tool_end("get_visited_shops", sid, rid, {
