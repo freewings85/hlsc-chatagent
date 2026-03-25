@@ -23,7 +23,6 @@ from hlsc.tools.ask_user_car_info import ask_user_car_info
 from hlsc.tools.geocode_location import geocode_location
 from hlsc.tools.ask_user_location import ask_user_location
 from hlsc.tools.match_project import match_project
-from hlsc.tools.get_project_price import get_project_price
 from hlsc.tools.get_visited_shops import get_visited_shops
 
 # 新版业务工具（stub，待实现）
@@ -61,9 +60,8 @@ def create_agent_app() -> AgentApp:
         # 位置信息
         "geocode_location": geocode_location,
         "ask_user_location": ask_user_location,
-        # 项目 & 报价
+        # 项目
         "match_project": match_project,
-        "get_project_price": get_project_price,
         # 商户查询
         "get_visited_shops": get_visited_shops,
         # 新版业务工具（stub，待实现真实逻辑）
