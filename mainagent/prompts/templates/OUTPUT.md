@@ -39,10 +39,14 @@ Example:
 
 Supported `action` types:
 
-- only `change_car` for now
-- fields: `{ "action": "change_car", "current_car_model_id": string }`
+- `change_car`
+  - fields: `{ "action": "change_car", "current_car_model_id": string }`
+- `invite_shop`
+  - Use when the user searches for a specific shop by name but no results are found (shop not on platform).
+  - Guide the user to invite the shop to join.
+  - fields: `{ "action": "invite_shop", "shop_name": string }`
 
-Example:
+Examples:
 
 那我按 `2021款大众朗逸 1.5L` 继续帮你看。
 
@@ -51,3 +55,11 @@ Example:
 ```
 
 接下来帮你估个价。
+
+---
+
+很抱歉，"朱德保修理厂"目前还没有入驻话痨说车平台。您可以邀请他们加入，入驻后预订还能享受话痨预订9折优惠哦！
+
+```action
+{"action":"invite_shop","shop_name":"朱德保修理厂"}
+```

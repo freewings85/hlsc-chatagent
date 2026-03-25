@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Annotated
 
 from pydantic import Field
@@ -22,5 +23,10 @@ async def invite_merchant(
     log_tool_start("invite_merchant", sid, rid, {
         "merchant_name": merchant_name, "merchant_phone": merchant_phone,
     })
-    log_tool_end("invite_merchant", sid, rid, {"status": "stub"})
-    return '{"status": "error", "notice": "invite_merchant 尚未实现，请引导车主通过平台页面邀请商户入驻"}'
+    result = {
+        "status": "guide_user",
+        "shop_name": merchant_name,
+        "message": "请使用 invite_shop action 围栏，引导车主在前端完成邀请操作",
+    }
+    log_tool_end("invite_merchant", sid, rid, result)
+    return json.dumps(result, ensure_ascii=False)
