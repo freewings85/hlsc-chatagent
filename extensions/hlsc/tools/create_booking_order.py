@@ -35,6 +35,7 @@ async def create_booking_order(
         "car_model_id": car_model_id,
         "price": price,
         "booking_time": booking_time,
+        "remark": "",
         "upload_image": True,
     }
     log_tool_start("create_booking_order", sid, rid, params)
