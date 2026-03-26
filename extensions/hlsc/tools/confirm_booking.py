@@ -1,24 +1,26 @@
-"""create_booking_order 工具：汇总预订参数，中断等待用户回复。"""
+"""confirm_booking 工具：汇总预订参数，中断等待用户回复。"""
 
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 from pydantic_ai import RunContext
+
+PlanMode = Literal["standard", "bidding"]
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk._agent.tools.call_interrupt import call_interrupt
 from agent_sdk.logging import log_tool_start, log_tool_end
 from hlsc.tools.prompt_loader import load_tool_prompt
 
-_DESCRIPTION: str = load_tool_prompt("create_booking_order")
+_DESCRIPTION: str = load_tool_prompt("confirm_booking")
 
 
-async def create_booking_order(
+async def confirm_booking(
     ctx: RunContext[AgentDeps],
-    plan_mode: Annotated[str, Field(description="预订模式：transition/standard/bidding/insurance/butler/package")],
+    plan_mode: Annotated[PlanMode, Field(description="预订模式：standard（标准预订）/ bidding（一口价竞标）")],
     project_ids: Annotated[list[str], Field(description="项目 ID 列表")],
     shop_ids: Annotated[list[str], Field(description="商户 ID 列表")],
     car_model_id: Annotated[str, Field(description="车型 ID")],
@@ -38,7 +40,7 @@ async def create_booking_order(
         "remark": "",
         "upload_image": True,
     }
-    log_tool_start("create_booking_order", sid, rid, params)
+    log_tool_start("confirm_booking", sid, rid, params)
 
     try:
         reply: str = await call_interrupt(ctx, {
@@ -47,7 +49,7 @@ async def create_booking_order(
             "booking_params": params,
         })
 
-        log_tool_end("create_booking_order", sid, rid, {"reply_length": len(reply)})
+        log_tool_end("confirm_booking", sid, rid, {"reply_length": len(reply)})
 
         # 提取 user_msg（JSON 格式）或原样返回纯文本
         try:
@@ -58,8 +60,8 @@ async def create_booking_order(
             return reply.strip()
 
     except Exception as e:
-        log_tool_end("create_booking_order", sid, rid, exc=e)
-        return f"Error: create_booking_order failed - {e}"
+        log_tool_end("confirm_booking", sid, rid, exc=e)
+        return f"Error: confirm_booking failed - {e}"
 
 
-create_booking_order.__doc__ = _DESCRIPTION
+confirm_booking.__doc__ = _DESCRIPTION

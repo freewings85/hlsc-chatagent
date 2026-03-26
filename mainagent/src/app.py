@@ -32,9 +32,8 @@ from hlsc.tools.search_nearby_shops import search_shops
 from hlsc.tools.invite_merchant import invite_merchant
 from hlsc.tools.check_coupon_eligibility import check_coupon_eligibility
 from hlsc.tools.purchase_coupon import purchase_coupon
-from hlsc.tools.create_booking_order import create_booking_order
+from hlsc.tools.confirm_booking import confirm_booking
 from hlsc.tools.push_order_to_merchant import push_order_to_merchant
-from hlsc.tools.create_bidding_order import create_bidding_order
 from hlsc.tools.handle_bidding_timeout import handle_bidding_timeout
 from hlsc.tools.submit_execution_request import submit_execution_request
 from hlsc.tools.query_execution_status import query_execution_status
@@ -72,9 +71,8 @@ def create_agent_app() -> AgentApp:
         "invite_merchant": invite_merchant,
         "check_coupon_eligibility": check_coupon_eligibility,
         "purchase_coupon": purchase_coupon,
-        "create_booking_order": create_booking_order,
+        "confirm_booking": confirm_booking,
         "push_order_to_merchant": push_order_to_merchant,
-        "create_bidding_order": create_bidding_order,
         "handle_bidding_timeout": handle_bidding_timeout,
         "submit_execution_request": submit_execution_request,
         # "query_execution_status": query_execution_status,
