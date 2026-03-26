@@ -9,6 +9,7 @@
 - 只读当前任务真正需要的文档，不要把整个 `/apis` 目录都读一遍
 - 优先按“任务”选文档，不要先按“后端接口名”选文档
 - 返回结果优先组织成业务结果，不要直接回传后端原始大对象
+- 文档里如果已经写明 HTTP method 和参数位置，按文档调用，不要自己改成另一种请求方式
 
 ## 统一命名
 
@@ -73,3 +74,12 @@
   - `/apis/quotations/nearby_shops.md`
 - 行情参考价 / 轮胎报价：
   - `/apis/quotations/market_reference.md`
+
+### 商户搜索和报价的边界
+
+- 只找附近候选门店：
+  - 优先读 `/apis/shops/search.md`
+- 需要比较真实价格：
+  - 必须先确认已经有 `car_model_id`
+  - 再读 `/apis/quotations/nearby_shops.md`
+- 如果当前没有 `car_model_id`，不要把报价接口当成“低价门店搜索接口”来硬查

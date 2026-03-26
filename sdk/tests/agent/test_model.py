@@ -39,6 +39,18 @@ class TestCreateModel:
         model = create_model(config)
         assert model is not None
 
+    def test_azure_responses_model(self) -> None:
+        config = LLMConfig(
+            llm_type="azure",
+            api_style="responses",
+            azure_endpoint="https://test.openai.azure.com/",
+            azure_api_key="test-key",
+            azure_api_version="2025-04-01-preview",
+            azure_deployment_name="gpt-5.3-codex",
+        )
+        model = create_model(config)
+        assert model is not None
+
     def test_default_config(self) -> None:
         """不传 config 使用 get_llm_config()"""
         with patch("agent_sdk._agent.model.get_llm_config") as mock_get:
