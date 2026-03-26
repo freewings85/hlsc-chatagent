@@ -50,10 +50,12 @@ IMPORTANT: --car-model-id 只能填上下文中已有的真实值，没有则填
 - 门店报价（query_shop_price）：直接用文字描述结果，不要使用任何 spec 卡片
 - 行情参考价（query_market_price）：直接用文字描述结果，不要使用任何 spec 卡片
 
+向车主展示价格时，必须明确包含每个项目的具体价格数值（如"标准洗车（轿车）：30元"），后续预订时需要用到这些价格。
+
 ## 后续引导
 
 价格结果返回后，主动告知车主可选的下一步操作：
-1. **选择商户报价预订** — 选择某个商户的报价直接预订（plan_mode=standard，走 `booking-execution`）
+1. **选择商户报价预订** — 选择某个商户的报价直接预订（plan_mode=standard，走 `booking-execution`，price 填入该商户的预约价格）
 2. **一口价竞标预订** — 由车主出一口价，推送给多家商户抢单（plan_mode=bidding，走 `booking-execution`）
 3. **继续查报价** — 如果之前查的是行情参考价，可以继续查附近门店的实际报价再决定
 
