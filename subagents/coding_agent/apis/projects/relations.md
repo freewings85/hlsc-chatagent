@@ -11,7 +11,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/getProjectPackageByPrimaryNameId`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/getProjectPackageByPrimaryNameId`
 
 ### 什么时候用
 
@@ -32,7 +32,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/getProjectPackageByProjectId`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/getProjectPackageByProjectId`
 
 ### 什么时候用
 
@@ -54,7 +54,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/getRelatedProjectPackageByPackage`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/getRelatedProjectPackageByPackage`
 
 ### 什么时候用
 
@@ -76,7 +76,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/getHistoryPackage`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/getHistoryPackage`
 
 ### 什么时候用
 
@@ -113,7 +113,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/getPendingPackage`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/getPendingPackage`
 
 ### 什么时候用
 

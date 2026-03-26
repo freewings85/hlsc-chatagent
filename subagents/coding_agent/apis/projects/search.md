@@ -13,7 +13,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/searchProjectPackageByKeyword`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/searchProjectPackageByKeyword`
 
 ### 什么时候用
 
@@ -62,7 +62,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/partprimary/searchPartPrimaryByKeyword`
+`${API_BASE_URL}/service_ai_datamanager/partprimary/optimize/searchPartPrimaryByKeyword`
 
 ### 什么时候用
 
@@ -86,7 +86,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/projecttriggerconditions/searchprojecttriggerconditions`
+`${API_BASE_URL}/service_ai_datamanager/projecttriggerconditions/optimize/searchprojecttriggerconditions`
 
 ### 什么时候用
 
@@ -105,7 +105,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/faultphenomenon/searchfaultphenomenon`
+`${API_BASE_URL}/service_ai_datamanager/faultphenomenon/optimize/searchfaultphenomenon`
 
 ### 什么时候用
 

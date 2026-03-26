@@ -6,7 +6,7 @@
 
 ## 接口
 
-`http://127.0.0.1:9000/web_owner/project/getProjectDetails`
+`${API_BASE_URL}/web_owner/project/optimize/getProjectDetails`
 
 ## 什么时候用
 

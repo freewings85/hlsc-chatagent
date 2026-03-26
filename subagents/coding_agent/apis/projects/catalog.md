@@ -14,7 +14,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/Category/allProjectCategoryTree`
+`${API_BASE_URL}/service_ai_datamanager/Category/optimize/allProjectCategoryTree`
 
 ### 什么时候用
 
@@ -40,7 +40,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/maintainProjectTreeByCarKey`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/maintainProjectTreeByCarKey`
 
 ### 什么时候用
 
@@ -69,7 +69,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/project/getSampleVinProjects`
+`${API_BASE_URL}/service_ai_datamanager/project/optimize/getSampleVinProjects`
 
 ### 什么时候用
 

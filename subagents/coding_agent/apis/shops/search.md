@@ -14,7 +14,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/shop/getNearbyShops`
+`${API_BASE_URL}/service_ai_datamanager/shop/optimize/getNearbyShops`
 
 ### 调用方式
 
@@ -142,7 +142,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/shop/getShopsById`
+`${API_BASE_URL}/service_ai_datamanager/shop/optimize/getShopsById`
 
 ### 调用方式
 

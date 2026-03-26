@@ -12,7 +12,7 @@
 
 ## 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/quotation/quotationByCarKeyNearby`
+`${API_BASE_URL}/service_ai_datamanager/quotation/optimize/quotationByCarKeyNearby`
 
 ## 调用方式
 

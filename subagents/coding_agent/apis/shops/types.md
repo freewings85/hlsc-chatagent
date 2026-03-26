@@ -4,7 +4,7 @@
 
 ## 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/shop/getAllShopType`
+`${API_BASE_URL}/service_ai_datamanager/shop/optimize/getAllShopType`
 
 ## 什么时候用
 

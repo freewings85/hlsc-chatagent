@@ -11,7 +11,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/quotation/quotationIndustryByPackageId`
+`${API_BASE_URL}/service_ai_datamanager/quotation/optimize/quotationIndustryByPackageId`
 
 ### 什么时候用
 
@@ -61,7 +61,7 @@
 
 ### 接口
 
-`http://127.0.0.1:9000/service_ai_datamanager/quotation/findATireQuote`
+`${API_BASE_URL}/service_ai_datamanager/quotation/optimize/findATireQuote`
 
 ### 什么时候用
 
