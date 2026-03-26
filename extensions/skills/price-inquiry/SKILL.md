@@ -13,8 +13,7 @@ when_to_use: 车主问"多少钱"、"什么价格"、"大概费用"、"行情价
 ## 前置条件
 
 - project_ids 已通过 match_project 获取
-- car_model_id 已知（L2 精度：品牌+车系+年款+排量）
-- 如条件不满足，先引导补齐再进入本 skill
+- car_model_id 必须来自上下文中已有的 car_model_id 字段，如果没有，传空字符串 ""，**严禁编造任何值**
 
 ## 执行步骤
 
@@ -40,14 +39,24 @@ cd <skill-dir> && python scripts/query_market_price.py --project-ids 502 505 --c
 需要 shop_ids（门店 ID 列表），可从 search_nearby_shops 或 get_visited_shops 获取。
 
 ```bash
-cd <skill-dir> && python scripts/query_shop_price.py --project-ids 502 505 --car-model-id "xxx" --shop-ids S001 S002
+cd <skill-dir> && python scripts/query_shop_price.py --project-ids 502 505 --car-model-id "上下文中的真实值或空字符串" --shop-ids S001 S002
 ```
+
 
 ## 返回格式
 
 - 门店报价（query_shop_price）：直接用文字描述结果，不要使用任何 spec 卡片
 - 行情参考价（query_market_price）：直接用文字描述结果，不要使用任何 spec 卡片
 
+## 后续引导
+
+价格结果返回后，主动告知车主可选的下一步操作：
+1. **选择商户报价预订** — 从已查到的门店报价中，选择某个商户的报价直接预订
+2. **一口价竞标预订** — 由车主出一口价，推送给多家商户抢单
+3. **商户报价预订** — 如果之前查的是行情参考价，可以继续查附近门店的实际报价再决定
+
+
 ## 完成标准
 
 - 已向车主返回对应类型的价格结果
+- 已告知车主后续可选操作
