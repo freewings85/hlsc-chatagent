@@ -10,6 +10,9 @@ from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end
+from hlsc.tools.prompt_loader import load_tool_prompt
+
+_DESCRIPTION = load_tool_prompt("invite_merchant")
 
 
 async def invite_merchant(
@@ -30,3 +33,6 @@ async def invite_merchant(
     }
     log_tool_end("invite_merchant", sid, rid, result)
     return json.dumps(result, ensure_ascii=False)
+
+
+invite_merchant.__doc__ = _DESCRIPTION

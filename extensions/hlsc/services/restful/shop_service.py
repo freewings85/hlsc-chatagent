@@ -52,6 +52,8 @@ class ShopService:
         self,
         owner_id: str,
         top: int = 5,
+        commercial_type: list[int] | None = None,
+        package_ids: list[int] | None = None,
         session_id: str = "",
         request_id: str = "",
     ) -> dict:
@@ -61,6 +63,10 @@ class ShopService:
             raise RuntimeError("DATA_MANAGER_URL 未配置")
 
         payload = {"ownerId": int(owner_id), "top": top}
+        if commercial_type is not None:
+            payload["commercialType"] = commercial_type
+        if package_ids is not None:
+            payload["packageIds"] = package_ids
         log_http_request(url, "POST", session_id, request_id, payload)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
