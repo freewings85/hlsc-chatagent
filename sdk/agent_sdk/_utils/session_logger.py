@@ -391,24 +391,32 @@ def log_request_start(
     user_query: str,
     user_id: str = "",
     request_id: str = "",
+    request_context: Any | None = None,
 ) -> None:
     """记录请求开始"""
     prefix = _req_prefix(request_id)
+    context_preview = _safe_json(request_context) if request_context is not None else ""
 
     if session_id:
         sl = get_session_logger(session_id)
         sl.info("=" * 80)
-        sl.info(
+        message = (
             f"{prefix}[REQUEST_START] session_id={session_id}, "
             f"request_id={request_id}, user_id={user_id}, "
             f"query={user_query}"
         )
+        if context_preview:
+            message += f", request_context={context_preview}"
+        sl.info(message)
 
-    gl = _get_global_logger()
-    gl.info(
+    gl_message = (
         f"[{session_id}] [{request_id}] 请求开始: "
         f"user_id={user_id}, query={user_query}"
     )
+    if context_preview:
+        gl_message += f", request_context={context_preview}"
+    gl = _get_global_logger()
+    gl.info(gl_message)
 
 
 def log_request_end(

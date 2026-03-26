@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
-from src.coding_context import CodingContextFormatter
 from src.prompt_loader import create_code_agent_prompt_loader
 from src.tools import create_code_agent_tool_map
 
@@ -20,8 +19,7 @@ def create_agent_app() -> AgentApp:
 
     agent = Agent(
         prompt_loader=prompt_loader,
-        tools=ToolConfig(manual=tool_map, exclude=["task", "bash"]),
-        context_formatter=CodingContextFormatter(),
+        tools=ToolConfig(manual=tool_map, exclude=["task", "bash", "write", "edit", "glob"]),
     )
 
     return AgentApp(

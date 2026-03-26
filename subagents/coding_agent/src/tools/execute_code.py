@@ -1,4 +1,4 @@
-"""QueryCodingAgent 代码执行工具。"""
+"""QueryCodingAgent Python 执行工具。"""
 
 from __future__ import annotations
 
@@ -6,46 +6,27 @@ import shlex
 import sys
 
 from pydantic_ai import RunContext
+from pydantic import Field
+from typing import Annotated
 
 from agent_sdk._agent.deps import AgentDeps
-from agent_sdk._agent.executor import K8sExecutor, get_executor
-from src.coding_context import resolve_code_dir
+from agent_sdk._agent.executor import get_executor
 
 
-async def execute_code(
+async def run_python(
     ctx: RunContext[AgentDeps],
-    main_py_path: str,
+    code: Annotated[str, Field(description="he python code to execute to do further analysis or calculation.")],
 ) -> str:
-    """执行当前 code_dir 中的 main.py。"""
-    code_dir = resolve_code_dir(ctx.deps.request_context)
-    if not code_dir:
-        return "[执行失败] 缺少 code_dir 上下文"
+    """Execute Python code for analysis, querying, or calculation.
 
-    if not main_py_path:
-        return "[执行失败] main_py_path 不能为空"
+    If you want the user to see a value, print it with `print(...)`.
+    Only printed stdout is visible to the user.
+    """
+    if not code or not code.strip():
+        return "[执行失败] code 不能为空"
 
-    normalized_path = main_py_path if main_py_path.startswith("/") else f"{code_dir}/{main_py_path}"
-    normalized_path = normalized_path.replace("\\", "/")
-    expected_path = f"{code_dir.rstrip('/')}/main.py"
-    if normalized_path != expected_path:
-        return f"[执行失败] 当前只允许执行 {expected_path}"
-
-    backend = ctx.deps.fs_tools_backend
-    if backend is None or not hasattr(backend, "_resolve_path"):
-        return "[执行失败] 当前执行环境不支持读取脚本文件"
-
-    resolved_path = backend._resolve_path(normalized_path)  # type: ignore[attr-defined]
-    if not resolved_path.exists():
-        return f"[执行失败] 文件不存在：{normalized_path}"
-
-    code = resolved_path.read_text(encoding="utf-8")
     executor = get_executor()
-
-    if isinstance(executor, K8sExecutor):
-        # k8s 模式：直接传入代码字符串执行
-        command = f"python3 -c {shlex.quote(code)}"
-    else:
-        command = f"{shlex.quote(sys.executable)} {shlex.quote(str(resolved_path))}"
+    command = f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}"
 
     # 传递必要环境变量到执行环境（k8s Pod 不继承 host 环境）
     import os
@@ -58,20 +39,16 @@ async def execute_code(
         command,
         timeout=30,
         env=exec_env,
-        cwd=str(resolved_path.parent) if not isinstance(executor, K8sExecutor) else None,
     )
-
     if not result.success:
         return f"[执行失败] 退出码 {result.exit_code}\n{result.output}".strip()
-
     if not result.stdout:
         return "[执行成功] 无输出"
-
     return result.stdout
 
 
 def create_code_agent_tool_map() -> dict:
     """创建 QueryCodingAgent 工具映射。"""
     return {
-        "execute_code": execute_code,
+        "run_python": run_python,
     }

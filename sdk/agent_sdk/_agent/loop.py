@@ -388,6 +388,7 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
         user_query=task.message,
         user_id=task.user_id,
         request_id=task.request_id,
+        request_context=task.context,
     )
 
     try:

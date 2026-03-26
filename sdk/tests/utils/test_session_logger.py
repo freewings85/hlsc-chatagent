@@ -191,6 +191,18 @@ class TestLogRequestStartEnd:
         assert "success=False" in text
         assert "error=boom" in text
 
+    def test_request_context_logged(self, log_dir: Path) -> None:
+        from agent_sdk._utils.session_logger import log_request_start
+        log_request_start(
+            "sess-c",
+            "run query",
+            request_id="req-c",
+            request_context={"code_task_id": "code-123", "current_car": {"car_model_id": "lavida"}},
+        )
+        text = (log_dir / "sess-c" / "execution.log").read_text()
+        assert "request_context=" in text
+        assert "\"code_task_id\": \"code-123\"" in text
+
 
 class TestLogInfoDebugError:
     def test_log_info(self, log_dir: Path) -> None:

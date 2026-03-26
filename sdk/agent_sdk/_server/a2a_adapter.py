@@ -118,6 +118,8 @@ class ChatAgentExecutor(AgentExecutor):
         parent_request_id: str = metadata.get("parent_request_id", "")
         request_context = metadata.get("request_context")
         otel_carrier: dict[str, str] = metadata.get("_otel_carrier", {})
+        if request_context is not None:
+            logger.info("A2A request_context: %s", request_context)
 
         # session_id：和 mainagent 保持一致，便于按 session 检索全链路
         session_id: str = parent_session_id if parent_session_id else context_id

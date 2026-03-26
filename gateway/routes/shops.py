@@ -27,7 +27,11 @@ async def get_nearby_shops(payload: dict[str, Any] = Body(default_factory=dict))
     min_rating = payload.get("min_rating")
     min_trading_count = payload.get("min_trading_count")
     top = int(payload.get("top", 5))
-    order_by = payload.get("order_by", "distance")
+    raw_order_by = payload.get("order_by", "distance")
+    if isinstance(raw_order_by, list):
+        order_keys = [str(part).strip() for part in raw_order_by if str(part).strip()]
+    else:
+        order_keys = [part.strip() for part in str(raw_order_by).split(",") if part.strip()]
 
     items = SHOPS[:]
     if shop_ids:
@@ -50,7 +54,7 @@ async def get_nearby_shops(payload: dict[str, Any] = Body(default_factory=dict))
     if min_trading_count is not None:
         items = [shop for shop in items if shop["trading_count"] >= int(min_trading_count)]
 
-    for key in reversed([part.strip() for part in order_by.split(",") if part.strip()]):
+    for key in reversed(order_keys):
         reverse = key in {"rating", "trading_count"}
         if key == "distance":
             items.sort(key=lambda x: x["distance_m"], reverse=False)
@@ -65,7 +69,7 @@ async def get_nearby_shops(payload: dict[str, Any] = Body(default_factory=dict))
             "project_ids": list(project_ids),
             "shop_type_ids": list(shop_type_ids),
             "keyword": payload.get("keyword"),
-            "order_by": [part.strip() for part in order_by.split(",") if part.strip()],
+            "order_by": order_keys,
         },
         "items": [{"shop": public_shop(shop)} for shop in items],
         "summary": {"total": len(items)},
