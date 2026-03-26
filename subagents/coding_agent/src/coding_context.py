@@ -28,14 +28,17 @@ def resolve_code_dir(request_context: RequestContext | dict | None, code_base_di
     if request_context is None:
         return None
 
+    if isinstance(request_context, RequestContext):
+        try:
+            request_context = request_context.model_dump()
+        except Exception:
+            return None
+
     if isinstance(request_context, dict):
         try:
             request_context = CodingRequestContext(**request_context)
         except Exception:
             return None
-
-    if not isinstance(request_context, CodingRequestContext):
-        return None
 
     base_dir = normalize_code_base_dir(code_base_dir)
     return f"{base_dir}/{request_context.code_task_id}"
@@ -48,6 +51,11 @@ class CodingContextFormatter(ContextFormatter):
         self._code_base_dir = normalize_code_base_dir(code_base_dir)
 
     def format(self, context: RequestContext) -> str:
+        if isinstance(context, RequestContext):
+            try:
+                context = context.model_dump()
+            except Exception:
+                return ""
         if isinstance(context, dict):
             try:
                 context = CodingRequestContext(**context)

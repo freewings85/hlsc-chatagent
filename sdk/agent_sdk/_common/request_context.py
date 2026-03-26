@@ -6,11 +6,13 @@
 
 import abc
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RequestContext(BaseModel):
     """请求上下文基类。业务继承扩展字段。"""
+
+    model_config = ConfigDict(extra="allow")
 
 
 class ContextFormatter(abc.ABC):

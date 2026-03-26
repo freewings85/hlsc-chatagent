@@ -1,7 +1,7 @@
 """LLM 模型工厂：根据配置创建 Pydantic AI Model"""
 
 from pydantic_ai.models import Model
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 
@@ -13,6 +13,8 @@ def create_model(config: LLMConfig | None = None) -> Model:
     if config is None:
         config = get_llm_config()
 
+    use_responses_api = config.api_style == "responses"
+
     if config.llm_type == "azure":
         client: AsyncOpenAI = AsyncAzureOpenAI(
             azure_endpoint=config.azure_endpoint,
@@ -20,7 +22,10 @@ def create_model(config: LLMConfig | None = None) -> Model:
             api_version=config.azure_api_version,
         )
         provider: OpenAIProvider = OpenAIProvider(openai_client=client)
-        model: Model = OpenAIChatModel(config.azure_deployment_name, provider=provider)
+        if use_responses_api:
+            model = OpenAIResponsesModel(config.azure_deployment_name, provider=provider)
+        else:
+            model = OpenAIChatModel(config.azure_deployment_name, provider=provider)
         return model
     else:
         client = AsyncOpenAI(
@@ -28,5 +33,8 @@ def create_model(config: LLMConfig | None = None) -> Model:
             base_url=config.base_url or None,
         )
         provider = OpenAIProvider(openai_client=client)
-        model = OpenAIChatModel(config.model, provider=provider)
+        if use_responses_api:
+            model = OpenAIResponsesModel(config.model, provider=provider)
+        else:
+            model = OpenAIChatModel(config.model, provider=provider)
         return model

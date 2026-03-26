@@ -9,6 +9,7 @@ class TestLLMConfig:
     def test_default(self) -> None:
         config = LLMConfig()
         assert config.llm_type in ("azure", "openai", "")
+        assert config.api_style in ("chat", "responses", "")
 
 
 class TestFileSystemConfig:

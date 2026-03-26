@@ -430,8 +430,10 @@ class Agent:
 def _create_model_from_config(config: ModelConfig) -> Model:
     """从 ModelConfig 构建 Pydantic AI Model"""
     from openai import AsyncAzureOpenAI, AsyncOpenAI
-    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
     from pydantic_ai.providers.openai import OpenAIProvider
+
+    use_responses_api = config.api_style == "responses"
 
     if config.provider == "azure":
         client: AsyncOpenAI = AsyncAzureOpenAI(
@@ -440,6 +442,8 @@ def _create_model_from_config(config: ModelConfig) -> Model:
             api_version=config.azure_api_version,
         )
         provider = OpenAIProvider(openai_client=client)
+        if use_responses_api:
+            return OpenAIResponsesModel(config.azure_deployment_name, provider=provider)
         return OpenAIChatModel(config.azure_deployment_name, provider=provider)
     else:
         client = AsyncOpenAI(
@@ -447,4 +451,6 @@ def _create_model_from_config(config: ModelConfig) -> Model:
             base_url=config.base_url or None,
         )
         provider = OpenAIProvider(openai_client=client)
+        if use_responses_api:
+            return OpenAIResponsesModel(config.model_name, provider=provider)
         return OpenAIChatModel(config.model_name, provider=provider)

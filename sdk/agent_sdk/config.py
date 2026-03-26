@@ -54,6 +54,7 @@ class ModelConfig:
     """
 
     provider: str = field(default_factory=lambda: os.getenv("LLM_TYPE", "azure"))
+    api_style: str = field(default_factory=lambda: os.getenv("LLM_API_STYLE", "chat"))
     # Azure
     azure_endpoint: str = field(default_factory=lambda: os.getenv("AZURE_OPENAI_ENDPOINT", ""))
     azure_api_key: str = field(default_factory=lambda: os.getenv("AZURE_OPENAI_API_KEY", ""))
