@@ -31,7 +31,7 @@ when_to_use: 车主问"多少钱"、"什么价格"、"大概费用"、"行情价
 **重要**：`<skill-dir>` 替换为 Skill 工具返回的实际路径。所有脚本必须在 skill 目录下执行。
 
 ```bash
-cd <skill-dir> && python scripts/query_market_price.py --project-ids 502 505 --car-model-id "xxx"
+cd <skill-dir> && python scripts/query_market_price.py --project-ids 502 505 --car-model-id ""
 ```
 
 ### 门店报价
@@ -39,8 +39,10 @@ cd <skill-dir> && python scripts/query_market_price.py --project-ids 502 505 --c
 需要 shop_ids（门店 ID 列表），可从 search_nearby_shops 或 get_visited_shops 获取。
 
 ```bash
-cd <skill-dir> && python scripts/query_shop_price.py --project-ids 502 505 --car-model-id "上下文中的真实值或空字符串" --shop-ids S001 S002
+cd <skill-dir> && python scripts/query_shop_price.py --project-ids 502 505 --car-model-id "" --shop-ids S001 S002
 ```
+
+IMPORTANT: --car-model-id 只能填上下文中已有的真实值，没有则填 ""（空字符串）。"unknown"、"SUV"、"sedan" 等都属于编造，严禁使用。
 
 
 ## 返回格式
