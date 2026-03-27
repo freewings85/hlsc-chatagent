@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field
 from pydantic_ai import RunContext
 
-PlanMode = Literal["standard", "bidding"]
+PlanMode = Literal["standard", "commission", "bidding"]
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk._agent.tools.call_interrupt import call_interrupt
@@ -20,7 +20,7 @@ _DESCRIPTION: str = load_tool_prompt("confirm_booking")
 
 async def confirm_booking(
     ctx: RunContext[AgentDeps],
-    plan_mode: Annotated[PlanMode, Field(description="预订模式：standard（标准预订）/ bidding（一口价竞标）")],
+    plan_mode: Annotated[PlanMode, Field(description="预订模式：standard（标准预订，选择商户报价）/ commission（委托预订，车主出一口价）/ bidding（竞标预订，商户竞价）")],
     project_ids: Annotated[list[str], Field(description="项目 ID 列表")],
     shop_ids: Annotated[list[str], Field(description="商户 ID 列表")],
     car_model_id: Annotated[str, Field(description="车型 ID")],

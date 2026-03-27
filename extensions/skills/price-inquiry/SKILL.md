@@ -56,8 +56,9 @@ IMPORTANT: --car-model-id 只能填上下文中已有的真实值，没有则填
 
 价格结果返回后，主动告知车主可选的下一步操作：
 1. **选择商户报价预订** — 选择某个商户的报价直接预订（plan_mode=standard，走 `booking-execution`，price 填入该商户的预约价格）
-2. **一口价竞标预订** — 由车主出一口价，推送给多家商户抢单（plan_mode=bidding，走 `booking-execution`）
-3. **继续查报价** — 如果之前查的是行情参考价，可以继续查附近门店的实际报价再决定
+2. **一口价委托预订** — 由车主出一口价，委托推送给多家商户（plan_mode=commission，走 `booking-execution`）
+3. **多商户竞价预订** — 车主给出项目要求，推送给多家商户，由商户竞价报价（plan_mode=bidding，走 `booking-execution`）
+4. **继续查报价** — 如果之前查的是行情参考价，可以继续查附近门店的实际报价再决定
 
 
 ## 完成标准
