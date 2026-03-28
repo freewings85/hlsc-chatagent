@@ -1,0 +1,33 @@
+id: confirm_saving
+name: 确认省钱方法
+
+description: |
+  帮助车主选择合适的省钱方式。
+  主要有两条路径：优惠券和竞价。
+  可以根据车主偏好推荐，也可以两者结合。
+  车主赶时间的话可以简化说明，直接推荐最优方案。
+
+depends_on:
+  - 已确认的养车项目（confirm_project 的 output）
+
+checklist:
+  - 介绍可用的省钱方式
+  - 根据车主偏好推荐方案
+  - 确认车主选择
+
+output:
+  - 车主选择的省钱方式（优惠券/竞价/不需要）
+  - 具体的优惠方案明细
+
+cancel_directions:
+  车主不关心省钱: 标记为不使用省钱方案，继续下一步
+  车主嫌麻烦: 推荐最简单的方案或跳过
+
+children:
+  - id: coupon_path
+    name: 优惠券路径
+    keywords: [优惠券, 券, 折扣, 满减, 领券]
+
+  - id: bidding_path
+    name: 竞价路径
+    keywords: [竞价, 比价, 报价, 压价, 商户出价]

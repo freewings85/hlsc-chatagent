@@ -15,3 +15,6 @@ CONFIRM_PROJECT_URL: str = os.getenv("CONFIRM_PROJECT_URL", "http://localhost:81
 
 RECOMMEND_PROJECT_URL: str = os.getenv("RECOMMEND_PROJECT_URL", "http://localhost:8105")
 """RecommendProject Subagent 的 A2A 地址"""
+
+BUSINESS_MAP_AGENT_URL: str = os.getenv("BUSINESS_MAP_AGENT_URL", "http://localhost:8103")
+"""BusinessMapAgent Subagent 的 A2A 地址"""

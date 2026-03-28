@@ -1,0 +1,32 @@
+id: confirm_project
+name: 确认养车项目
+
+description: |
+  把车主的表述匹配到具体的养车项目。
+  大部分情况能快速通过，不需要过度追问。
+
+checklist:
+  - 识别车主描述对应的项目类型
+  - 匹配到具体项目
+  - 获得车主确认
+
+output:
+  - 已确认的养车项目名称
+  - 项目对应的标准服务内容
+
+cancel_directions:
+  车主不确定要做什么: 引导到 fuzzy_intent 场景
+  车主想先了解价格: 跳转到 confirm_saving 节点
+
+children:
+  - id: direct_expression
+    name: 直接表达场景
+    keywords: [换机油, 做保养, 换轮胎, 换刹车片]
+
+  - id: fuzzy_intent
+    name: 模糊意图场景
+    keywords: [该保养了, 跑了很久, 不知道该做什么]
+
+  - id: symptom_based
+    name: 症状描述场景
+    keywords: [异响, 抖动, 故障灯, 漏油]

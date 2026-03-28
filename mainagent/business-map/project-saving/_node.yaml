@@ -1,0 +1,40 @@
+id: project_saving
+name: 沟通项目需求与省钱方案
+
+description: |
+  本阶段目标是把车主模糊的养车需求收束成明确的项目和省钱方案。
+  通常按确认项目 → 特殊需求 → 省钱方法顺序推进。
+  车主急切时可加快节奏，特殊需求可简单确认后跳过。
+
+checklist:
+  - 确认车主的养车项目
+  - 了解是否有特殊需求
+  - 沟通省钱方法和偏好
+
+output:
+  - 已确认的养车项目列表
+  - 特殊需求记录（如有）
+  - 省钱方案偏好
+
+cancel_directions:
+  车主不想做了: 记录意向，结束流程
+  车主要自己去店里问: 提供商户推荐后结束
+
+children:
+  - id: confirm_project
+    name: 确认养车项目
+    keywords: [保养, 换机油, 什么项目, 该做什么]
+    path: confirm-project/
+
+  - id: confirm_requirements
+    name: 确认特殊需求
+    keywords: [品牌, 全合成, 配件, 指定]
+    optional: true
+    path: confirm-requirements.yaml
+
+  - id: confirm_saving
+    name: 确认省钱方法
+    keywords: [省钱, 便宜, 优惠, 打折, 划算]
+    path: confirm-saving/
+    depends_on:
+      - 需要已确认的养车项目（confirm_project 的 output）

@@ -1,0 +1,28 @@
+id: root
+name: 养车预订业务地图
+description: |
+  帮助车主完成从需求沟通到预订执行的完整流程。
+  project_saving 和 merchant_search 可交叉进行。
+  确认了项目就可以开始搜商户，不必等省钱方案完全敲定。
+  booking 必须在前两阶段基本完成后启动。
+
+children:
+  - id: project_saving
+    name: 沟通项目需求与省钱方案
+    keywords: [保养, 维修, 换, 项目, 省钱, 优惠, 比价, 便宜]
+    path: project-saving/
+
+  - id: merchant_search
+    name: 筛选匹配商户
+    keywords: [找店, 商户, 附近, 推荐, 门店, 哪家, 靠谱]
+    depends_on:
+      - 需要已确认的养车项目（confirm_project 的 output）
+    path: merchant-search/
+
+  - id: booking
+    name: 执行预订
+    keywords: [预订, 下单, 约, 预约, 时间]
+    depends_on:
+      - 已确认的项目和省钱方案（project_saving 的 output）
+      - 已选定的商户（merchant_search 的 output）
+    path: booking/

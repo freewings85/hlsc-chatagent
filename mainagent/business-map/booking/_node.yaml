@@ -1,0 +1,33 @@
+id: booking
+name: 执行预订
+
+description: |
+  在项目和商户都确认后，执行最终的预订操作。
+  先构建预订方案，再执行预订。
+  预订方案需要车主最终确认后才能执行。
+
+depends_on:
+  - 已确认的项目和省钱方案（project_saving 的 output）
+  - 已选定的商户（merchant_search 的 output）
+
+checklist:
+  - 构建完整的预订方案
+  - 获得车主最终确认
+  - 执行预订并反馈结果
+
+output:
+  - 预订订单信息
+  - 预约时间和到店信息
+
+cancel_directions:
+  车主临时不想预订了: 记录已确认的项目和商户，方便下次继续
+  车主要改时间: 返回方案构建步骤调整时间
+
+children:
+  - id: build_plan
+    name: 构建预订方案
+    keywords: [方案, 确认订单, 订单详情, 预订内容]
+
+  - id: execute
+    name: 执行预订
+    keywords: [下单, 提交, 确认预订, 预约]
