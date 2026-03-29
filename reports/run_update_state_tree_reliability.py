@@ -84,7 +84,7 @@ class SingleRunResult:
 
 def load_business_map() -> BusinessMapService:
     """加载业务地图 YAML 并返回服务实例。"""
-    biz_map_dir: Path = _PROJECT_ROOT / "mainagent" / "business-map"
+    biz_map_dir: Path = _PROJECT_ROOT / "extensions" / "business-map" / "data"
     svc: BusinessMapService = BusinessMapService()
     svc.load(biz_map_dir)
     return svc
@@ -127,9 +127,16 @@ _BUSINESS_MAP_INSTRUCTIONS: str = """[business_map_instructions]:
 
 使用原则：
 - 切片是主要参考，优先按 checklist 推进；但如果用户意图明显偏离切片内容，以用户为准
-- 用户确认、完成步骤、做出选择后，先调用 update_state_tree 保存进度，再回复用户
 - 需要更多节点详情时调用 read_business_node
-- 闲聊或无业务进展时不需要更新状态树""".strip()
+- 闲聊或无业务进展时不需要更新状态树
+
+update_state_tree 调用规则（重要 — 不调用会导致进度丢失）：
+- 如果 [state_tree] 不存在 → 本轮必须调用 update_state_tree 创建初始状态树
+- 如果 [state_tree] 已存在，以下场景必须在回复用户之前先调用 update_state_tree：
+  · 用户确认了选择（如确认项目、选定方案、选择优惠方式）
+  · 用户改变了意图或切换到其他业务分支
+  · 当前步骤的信息收集已完成，准备进入下一步
+- 调用时传入完整的更新后状态树，用标记反映最新进度""".strip()
 
 
 def build_user_message_with_context(
@@ -147,6 +154,11 @@ def build_user_message_with_context(
         context_parts.append(f"[business_map_slice]:\n{slice_md}")
     if state_tree:
         context_parts.append(f"[state_tree]:\n{state_tree}")
+        # 动态提醒：与 hlsc_context.py 保持一致
+        context_parts.append(
+            "[reminder]: 如果本轮用户确认了选择、改变了意图、"
+            "或完成了步骤信息收集，请先调用 update_state_tree 更新进度再回复。"
+        )
 
     context_block: str = "\n\n".join(context_parts)
     return f"{context_block}\n\n{user_message}"

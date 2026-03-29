@@ -157,6 +157,7 @@ class BusinessMapService:
             return ""
 
         # 2-3. 对每个有效 ID，获取路径并去重组装
+        target_ids: set[str] = set(valid_ids)
         seen_ids: set[str] = set()
         sections: list[str] = []
 
@@ -168,36 +169,38 @@ class BusinessMapService:
                 if ancestor.id in seen_ids:
                     continue
                 seen_ids.add(ancestor.id)
-                sections.append(self.format_node(ancestor))
+                # 跳过根节点的 description（元数据，不是业务指引）
+                if ancestor.id == "root":
+                    continue
+                # 目标节点标注 ← 当前定位
+                is_target: bool = ancestor.id in target_ids
+                sections.append(self.format_node(ancestor, is_target=is_target))
 
             # 不同路径之间用 "---" 分隔（最后一条路径后不加）
             if i < len(valid_ids) - 1:
                 sections.append("---")
 
-        # 4. 计算深度：所有路径中的最大深度（路径长度 - 1）
-        depth: int = max(
-            len(self.path_from_root(nid)) for nid in valid_ids
-        ) - 1
-
-        # 5. 组装头部
-        header: str = f"定位深度：{depth}"
-        if len(valid_ids) > 1:
-            header += "（多路径）"
+        # 4. 组装头部：标明当前定位的节点名称
+        target_names: list[str] = [self.find(nid).name for nid in valid_ids]
+        header: str = f"当前定位：{'、'.join(target_names)}"
 
         return header + "\n\n" + "\n\n".join(sections)
 
-    def format_node(self, node: BusinessNode) -> str:
+    def format_node(self, node: BusinessNode, *, is_target: bool = False) -> str:
         """把单个节点的 YAML 内容格式化为一段 Markdown。
 
         格式：
-        - ``### {node.name}`` 标题
+        - ``### {node.name}`` 标题（目标节点追加 ← 当前定位）
         - description（去除首尾空白）
         - 待办：checklist 列表
         - 产出：output 列表
         - 依赖：depends_on 列表
         - 取消走向：cancel_directions（reason → direction）
         """
-        parts: list[str] = [f"### {node.name}"]
+        title: str = f"### {node.name}"
+        if is_target:
+            title += " ← 当前定位"
+        parts: list[str] = [title]
 
         if node.description:
             parts.append(node.description.strip())

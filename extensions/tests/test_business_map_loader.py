@@ -1,7 +1,7 @@
 """BusinessMap 加载器和 BusinessNode 模型测试。
 
 测试 YAML 业务树的加载、节点查找、路径计算、校验逻辑。
-使用 mainagent/business-map/ 下的示例 YAML 文件作为测试数据。
+使用 extensions/business-map/data/ 下的示例 YAML 文件作为测试数据。
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from hlsc.business_map.model import BusinessNode
 
 # ── 路径解析（兼容不同工作目录）──
 _PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
-_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "mainagent" / "business-map"
+_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "extensions" / "business-map" / "data"
 
 
 # ── Fixtures ──

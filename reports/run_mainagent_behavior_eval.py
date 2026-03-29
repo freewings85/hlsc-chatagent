@@ -92,7 +92,7 @@ class CheckResult:
 
 def load_business_map() -> BusinessMapService:
     """加载业务地图 YAML 并返回服务实例。"""
-    biz_map_dir: Path = _PROJECT_ROOT / "mainagent" / "business-map"
+    biz_map_dir: Path = _PROJECT_ROOT / "extensions" / "business-map" / "data"
     svc: BusinessMapService = BusinessMapService()
     svc.load(biz_map_dir)
     return svc

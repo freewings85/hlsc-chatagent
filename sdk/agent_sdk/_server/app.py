@@ -151,18 +151,6 @@ if _DIST_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_DIST_DIR / "assets")), name="static-assets")
 
 
-@app.get("/{full_path:path}", response_class=HTMLResponse)
-async def spa_fallback(full_path: str) -> HTMLResponse:
-    """SPA 路由回退：非 API 路径返回 index.html，由前端路由处理。"""
-    dist_html = _DIST_DIR / "index.html"
-    if dist_html.exists():
-        return HTMLResponse(content=dist_html.read_text(encoding="utf-8"))
-    dev_html = _WEB_DIR / "index.html"
-    if dev_html.exists():
-        return HTMLResponse(content=dev_html.read_text(encoding="utf-8"))
-    return HTMLResponse(content="<h1>web/index.html 不存在</h1>", status_code=404)
-
-
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     """SSE 流式对话接口。
@@ -247,6 +235,80 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/chat/sync")
+async def chat_sync(request: ChatRequest) -> JSONResponse:
+    """同步对话接口（非 SSE）。
+
+    等待 Agent 执行完成后返回 JSON 结果，适合测试和外部集成。
+
+    返回格式：
+        {
+            "session_id": "...",
+            "text": "Agent 最终回复文本",
+            "tool_calls": [{"tool_name": "...", "tool_call_id": "..."}],
+            "tool_results": [{"tool_name": "...", "result": "..."}],
+            "finish_reason": "end_turn" | "error" | ...,
+            "error": null | "错误信息"
+        }
+    """
+    from agent_sdk._event.event_emitter import EventEmitter
+    from agent_sdk._event.event_model import EventModel
+    from agent_sdk._event.event_type import EventType
+    from agent_sdk._config.settings import get_fs_tools_backend
+
+    queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+    emitter: EventEmitter = EventEmitter(queue)
+
+    agent = _get_agent()
+    task_id: str = f"{request.session_id}-sync-{id(request)}"
+
+    loop_task: asyncio.Task[None] = asyncio.create_task(
+        agent.run(
+            message=request.message,
+            user_id=request.user_id,
+            session_id=request.session_id,
+            emitter=emitter,
+            temporal_client=_get_temporal_client(),
+            request_context=request.context,
+            fs_tools_backend=get_fs_tools_backend(),
+        ),
+        name=f"agent-loop-{task_id}",
+    )
+    _running_tasks[task_id] = (None, loop_task)
+
+    def _ensure_sentinel(fut: asyncio.Task[None]) -> None:
+        queue.put_nowait(None)
+
+    loop_task.add_done_callback(_ensure_sentinel)
+
+    text_parts: list[str] = []
+    finish_reason: str | None = None
+    error: str | None = None
+
+    try:
+        while True:
+            event: EventModel | None = await queue.get()
+            if event is None:
+                break
+            if event.type == EventType.TEXT:
+                content: str = event.data.get("content", "")
+                if content:
+                    text_parts.append(content)
+            elif event.type == EventType.ERROR:
+                error = event.data.get("message", event.data.get("error", str(event.data)))
+            elif event.type == EventType.CHAT_REQUEST_END:
+                finish_reason = event.finish_reason
+    finally:
+        _running_tasks.pop(task_id, None)
+
+    return JSONResponse(content={
+        "session_id": request.session_id,
+        "text": "".join(text_parts),
+        "finish_reason": finish_reason,
+        "error": error,
+    })
 
 
 @app.post("/chat/stop")
@@ -369,3 +431,16 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
     loop_task.add_done_callback(_ensure_sentinel)
 
     return JSONResponse({"status": "accepted", "task_id": task_id})
+
+
+# SPA 路由回退（必须在所有 API 路由之后注册，否则会拦截 POST 请求）
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def spa_fallback(full_path: str) -> HTMLResponse:
+    """SPA 路由回退：非 API 路径返回 index.html，由前端路由处理。"""
+    dist_html = _DIST_DIR / "index.html"
+    if dist_html.exists():
+        return HTMLResponse(content=dist_html.read_text(encoding="utf-8"))
+    dev_html = _WEB_DIR / "index.html"
+    if dev_html.exists():
+        return HTMLResponse(content=dev_html.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>web/index.html 不存在</h1>", status_code=404)

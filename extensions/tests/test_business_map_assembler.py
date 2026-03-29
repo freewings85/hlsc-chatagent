@@ -21,7 +21,7 @@ from hlsc.services.business_map_service import BusinessMapService
 
 # ── 路径解析（兼容不同工作目录）──
 _PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
-_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "mainagent" / "business-map"
+_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "extensions" / "business-map" / "data"
 
 
 # ── Fixtures ──

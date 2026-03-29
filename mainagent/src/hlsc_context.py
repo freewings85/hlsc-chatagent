@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from agent_sdk._common.request_context import ContextFormatter, RequestContext
 from hlsc.models import CarInfo, LocationInfo
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.business_map_hook import BusinessMapPreprocessor
@@ -67,6 +70,12 @@ class HlscContextFormatter(ContextFormatter):
             slice_md: str | None = self._preprocessor.get_slice(sid)
             state_tree: str | None = self._preprocessor.get_state_tree(sid)
 
+            logger.info(
+                "formatter 注入: session=%s, has_slice=%s, has_state_tree=%s, slice_len=%d",
+                sid, bool(slice_md), bool(state_tree),
+                len(slice_md) if slice_md else 0,
+            )
+
             if slice_md or state_tree:
                 result += "\n\n" + _BUSINESS_MAP_INSTRUCTIONS
 
@@ -75,7 +84,17 @@ class HlscContextFormatter(ContextFormatter):
 
             if state_tree:
                 result += f"\n\n[state_tree]:\n{state_tree}"
+                # 动态提醒：状态树已存在时，提醒 LLM 在有业务进展时更新
+                result += (
+                    "\n\n[reminder]: 如果本轮用户确认了选择、改变了意图、"
+                    "或完成了步骤信息收集，请先调用 update_state_tree 更新进度再回复。"
+                )
+            elif slice_md:
+                result += "\n\n[state_tree]: (尚未创建，请在本轮回复结束前调用 update_state_tree 创建)"
+        else:
+            logger.warning("formatter: preprocessor 为 None，跳过切片注入")
 
+        logger.info("formatter 输出长度: %d", len(result))
         return result
 
 
@@ -86,6 +105,13 @@ _BUSINESS_MAP_INSTRUCTIONS: str = """[business_map_instructions]:
 
 使用原则：
 - 切片是主要参考，优先按 checklist 推进；但如果用户意图明显偏离切片内容，以用户为准
-- 用户确认、完成步骤、做出选择后，先调用 update_state_tree 保存进度，再回复用户
 - 需要更多节点详情时调用 read_business_node
-- 闲聊或无业务进展时不需要更新状态树""".strip()
+- 闲聊或无业务进展时不需要更新状态树
+
+update_state_tree 调用规则（重要 — 不调用会导致进度丢失）：
+- 如果 [state_tree] 不存在 → 本轮必须调用 update_state_tree 创建初始状态树
+- 如果 [state_tree] 已存在，以下场景必须在回复用户之前先调用 update_state_tree：
+  · 用户确认了选择（如确认项目、选定方案、选择优惠方式）
+  · 用户改变了意图或切换到其他业务分支
+  · 当前步骤的信息收集已完成，准备进入下一步
+- 调用时传入完整的更新后状态树，用标记反映最新进度""".strip()

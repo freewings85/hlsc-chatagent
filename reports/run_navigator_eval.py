@@ -27,7 +27,7 @@ from pydantic_ai import Agent  # noqa: E402
 from pydantic_ai.models import Model  # noqa: E402
 
 # ── 常量 ──
-_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "mainagent" / "business-map"
+_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "extensions" / "business-map" / "data"
 _SYSTEM_PROMPT_PATH: Path = (
     _PROJECT_ROOT / "subagents" / "business_map_agent" / "prompts" / "templates" / "system.md"
 )

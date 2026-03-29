@@ -13,9 +13,11 @@ import asyncio
 import contextvars
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
+from hlsc.business_map.model import BusinessNode
 from hlsc.services.business_map_service import business_map_service
 from hlsc.services.state_tree_service import state_tree_service
 
@@ -34,7 +36,7 @@ BUSINESS_MAP_AGENT_URL: str = os.getenv(
 # 业务地图 YAML 目录
 BUSINESS_MAP_DIR: str = os.getenv(
     "BUSINESS_MAP_DIR",
-    str(Path(__file__).resolve().parents[1] / "business-map"),
+    str(Path(__file__).resolve().parents[2] / "extensions" / "business-map" / "data"),
 )
 
 
@@ -42,13 +44,42 @@ _MAX_CACHED_SESSIONS: int = 100
 """最大缓存 session 数量，超过后清理最早的条目。"""
 
 # 意图跳转关键词：信号粗粒度，用于判断是否需要重新导航
-_INTENT_KEYWORDS: list[str] = [
-    "找店", "附近", "推荐", "商户",      # merchant_search
-    "预订", "预约", "下单", "约",         # booking
-    "保养", "换", "修", "轮胎",          # project_saving
-    "省钱", "便宜", "优惠", "比价",      # confirm_saving
-    "算了", "不做了", "改成", "换个",    # 意图改变
-]
+def _load_intent_keywords() -> list[str]:
+    """从 intent_keywords.yaml 加载意图关键词列表。"""
+    import yaml
+    keywords_file: Path = (
+        Path(__file__).resolve().parents[2] / "extensions" / "business-map" / "intent_keywords.yaml"
+    )
+    if not keywords_file.exists():
+        logger.warning("意图关键词文件不存在: %s，使用空列表", keywords_file)
+        return []
+    with open(keywords_file, "r", encoding="utf-8") as f:
+        data: dict[str, list[str]] = yaml.safe_load(f)
+    keywords: list[str] = []
+    group: list[str]
+    for group in data.values():
+        if isinstance(group, list):
+            keywords.extend(group)
+    return keywords
+
+
+_INTENT_KEYWORDS: list[str] = _load_intent_keywords()
+
+
+class _NullEmitter:
+    """空操作 emitter：实现 EventEmitter 接口但不发送任何事件。
+
+    用于 _SilentDeps，让 SubagentSession 正常收集 _text_parts，
+    同时不将 BMA 的中间输出泄漏到用户前端。
+    """
+
+    async def emit(self, event: Any) -> None:
+        """静默丢弃所有事件。"""
+        pass
+
+    async def close(self) -> None:
+        """空操作。"""
+        pass
 
 
 class BusinessMapPreprocessor:
@@ -124,14 +155,14 @@ class BusinessMapPreprocessor:
         if current_state_tree != self._nav_state_trees.get(session_id):
             return True
 
-        # R3: 短消息且无意图关键词 → 跳过
+        # R3: 包含意图跳转关键词 → 无论长度都调用
         stripped: str = message.strip()
-        if len(stripped) <= 8 and not any(kw in stripped for kw in _INTENT_KEYWORDS):
-            return False
-
-        # R4: 包含意图跳转关键词 → 调用
         if any(kw in stripped for kw in _INTENT_KEYWORDS):
             return True
+
+        # R4: 短消息且无关键词 → 跳过
+        if len(stripped) <= 8:
+            return False
 
         # R5: 其他长消息 → 调用（宁可多调，不漏意图）
         return True
@@ -189,6 +220,7 @@ class BusinessMapPreprocessor:
                     "业务地图切片已组装: session=%s, node_ids=%s, 长度=%d",
                     session_id, node_ids, len(slice_md),
                 )
+
         except Exception:
             logger.error("切片组装失败", exc_info=True)
 
@@ -216,18 +248,52 @@ class BusinessMapPreprocessor:
                 "recent_history": message,
             }
 
+            # call_subagent 期望 ctx.deps 形式，构造一个简单包装。
+            #
+            # 关键设计：使用 _NullEmitter 替代 emitter=None。
+            #
+            # 为什么不能用 emitter=None：
+            #   SubagentSession._emit_artifacts() 在 emitter is None 时会 early-return，
+            #   导致 TextPart artifact 中的文本不会被收集到 _text_parts，
+            #   最终 session.result 可能丢失 BMA 的输出。
+            #
+            # 为什么不能用原始 emitter：
+            #   BMA 的中间输出（工具调用 JSON、节点 ID 原文）会通过 TEXT 事件
+            #   泄漏到用户聊天界面。
+            #
+            # _NullEmitter 的作用：
+            #   实现 EventEmitter 接口但 emit() 是空操作，既不泄漏到前端，
+            #   又让 SubagentSession 正常走完全部逻辑（包括 _text_parts 收集）。
+            silent_emitter: _NullEmitter = _NullEmitter()
+
+            class _SilentDeps:
+                """包装 deps，用 _NullEmitter 替换真实 emitter。"""
+                def __init__(self, real_deps: Any, emitter: _NullEmitter) -> None:
+                    self._real: Any = real_deps
+                    self.emitter: _NullEmitter = emitter
+
+                def __getattr__(self, name: str) -> Any:
+                    return getattr(self._real, name)
+
+            class _CtxShim:
+                def __init__(self, deps: Any) -> None:
+                    self.deps: Any = deps
+
+            ctx_shim: _CtxShim = _CtxShim(_SilentDeps(deps, silent_emitter))
+
             result: str = await asyncio.wait_for(
                 call_subagent(
-                    deps, url=BUSINESS_MAP_AGENT_URL, message=message, context=context
+                    ctx_shim, url=BUSINESS_MAP_AGENT_URL, message=message, context=context
                 ),
-                timeout=5.0,
+                timeout=30.0,
             )
 
+            logger.info("BMA 原始返回: %s", repr(result[:300]) if result else "(empty)")
             # 解析逗号分隔的 ID
             return _parse_node_ids(result)
 
         except asyncio.TimeoutError:
-            logger.warning("BusinessMapAgent A2A 调用超时（5s），跳过导航")
+            logger.warning("BusinessMapAgent A2A 调用超时（30s），跳过导航")
             return []
         except Exception:
             logger.warning(
@@ -284,17 +350,114 @@ def _compress_state_tree(state_tree: str) -> str:
     return "\n".join(parts) if parts else ""
 
 
+# 正则解析时过滤的噪声词：JSON 常见 key、布尔值等
+_PARSE_NOISE: frozenset[str] = frozenset({
+    "node_id", "node_ids", "text", "kind", "role", "type",
+    "name", "root", "true", "false", "null", "none",
+    "parts", "data", "result", "status", "state", "message",
+    "completed", "failed", "working", "content", "agent",
+    "the", "node", "relevant", "output", "response",
+})
+
+# 匹配 JSON 对象的正则（贪婪匹配一对花括号）
+_JSON_BLOCK_RE: re.Pattern[str] = re.compile(r"\{[^{}]*\}")
+
+# 匹配 markdown 代码块
+_CODE_BLOCK_RE: re.Pattern[str] = re.compile(r"```[\s\S]*?```")
+
+
+def _clean_raw_output(raw: str) -> str:
+    """清洗 BMA 原始返回，去除 JSON 块和 markdown 代码块等干扰。
+
+    保留纯文本中的节点 ID，便于正则提取。
+    """
+    # 去掉 markdown 代码块（```...```）
+    cleaned: str = _CODE_BLOCK_RE.sub(" ", raw)
+    # 去掉 JSON 对象（{...}）
+    cleaned = _JSON_BLOCK_RE.sub(" ", cleaned)
+    # 去掉 markdown 反引号
+    cleaned = cleaned.replace("`", " ")
+    return cleaned
+
+
 def _parse_node_ids(raw: str) -> list[str]:
-    """解析逗号分隔的节点 ID 字符串。"""
+    """从原始返回中提取有效的节点 ID。
+
+    解析策略（按优先级）：
+    1. 先清洗 raw：去除 markdown 反引号、JSON 块等干扰内容
+    2. 用正则提取合法的 snake_case 标识符
+    3. 验证 ID 是否存在于业务地图中，过滤掉 LLM 幻觉 ID
+    4. 兜底：若无有效 ID，尝试将中文节点名称映射回 ID
+    """
     if not raw or not raw.strip():
         return []
-    ids: list[str] = []
-    part: str
-    for part in raw.split(","):
-        cleaned: str = part.strip()
-        if cleaned:
-            ids.append(cleaned)
-    return ids
+    logger.info("_parse_node_ids raw: %s", repr(raw[:300]))
+
+    # 第一步：清洗——去掉 JSON 块和 markdown 代码块，减少干扰
+    cleaned: str = _clean_raw_output(raw)
+
+    # 第二步：用正则提取 snake_case 标识符（节点 ID 格式）
+    # 匹配规则：以字母开头，由字母/数字/下划线组成，至少 3 字符
+    all_matches: list[str] = re.findall(r"\b([a-z][a-z0-9_]{2,})\b", cleaned)
+    # 过滤掉常见的非 ID 噪声词
+    ids: list[str] = [m for m in all_matches if m not in _PARSE_NOISE]
+
+    # 第三步：验证 ID 是否真实存在于业务地图中，过滤掉 LLM 幻觉
+    valid_ids: list[str] = _validate_node_ids(ids)
+    if valid_ids:
+        if len(valid_ids) < len(ids):
+            logger.warning(
+                "_parse_node_ids: 过滤掉不存在的 ID: %s",
+                [i for i in ids if i not in valid_ids],
+            )
+        return valid_ids
+
+    # 兜底：LLM 可能输出了中文名称而非英文 ID，尝试 name → id 映射
+    name_map: dict[str, str] = _get_name_to_id_map()
+    if name_map:
+        fallback_ids: list[str] = []
+        node_name: str
+        node_id: str
+        for node_name, node_id in name_map.items():
+            if node_name in raw:
+                fallback_ids.append(node_id)
+        if fallback_ids:
+            logger.info("_parse_node_ids 兜底：中文名称映射到 ID: %s", fallback_ids)
+            return fallback_ids
+
+    return []
+
+
+def _validate_node_ids(ids: list[str]) -> list[str]:
+    """验证节点 ID 是否存在于业务地图中，过滤掉 LLM 幻觉的 ID。"""
+    if not business_map_service.is_loaded or not ids:
+        return ids  # 未加载时无法验证，原样返回
+    known_ids: set[str] = business_map_service._biz_map.all_ids()
+    return [i for i in ids if i in known_ids]
+
+
+def _get_name_to_id_map() -> dict[str, str]:
+    """从已加载的 BusinessMapService 构建 name → id 映射。
+
+    按名称长度倒序排列，避免短名称抢先匹配长名称的子串。
+    """
+    if not business_map_service.is_loaded:
+        return {}
+    try:
+        all_ids: set[str] = business_map_service._biz_map.all_ids()
+        name_map: dict[str, str] = {}
+        node_id: str
+        for node_id in all_ids:
+            node: BusinessNode = business_map_service.find(node_id)
+            name_map[node.name] = node_id
+        # 按名称长度倒序，优先匹配长名称（避免"需求沟通"匹配到"需求"子串）
+        sorted_map: dict[str, str] = dict(
+            sorted(name_map.items(), key=lambda x: len(x[0]), reverse=True)
+        )
+        return sorted_map
+    except Exception:
+        logger.warning("构建 name→id 映射失败", exc_info=True)
+        return {}
 
 
 # 模块级单例

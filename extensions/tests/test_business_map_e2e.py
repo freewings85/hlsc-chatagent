@@ -33,7 +33,7 @@ from hlsc.services.state_tree_service import StateTreeService
 
 # ── 路径解析 ──
 _PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
-_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "mainagent" / "business-map"
+_BUSINESS_MAP_DIR: Path = _PROJECT_ROOT / "extensions" / "business-map" / "data"
 _MAINAGENT_SRC: Path = _PROJECT_ROOT / "mainagent"
 
 # 将 mainagent 加入 sys.path，以便导入 business_map_hook 中的工具函数
