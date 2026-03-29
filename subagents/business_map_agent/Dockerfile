@@ -40,10 +40,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 # ---------- 构建时生成业务地图数据 ----------
-# 使用 uv sync 安装的 venv（含 pyyaml），避免额外 pip install
-RUN cd subagents/business_map_agent && \
-    uv run python ../../extensions/business-map/convert_tree.py \
-    ../../extensions/business-map/AllTree.yaml ../../extensions/business-map/data
+RUN subagents/business_map_agent/.venv/bin/python extensions/business-map/convert_tree.py \
+    extensions/business-map/AllTree.yaml extensions/business-map/data
 
 # ---------- 应用层 ----------
 COPY subagents/business_map_agent/server.py subagents/business_map_agent/
