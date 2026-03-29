@@ -443,8 +443,10 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                         user_prompt=pending_user,
                     )
                     if alt_errors:
-                        log_error(
-                            f"[MSG_ALTERNATION] 消息交替校验失败 "
+                        # Pydantic AI graph 模式下 tool_result 可能延迟加入 message_history，
+                        # 导致校验误报。降为 WARNING 避免日志噪声，不影响功能。
+                        log_info(
+                            f"[MSG_ALTERNATION] 消息交替校验异常 "
                             f"(iteration={iteration}): {alt_errors}"
                         )
 

@@ -402,6 +402,10 @@ def _parse_node_ids(raw: str) -> list[str]:
     # 过滤掉常见的非 ID 噪声词
     ids: list[str] = [m for m in all_matches if m not in _PARSE_NOISE]
 
+    # 去重（保持顺序）
+    seen: set[str] = set()
+    ids = [i for i in ids if not (i in seen or seen.add(i))]  # type: ignore[func-returns-value]
+
     # 第三步：验证 ID 是否真实存在于业务地图中，过滤掉 LLM 幻觉
     valid_ids: list[str] = _validate_node_ids(ids)
     if valid_ids:
