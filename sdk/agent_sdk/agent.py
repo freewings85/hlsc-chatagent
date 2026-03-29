@@ -286,14 +286,17 @@ class Agent:
             context_messages: list[ModelRequest] = list(prompt_result.context_messages)
 
             # 11. 请求上下文（始终注入完整 context，每轮 LLM 调用都能看到）
+            # formatter 可能有独立数据源（如 BusinessMapPreprocessor 缓存），
+            # 因此即使 request_context 为 None 也需要调用 formatter
+            if self._context_formatter is not None:
+                fmt_input: Any = request_context if request_context is not None else {}
+                context_text: str = self._context_formatter.format(fmt_input)
+                if context_text:
+                    context_messages.append(ModelRequest(
+                        parts=[UserPromptPart(content=context_text)],
+                        metadata={"is_meta": True, "source": "request_context"},
+                    ))
             if request_context is not None:
-                if self._context_formatter is not None:
-                    context_text = self._context_formatter.format(request_context)
-                    if context_text:
-                        context_messages.append(ModelRequest(
-                            parts=[UserPromptPart(content=context_text)],
-                            metadata={"is_meta": True, "source": "request_context"},
-                        ))
                 deps.request_context = request_context
 
             # 12. Attachment collector

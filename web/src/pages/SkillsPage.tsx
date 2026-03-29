@@ -45,21 +45,27 @@ export default function SkillsPage() {
   }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
     setUploading(true)
     setMessage(null)
-    try {
-      const res = await uploadSkill(file)
-      setMessage({ type: 'success', text: res.message })
-      await fetchSkills()
-    } catch (err) {
-      setMessage({ type: 'error', text: (err as Error).message })
-    } finally {
-      setUploading(false)
-      // 重置 input，允许再次上传同一文件
-      if (fileInputRef.current) fileInputRef.current.value = ''
+    const succeeded: string[] = []
+    const failed: string[] = []
+    for (const file of Array.from(files)) {
+      try {
+        await uploadSkill(file)
+        succeeded.push(file.name)
+      } catch (err) {
+        failed.push(`${file.name}: ${(err as Error).message}`)
+      }
     }
+    const parts: string[] = []
+    if (succeeded.length > 0) parts.push(`成功上传 ${succeeded.length} 个 skill`)
+    if (failed.length > 0) parts.push(`失败 ${failed.length} 个: ${failed.join('; ')}`)
+    setMessage({ type: failed.length > 0 ? 'error' : 'success', text: parts.join('。') })
+    await fetchSkills()
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleUninstall = async (name: string) => {
@@ -100,6 +106,7 @@ export default function SkillsPage() {
             ref={fileInputRef}
             type="file"
             accept=".zip"
+            multiple
             onChange={handleUpload}
             style={{ display: 'none' }}
           />

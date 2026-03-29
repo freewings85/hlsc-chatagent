@@ -263,6 +263,71 @@ class AgentApp:
 
             return JSONResponse({"status": "accepted", "task_id": task_id})
 
+        # Sync Chat（非 SSE，等待完成后返回 JSON）
+        @fastapi_app.post("/chat/sync")
+        async def chat_sync(request: dict[str, Any]) -> JSONResponse:
+            """同步对话接口：等待 Agent 完成后返回 JSON 结果。"""
+            from agent_sdk._event.event_emitter import EventEmitter
+            from agent_sdk._event.event_model import EventModel
+            from agent_sdk._event.event_type import EventType
+
+            session_id: str = request.get("session_id", "default")
+            user_id: str = request.get("user_id", "anonymous")
+            message: str = request.get("message", "")
+            context: Any = request.get("context")
+
+            queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+            emitter: EventEmitter = EventEmitter(queue)
+            fs_tools_backend: Any = self._resolve_chat_fs_tools_backend(user_id, session_id)
+
+            loop_task: asyncio.Task[None] = asyncio.create_task(
+                agent.run(
+                    message,
+                    user_id=user_id,
+                    session_id=session_id,
+                    emitter=emitter,
+                    temporal_client=self._temporal_client,
+                    request_context=context,
+                    fs_tools_backend=fs_tools_backend,
+                ),
+                name=f"agent-loop-sync-{session_id}",
+            )
+
+            task_id: str = f"sync-{session_id}-{id(loop_task)}"
+            self._running_tasks[task_id] = loop_task
+
+            def _ensure_sentinel(fut: asyncio.Task[None]) -> None:
+                queue.put_nowait(None)
+
+            loop_task.add_done_callback(_ensure_sentinel)
+
+            text_parts: list[str] = []
+            finish_reason: str | None = None
+            error: str | None = None
+
+            try:
+                while True:
+                    event: EventModel | None = await queue.get()
+                    if event is None:
+                        break
+                    if event.type == EventType.TEXT:
+                        content: str = event.data.get("content", "")
+                        if content:
+                            text_parts.append(content)
+                    elif event.type == EventType.ERROR:
+                        error = event.data.get("message", event.data.get("error", str(event.data)))
+                    elif event.type == EventType.CHAT_REQUEST_END:
+                        finish_reason = event.finish_reason
+            finally:
+                self._running_tasks.pop(task_id, None)
+
+            return JSONResponse({
+                "session_id": session_id,
+                "text": "".join(text_parts),
+                "finish_reason": finish_reason,
+                "error": error,
+            })
+
         # Stop
         @fastapi_app.post("/chat/stop")
         async def chat_stop(request: dict[str, Any]) -> JSONResponse:

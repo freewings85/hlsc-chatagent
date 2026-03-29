@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ProfileTriggerHook, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
+from src.business_map_hook import business_map_preprocessor
 from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 
@@ -38,6 +39,10 @@ from hlsc.tools.handle_bidding_timeout import handle_bidding_timeout
 from hlsc.tools.submit_execution_request import submit_execution_request
 from hlsc.tools.query_execution_status import query_execution_status
 from hlsc.tools.tire_image_recognize import tire_image_recognize
+
+# 业务地图工具
+from hlsc.tools.read_business_node import read_business_node
+from hlsc.tools.update_state_tree import update_state_tree
 
 
 
@@ -77,12 +82,21 @@ def create_agent_app() -> AgentApp:
         "submit_execution_request": submit_execution_request,
         # "query_execution_status": query_execution_status,
         "tire_image_recognize": tire_image_recognize,
+        # 业务地图工具
+        "read_business_node": read_business_node,
+        "update_state_tree": update_state_tree,
     }
+
+    # 业务地图预处理器（hook 和 formatter 共享状态）
+    formatter: HlscContextFormatter = HlscContextFormatter(
+        preprocessor=business_map_preprocessor
+    )
 
     agent = Agent(
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
-        context_formatter=HlscContextFormatter(),
+        context_formatter=formatter,
+        before_agent_run_hook=business_map_preprocessor,
         after_run_hooks=[ProfileTriggerHook()],
     )
 

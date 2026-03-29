@@ -75,6 +75,31 @@
         "http_proxy": "",
         "https_proxy": ""
       }
+    },
+    {
+      "name": "BusinessMapAgent",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "server.py",
+      "python": "${workspaceFolder}/subagents/business_map_agent/.venv/bin/python",
+      "cwd": "${workspaceFolder}/subagents/business_map_agent",
+      "console": "integratedTerminal",
+      "env": {
+        "HTTP_PROXY": "",
+        "HTTPS_PROXY": "",
+        "http_proxy": "",
+        "https_proxy": ""
+      }
+    },
+    {
+      "name": "ConvertBusinessMap",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "business-map/convert_tree.py",
+      "args": ["business-map/AllTree.yaml", "business-map/data"],
+      "python": "${workspaceFolder}/extensions/.venv/bin/python",
+      "cwd": "${workspaceFolder}/extensions",
+      "console": "integratedTerminal"
     }
   ]
 }
