@@ -20,7 +20,7 @@ async def search_shops(
     ctx: RunContext[AgentDeps],
     latitude: Annotated[float, Field(description="纬度")],
     longitude: Annotated[float, Field(description="经度")],
-    keyword: Annotated[str, Field(description="商户名称关键词，仅用户明确按名称搜索时传入")] = "",
+    shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入，描述性词语（如'技术好'、'口碑好'）不能传入")] = "",
     top: Annotated[int, Field(description="返回数量")] = 5,
     radius: Annotated[int, Field(description="搜索半径（米）")] = 10000,
     order_by: Annotated[str, Field(description="排序方式：distance/rating/tradingCount，可组合")] = "distance",
@@ -36,7 +36,7 @@ async def search_shops(
 ) -> str:
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
     log_tool_start("search_shops", sid, rid, {
-        "lat": latitude, "lng": longitude, "keyword": keyword,
+        "lat": latitude, "lng": longitude, "shop_name": shop_name,
         "top": top, "radius": radius, "order_by": order_by,
     })
 
@@ -44,7 +44,7 @@ async def search_shops(
         result = await shop_service.get_nearby_shops(
             lat=latitude,
             lng=longitude,
-            keyword=keyword,
+            keyword=shop_name,
             top=top,
             radius=radius,
             order_by=order_by,
