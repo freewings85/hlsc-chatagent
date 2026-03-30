@@ -213,13 +213,19 @@ class SkillRegistry:
                     registry._entries[entry.name] = entry
         return registry
 
-    def format_listing(self) -> str:
+    def format_listing(self, filter_names: list[str] | None = None) -> str:
         """格式化 skill_listing 文本（带字符预算控制）。
 
         格式（兼容 Claude Code ET8 风格）：
           - skill_name: description - when_to_use
+
+        Args:
+            filter_names: 如果提供，只展示这些名称的 skill。None 表示展示全部。
         """
         skills = self.list_invocable()
+        if filter_names is not None:
+            allowed: set[str] = set(filter_names)
+            skills = [s for s in skills if s.name in allowed]
         if not skills:
             return ""
 

@@ -95,6 +95,8 @@ class PreModelCallMessageService:
         self._skill_registry = skill_registry
         self._invoked_skill_store = invoked_skill_store
         self._system_prompt = system_prompt
+        # 场景允许的 skill 列表（None = 不限制）。由 loop 每轮从 deps 同步。
+        self.allowed_skills: list[str] | None = None
 
     async def handle(self, messages: list[ModelMessage]) -> PreModelCallResult:
         """处理消息，返回 PreModelCallResult。
@@ -157,7 +159,7 @@ class PreModelCallMessageService:
         """
         if self._skill_registry is None:
             return None
-        listing = self._skill_registry.format_listing()
+        listing: str = self._skill_registry.format_listing(filter_names=self.allowed_skills)
         if not listing:
             return None
         content = (

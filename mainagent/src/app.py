@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ProfileTriggerHook, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
-from src.business_map_hook import business_map_preprocessor
+from src.business_map_hook import scene_orchestrator
 from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 
@@ -87,16 +87,16 @@ def create_agent_app() -> AgentApp:
         "update_state_tree": update_state_tree,
     }
 
-    # 业务地图预处理器（hook 和 formatter 共享状态）
+    # 场景编排器（hook 和 formatter 共享状态）
     formatter: HlscContextFormatter = HlscContextFormatter(
-        preprocessor=business_map_preprocessor
+        orchestrator=scene_orchestrator
     )
 
     agent = Agent(
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
         context_formatter=formatter,
-        before_agent_run_hook=business_map_preprocessor,
+        before_agent_run_hook=scene_orchestrator,
         after_run_hooks=[ProfileTriggerHook()],
     )
 

@@ -46,6 +46,8 @@ class AgentDeps:
     # Skill 系统（None 时 Skill 工具不可用）
     skill_registry: SkillRegistry | None = None
     invoked_skill_store: InvokedSkillStore | None = None
+    # 场景允许的 skill 名称列表（None 表示不限制，展示全部）
+    allowed_skills: list[str] | None = None
     # 事件发射器（interrupt 等工具需要直接发出 SSE 事件）
     emitter: EventEmitter | None = None
     # 请求上下文（位置、车辆信息等），工具可通过 ctx.deps.request_context 读取

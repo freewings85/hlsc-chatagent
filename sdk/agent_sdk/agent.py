@@ -288,7 +288,7 @@ class Agent:
             context_messages: list[ModelRequest] = list(prompt_result.context_messages)
 
             # 11. 请求上下文（始终注入完整 context，每轮 LLM 调用都能看到）
-            # formatter 可能有独立数据源（如 BusinessMapPreprocessor 缓存），
+            # formatter 可能有独立数据源（如 SceneOrchestrator 缓存），
             # 因此即使 request_context 为 None 也需要调用 formatter
             if self._context_formatter is not None:
                 fmt_input: Any = request_context if request_context is not None else {}

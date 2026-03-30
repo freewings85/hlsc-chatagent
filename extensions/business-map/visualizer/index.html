@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>决策树可视化 - 养车预订服务</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+<style>
+/* ── Reset & Layout ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: #fff;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111;
+}
+header .meta {
+  font-size: 13px;
+  color: #888;
+}
+
+/* ── Stage Bar ── */
+#stage-bar {
+  display: flex;
+  gap: 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.stage-card {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 16px;
+  min-width: 260px;
+  background: #fff;
+}
+.stage-card h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.stage-card .desc {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+.stage-card .slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.slot-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+.slot-tag.conditional {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ── Main Area ── */
+.main-area {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Tree Container ── */
+#tree-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  cursor: grab;
+}
+#tree-container:active { cursor: grabbing; }
+#tree-container svg { width: 100%; height: 100%; }
+
+/* ── Detail Panel ── */
+#detail-panel {
+  width: 380px;
+  border-left: 1px solid #e5e7eb;
+  background: #fafafa;
+  overflow-y: auto;
+  padding: 20px;
+  flex-shrink: 0;
+  transition: width 0.2s;
+}
+#detail-panel.collapsed {
+  width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+#detail-panel h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #111;
+}
+#detail-panel .hint {
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 40px;
+}
+.detail-section {
+  margin-bottom: 16px;
+}
+.detail-section .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #888;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.detail-section .value {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: #333;
+}
+.detail-section .value code {
+  background: #f3f4f6;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.detail-slot-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.detail-slot-table th,
+.detail-slot-table td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid #eee;
+}
+.detail-slot-table th {
+  font-weight: 600;
+  color: #666;
+}
+.tool-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #dbeafe;
+  color: #1e40af;
+  margin: 2px 2px 2px 0;
+}
+.stage-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.stage-badge.s1 { background: #e0e7ff; color: #3730a3; }
+.stage-badge.s2 { background: #d1fae5; color: #065f46; }
+.stage-badge.any { background: #fef3c7; color: #92400e; }
+
+/* ── Tree Nodes ── */
+.node-group { cursor: pointer; }
+.node-rect {
+  stroke-width: 1.5px;
+  rx: 6;
+  ry: 6;
+}
+.node-condition .node-rect {
+  fill: #eff6ff;
+  stroke: #3b82f6;
+}
+.node-scene .node-rect {
+  fill: #f0fdf4;
+  stroke: #22c55e;
+}
+.node-fallback .node-rect {
+  fill: #fefce8;
+  stroke: #eab308;
+}
+.node-text {
+  font-size: 12px;
+  fill: #333;
+  pointer-events: none;
+}
+.node-subtext {
+  font-size: 10px;
+  fill: #888;
+  pointer-events: none;
+}
+.link-path {
+  fill: none;
+  stroke: #d1d5db;
+  stroke-width: 1.5px;
+}
+.node-group:hover .node-rect {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.12));
+}
+.node-group.selected .node-rect {
+  stroke-width: 2.5px;
+}
+.node-condition.selected .node-rect { stroke: #1d4ed8; }
+.node-scene.selected .node-rect { stroke: #15803d; }
+.node-fallback.selected .node-rect { stroke: #ca8a04; }
+
+/* ── Tooltip ── */
+#tooltip {
+  position: absolute;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 320px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+#tooltip.visible { opacity: 1; }
+
+/* ── Loading ── */
+#loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.9);
+  font-size: 14px;
+  color: #666;
+  z-index: 200;
+}
+#loading.hidden { display: none; }
+
+/* ── Legend ── */
+#legend {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #666;
+  background: rgba(255,255,255,0.9);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid;
+}
+.legend-swatch.condition { background: #eff6ff; border-color: #3b82f6; }
+.legend-swatch.scene { background: #f0fdf4; border-color: #22c55e; }
+.legend-swatch.fallback { background: #fefce8; border-color: #eab308; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="page-title">决策树可视化</h1>
+  <span class="meta" id="page-meta"></span>
+</header>
+
+<div id="stage-bar"></div>
+
+<div class="main-area">
+  <div id="tree-container">
+    <div id="loading">加载配置文件...</div>
+    <div id="tooltip"></div>
+    <div id="legend">
+      <div class="legend-item"><div class="legend-swatch condition"></div>条件节点</div>
+      <div class="legend-item"><div class="legend-swatch scene"></div>场景叶节点</div>
+      <div class="legend-item"><div class="legend-swatch fallback"></div>兜底节点</div>
+    </div>
+  </div>
+  <div id="detail-panel">
+    <h2>场景详情</h2>
+    <div class="hint" id="detail-hint">点击叶节点查看场景定义</div>
+    <div id="detail-content" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 主程序
+// ============================================================
+(async function main() {
+  const loadingEl = document.getElementById("loading");
+  const yamlUrl = "../scene_config_example.yaml";
+
+  let rawText;
+  try {
+    const resp = await fetch(yamlUrl);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    rawText = await resp.text();
+  } catch (e) {
+    loadingEl.textContent = `无法加载 ${yamlUrl}：${e.message}。请通过 HTTP 服务器打开（python -m http.server）`;
+    return;
+  }
+
+  let config;
+  try {
+    config = jsyaml.load(rawText);
+  } catch (e) {
+    loadingEl.textContent = `YAML 解析失败：${e.message}`;
+    return;
+  }
+
+  loadingEl.classList.add("hidden");
+
+  // ── 渲染元信息 ──
+  if (config.meta) {
+    document.getElementById("page-title").textContent =
+      `决策树可视化 — ${config.meta.description || ""}`;
+    document.getElementById("page-meta").textContent =
+      `v${config.meta.version || "?"}`;
+  }
+
+  // ── 渲染阶段信息 ──
+  renderStages(config.stages || {});
+
+  // ── 构建树数据 ──
+  const treeRoot = buildTreeData(config.tree || [], config.scenes || {});
+
+  // ── 渲染 D3 树 ──
+  renderTree(treeRoot, config.scenes || {});
+})();
+
+
+// ============================================================
+// 渲染阶段卡片
+// ============================================================
+function renderStages(stages) {
+  const bar = document.getElementById("stage-bar");
+  for (const [id, stage] of Object.entries(stages)) {
+    const card = document.createElement("div");
+    card.className = "stage-card";
+    let slotsHtml = "";
+    if (stage.slots) {
+      for (const [slotId, slotDef] of Object.entries(stage.slots)) {
+        const cls = slotDef.required === "conditional" ? "slot-tag conditional" : "slot-tag";
+        slotsHtml += `<span class="${cls}">${slotDef.label || slotId}${slotDef.required === "conditional" ? " (条件)" : ""}</span>`;
+      }
+    }
+    card.innerHTML = `
+      <h3>${id} — ${stage.name || ""}</h3>
+      <div class="desc">${stage.description || ""}</div>
+      <div class="slots">${slotsHtml}</div>
+    `;
+    bar.appendChild(card);
+  }
+}
+
+
+// ============================================================
+// 将 YAML tree 转换为 D3 hierarchy 数据
+// ============================================================
+function buildTreeData(treeNodes, scenes) {
+  // 根节点
+  const root = {
+    name: "ROOT",
+    displayName: "入口",
+    nodeType: "condition",
+    children: []
+  };
+
+  function processNode(node) {
+    if (node.children) {
+      // 条件 -> 子树
+      const condText = formatCondition(node.if || "");
+      const item = {
+        name: node.label || condText,
+        displayName: node.label || condText,
+        condition: node.if || "",
+        nodeType: "condition",
+        children: node.children.map(c => processNode(c))
+      };
+      return item;
+    } else if (node.scene) {
+      // 叶节点 -> 场景
+      const sceneDef = scenes[node.scene] || {};
+      const isFallback = !node.if;
+      const item = {
+        name: node.scene,
+        displayName: node.scene,
+        sceneName: sceneDef.name || node.scene,
+        condition: node.if || null,
+        label: node.label || null,
+        nodeType: isFallback ? "fallback" : "scene",
+        sceneId: node.scene
+      };
+      return item;
+    }
+    return { name: "?", displayName: "?", nodeType: "condition" };
+  }
+
+  for (const node of treeNodes) {
+    root.children.push(processNode(node));
+  }
+
+  return root;
+}
+
+function formatCondition(cond) {
+  if (!cond) return "";
+  // 缩短长条件
+  return cond
+    .replace(/intent\./g, "")
+    .replace(/slot\./g, "")
+    .replace(/ AND /g, "\n& ")
+    .replace(/ OR /g, "\n| ");
+}
+
+
+// ============================================================
+// D3 树形渲染
+// ============================================================
+function renderTree(treeRoot, scenes) {
+  const container = document.getElementById("tree-container");
+  const rect = container.getBoundingClientRect();
+  const width = rect.width;
+  const height = rect.height;
+
+  const svg = d3.select(container)
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+  // 缩放 + 平移
+  const g = svg.append("g");
+  const zoom = d3.zoom()
+    .scaleExtent([0.2, 3])
+    .on("zoom", (e) => g.attr("transform", e.transform));
+  svg.call(zoom);
+
+  // 构建层级
+  const root = d3.hierarchy(treeRoot);
+
+  // 计算节点尺寸
+  const nodeWidth = 160;
+  const nodeHeight = 54;
+  const hSep = 42;
+  const vSep = 80;
+
+  // 树形布局
+  const treeLayout = d3.tree()
+    .nodeSize([nodeWidth + hSep, nodeHeight + vSep])
+    .separation((a, b) => {
+      return a.parent === b.parent ? 1 : 1.15;
+    });
+
+  treeLayout(root);
+
+  // 居中
+  const nodes = root.descendants();
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of nodes) {
+    if (n.x < minX) minX = n.x;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.y > maxY) maxY = n.y;
+  }
+  const treeW = maxX - minX + nodeWidth + 80;
+  const treeH = maxY - minY + nodeHeight + 80;
+  const scaleInit = Math.min(width / treeW, height / treeH, 1);
+  const tx = width / 2 - ((minX + maxX) / 2) * scaleInit;
+  const ty = 40;
+  svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scaleInit));
+
+  // ── 连线 ──
+  const links = root.links();
+  g.selectAll(".link-path")
+    .data(links)
+    .enter()
+    .append("path")
+    .attr("class", "link-path")
+    .attr("d", d => {
+      const sx = d.source.x;
+      const sy = d.source.y + nodeHeight / 2;
+      const tx = d.target.x;
+      const ty = d.target.y - nodeHeight / 2;
+      const my = (sy + ty) / 2;
+      return `M${sx},${sy} C${sx},${my} ${tx},${my} ${tx},${ty}`;
+    });
+
+  // ── 节点组 ──
+  const tooltip = document.getElementById("tooltip");
+  let selectedNode = null;
+
+  const nodeGroups = g.selectAll(".node-group")
+    .data(nodes)
+    .enter()
+    .append("g")
+    .attr("class", d => {
+      const t = d.data.nodeType;
+      return `node-group node-${t}`;
+    })
+    .attr("transform", d => `translate(${d.x - nodeWidth / 2}, ${d.y - nodeHeight / 2})`);
+
+  // 矩形
+  nodeGroups.append("rect")
+    .attr("class", "node-rect")
+    .attr("width", nodeWidth)
+    .attr("height", nodeHeight);
+
+  // 主文字
+  nodeGroups.each(function(d) {
+    const group = d3.select(this);
+    const data = d.data;
+
+    if (data.nodeType === "condition") {
+      // 条件节点：显示 label 或简化后的条件
+      const lines = (data.displayName || "").split("\n");
+      const startY = nodeHeight / 2 - (lines.length - 1) * 7;
+      lines.forEach((line, i) => {
+        group.append("text")
+          .attr("class", "node-text")
+          .attr("x", nodeWidth / 2)
+          .attr("y", startY + i * 14)
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "central")
+          .text(truncate(line, 18));
+      });
+    } else {
+      // 场景 / 兜底节点
+      group.append("text")
+        .attr("class", "node-text")
+        .attr("x", nodeWidth / 2)
+        .attr("y", nodeHeight / 2 - 8)
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "central")
+        .style("font-weight", "600")
+        .text(truncate(data.sceneId || data.name, 18));
+
+      group.append("text")
+        .attr("class", "node-subtext")
+        .attr("x", nodeWidth / 2)
+        .attr("y", nodeHeight / 2 + 10)
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "central")
+        .text(truncate(data.sceneName || "", 16));
+    }
+  });
+
+  // ── 悬停 tooltip ──
+  nodeGroups
+    .on("mouseenter", function(event, d) {
+      const data = d.data;
+      let html = "";
+      if (data.nodeType === "condition") {
+        html = `<strong>${data.displayName}</strong>`;
+        if (data.condition) {
+          html += `<br><code style="color:#93c5fd">${data.condition}</code>`;
+        }
+      } else {
+        const scene = scenes[data.sceneId];
+        if (scene) {
+          html = `<strong>${data.sceneId}</strong> — ${scene.name}<br>`;
+          html += `<em>阶段：${scene.stage}</em><br>`;
+          html += `目标：${truncate(scene.goal || "", 60)}`;
+          if (scene.tools && scene.tools.length) {
+            html += `<br>工具：${scene.tools.join(", ")}`;
+          }
+        } else {
+          html = `<strong>${data.sceneId || data.name}</strong>`;
+        }
+        if (data.condition) {
+          html += `<br><code style="color:#93c5fd">if: ${data.condition}</code>`;
+        }
+      }
+      tooltip.innerHTML = html;
+      tooltip.classList.add("visible");
+    })
+    .on("mousemove", function(event) {
+      const cr = container.getBoundingClientRect();
+      let left = event.clientX - cr.left + 14;
+      let top = event.clientY - cr.top + 14;
+      // 避免溢出右边
+      if (left + 320 > cr.width) left = event.clientX - cr.left - 330;
+      if (top + 120 > cr.height) top = event.clientY - cr.top - 80;
+      tooltip.style.left = left + "px";
+      tooltip.style.top = top + "px";
+    })
+    .on("mouseleave", function() {
+      tooltip.classList.remove("visible");
+    });
+
+  // ── 点击显示详情 ──
+  nodeGroups.on("click", function(event, d) {
+    event.stopPropagation();
+    const data = d.data;
+    // 移除之前的选中
+    g.selectAll(".node-group").classed("selected", false);
+    d3.select(this).classed("selected", true);
+
+    if (data.sceneId && scenes[data.sceneId]) {
+      showDetail(data.sceneId, scenes[data.sceneId], data.condition);
+    } else if (data.nodeType === "condition") {
+      showConditionDetail(data);
+    }
+  });
+
+  // 点击空白取消选中
+  svg.on("click", () => {
+    g.selectAll(".node-group").classed("selected", false);
+    hideDetail();
+  });
+}
+
+function truncate(s, n) {
+  return s.length > n ? s.slice(0, n) + "..." : s;
+}
+
+
+// ============================================================
+// 右侧详情面板
+// ============================================================
+function showDetail(sceneId, scene, condition) {
+  const hint = document.getElementById("detail-hint");
+  const content = document.getElementById("detail-content");
+  hint.style.display = "none";
+  content.style.display = "block";
+
+  const stageCls = (scene.stage || "any").toLowerCase();
+
+  let slotsHtml = "";
+  if (scene.target_slots && Object.keys(scene.target_slots).length > 0) {
+    slotsHtml = `<table class="detail-slot-table">
+      <tr><th>槽位</th><th>必填</th><th>获取方式</th></tr>`;
+    for (const [slotId, slotDef] of Object.entries(scene.target_slots)) {
+      const req = slotDef.required === true ? "是"
+        : slotDef.required === "conditional" ? `条件: ${slotDef.condition || "-"}`
+        : String(slotDef.required);
+      slotsHtml += `<tr>
+        <td><strong>${slotDef.label || slotId}</strong></td>
+        <td>${req}</td>
+        <td>${slotDef.method || "-"}</td>
+      </tr>`;
+    }
+    slotsHtml += "</table>";
+  } else {
+    slotsHtml = `<span style="color:#999">无目标槽位</span>`;
+  }
+
+  let toolsHtml = "";
+  if (scene.tools && scene.tools.length > 0) {
+    toolsHtml = scene.tools.map(t => `<span class="tool-tag">${t}</span>`).join(" ");
+  } else {
+    toolsHtml = `<span style="color:#999">无工具</span>`;
+  }
+
+  content.innerHTML = `
+    <div class="detail-section">
+      <div class="label">场景</div>
+      <div class="value"><strong>${sceneId}</strong> — ${scene.name || ""}</div>
+    </div>
+    <div class="detail-section">
+      <div class="label">阶段</div>
+      <div class="value"><span class="stage-badge ${stageCls}">${scene.stage || "-"}</span></div>
+    </div>
+    ${condition ? `<div class="detail-section">
+      <div class="label">进入条件</div>
+      <div class="value"><code>${condition}</code></div>
+    </div>` : ""}
+    <div class="detail-section">
+      <div class="label">目标 (Goal)</div>
+      <div class="value">${scene.goal || "-"}</div>
+    </div>
+    <div class="detail-section">
+      <div class="label">目标槽位 (Target Slots)</div>
+      <div class="value">${slotsHtml}</div>
+    </div>
+    <div class="detail-section">
+      <div class="label">工具 (Tools)</div>
+      <div class="value">${toolsHtml}</div>
+    </div>
+    <div class="detail-section">
+      <div class="label">退出条件 (Exit When)</div>
+      <div class="value"><code>${scene.exit_when || "-"}</code></div>
+    </div>
+    <div class="detail-section">
+      <div class="label">沟通策略 (Strategy)</div>
+      <div class="value">${(scene.strategy || "-").replace(/\n/g, "<br>")}</div>
+    </div>
+  `;
+}
+
+function showConditionDetail(data) {
+  const hint = document.getElementById("detail-hint");
+  const content = document.getElementById("detail-content");
+  hint.style.display = "none";
+  content.style.display = "block";
+  content.innerHTML = `
+    <div class="detail-section">
+      <div class="label">条件节点</div>
+      <div class="value"><strong>${data.displayName || data.name}</strong></div>
+    </div>
+    ${data.condition ? `<div class="detail-section">
+      <div class="label">完整条件</div>
+      <div class="value"><code>${data.condition}</code></div>
+    </div>` : ""}
+    <div class="detail-section">
+      <div class="label">子节点数</div>
+      <div class="value">${(data.children || []).length}</div>
+    </div>
+  `;
+}
+
+function hideDetail() {
+  document.getElementById("detail-hint").style.display = "block";
+  document.getElementById("detail-content").style.display = "none";
+}
+</script>
+</body>
+</html>

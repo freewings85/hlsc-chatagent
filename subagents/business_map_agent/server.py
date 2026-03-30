@@ -1,32 +1,29 @@
-"""Agent 启动入口（通用模板）
+"""BusinessMapAgent 启动入口
 
-配置加载由 nacos.py 统一处理：
-  ACTIVE=local  -> 加载 .env.local（本地开发）
-  ACTIVE=test   -> 加载 .env.test -> Nacos 拉取远程配置
-  ACTIVE=uat    -> 加载 .env.uat  -> Nacos 拉取远程配置
+纯 FastAPI 服务，暴露 /classify 端点进行场景分类。
+不使用 AgentApp / A2A 协议。
 
 启动方式：
     uv run python server.py
     uv run python server.py --port 8103
-    ACTIVE=test uv run python server.py
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 
 
 def main() -> None:
-    import logging
-
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser()
+    parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--host", type=str, default=None)
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
 
+    # Nacos 服务注册（如果启用）
     from agent_sdk._common.nacos import register_service, deregister_service
 
     if args.port is not None:
@@ -36,10 +33,10 @@ def main() -> None:
 
     register_service()
 
+    # Logfire / OpenTelemetry（可选）
     from agent_sdk._config.settings import LogfireConfig
-    from agent_sdk.config import get_agent_name
 
-    logfire_config = LogfireConfig()
+    logfire_config: LogfireConfig = LogfireConfig()
     if logfire_config.enabled:
         import logfire
 
@@ -47,11 +44,8 @@ def main() -> None:
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
             from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-            from agent_sdk._config.otel import patch_pydantic_ai_json_dumps
-
-            patch_pydantic_ai_json_dumps()
             logfire.configure(
-                service_name=get_agent_name(),
+                service_name="business_map_agent",
                 send_to_logfire=False,
                 scrubbing=False,
                 additional_span_processors=[
@@ -59,15 +53,21 @@ def main() -> None:
                 ],
             )
         else:
-            logfire.configure(service_name=get_agent_name())
-        logfire.instrument_pydantic_ai()
+            logfire.configure(service_name="business_map_agent")
 
-    from src.app import create_agent_app
+    # 构建 FastAPI app
+    from src.classify import create_app
 
-    agent_app = create_agent_app()
+    app = create_app()
+
+    # 启动 uvicorn
+    import uvicorn
+
+    host: str = os.getenv("SERVER_HOST", "0.0.0.0")
+    port: int = int(os.getenv("SERVER_PORT", "8103"))
 
     try:
-        agent_app.run()
+        uvicorn.run(app, host=host, port=port)
     finally:
         deregister_service()
 

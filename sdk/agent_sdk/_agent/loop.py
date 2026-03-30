@@ -418,6 +418,25 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                         run._graph_run.state.message_history[:] = model_messages[:-1] if model_messages else []
 
                     history: list[ModelMessage] = run._graph_run.state.message_history
+
+                    # DEBUG: 打印 handle 前后的消息结构
+                    if not _first_llm_call:
+                        _debug_parts: list[str] = []
+                        for _di, _dm in enumerate(history):
+                            _dtype: str = "Req" if isinstance(_dm, ModelRequest) else "Resp"
+                            _dparts: list[str] = []
+                            for _dp in _dm.parts:
+                                _dparts.append(type(_dp).__name__)
+                            _debug_parts.append(f"  [{_di}] {_dtype}: {_dparts}")
+                        log_info(
+                            f"[DEBUG_HISTORY] iteration={iteration}, "
+                            f"before handle ({len(history)} msgs):\n"
+                            + "\n".join(_debug_parts)
+                        )
+
+                    # 同步场景允许的 skill 列表到 pre_call_service
+                    pre_call_service.allowed_skills = deps.allowed_skills
+
                     pre_result = await pre_call_service.handle(history)
 
                     if pre_result.compacted:
@@ -443,10 +462,8 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                         user_prompt=pending_user,
                     )
                     if alt_errors:
-                        # Pydantic AI graph 模式下 tool_result 可能延迟加入 message_history，
-                        # 导致校验误报。降为 WARNING 避免日志噪声，不影响功能。
-                        log_info(
-                            f"[MSG_ALTERNATION] 消息交替校验异常 "
+                        log_error(
+                            f"[MSG_ALTERNATION] 消息交替校验失败 "
                             f"(iteration={iteration}): {alt_errors}"
                         )
 
