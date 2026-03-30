@@ -137,6 +137,10 @@ class AgentApp:
             user_id = request.get("user_id", "anonymous")
             message = request.get("message", "")
             context = request.get("context")
+            raw_rid: Any = request.get("request_id")
+            request_id: str | None = (
+                raw_rid if isinstance(raw_rid, str) and 1 <= len(raw_rid) <= 64 else None
+            )
 
             queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
             emitter = EventEmitter(queue)
@@ -151,6 +155,7 @@ class AgentApp:
                     temporal_client=self._temporal_client,
                     request_context=context,
                     fs_tools_backend=fs_tools_backend,
+                    request_id=request_id,
                 ),
                 name=f"agent-loop-{session_id}",
             )

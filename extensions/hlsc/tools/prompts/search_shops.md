@@ -9,7 +9,7 @@ Usage notes:
 - 这是标准商户搜索工具，优先用于直接查询附近或指定范围内的候选商户
 - 返回的是商户详情数据，不只是商户名称
 - 如果任务需要复杂排序、聚合、价格比较或额外计算，改用 `call_query_codingagent`
-- 用户未明确指定 keyword 或 commercial_type 时，不要自行猜测填充
+- 用户未明确指定 project_ids 或 commercial_type 时，不要自行猜测填充
 - `shop_name` 只用于明确的商户名称
 
 返回结果中的每个商户通常包含：

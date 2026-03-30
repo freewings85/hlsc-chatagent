@@ -30,7 +30,7 @@ async def search_shops(
     city_id: Annotated[int | None, Field(description="城市ID")] = None,
     district_id: Annotated[int | None, Field(description="区县ID")] = None,
     address_name: Annotated[str | None, Field(description="地址名称搜索")] = None,
-    package_ids: Annotated[str | None, Field(description="服务项目ID，逗号分隔")] = None,
+    project_ids: Annotated[str | None, Field(description="服务项目ID，逗号分隔")] = None,
     min_rating: Annotated[float | None, Field(description="最低评分")] = None,
     min_trading_count: Annotated[int | None, Field(description="最低成交量")] = None,
 ) -> str:
@@ -54,7 +54,7 @@ async def search_shops(
             city_id=city_id,
             district_id=district_id,
             address_name=address_name,
-            package_ids=package_ids,
+            package_ids=project_ids,
             min_rating=min_rating,
             min_trading_count=min_trading_count,
             session_id=sid,
@@ -64,7 +64,7 @@ async def search_shops(
         commercials = result.get("commercials", []) if isinstance(result, dict) else []
         if not commercials:
             log_tool_end("search_shops", sid, rid, {"shop_count": 0})
-            return "未找到附近的门店，建议扩大搜索范围或调整关键词"
+            return f"{radius // 1000}km 范围内未找到符合条件的门店，建议扩大搜索范围"
 
         shops = []
         for item in commercials:

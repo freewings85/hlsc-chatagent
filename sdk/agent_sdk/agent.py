@@ -178,6 +178,7 @@ class Agent:
         transcript_session_id: str | None = None,
         parent_request_id: str | None = None,
         parent_otel_context: Any = None,
+        request_id: str | None = None,
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -193,6 +194,7 @@ class Agent:
             message_history: 消息历史（None 时从持久化加载，[] 表示无历史）
             parent_request_id: 父级 request_id（subagent 场景，用于 trace 关联）
             parent_otel_context: 父级 OTel context（subagent 场景，实现跨服务 trace 关联）
+            request_id: 请求端传入的 request_id，不传时自动生成
 
         Returns:
             最终响应文本，或 None
@@ -225,7 +227,7 @@ class Agent:
 
         # 3. 构建 deps
         import uuid
-        request_id = uuid.uuid4().hex
+        request_id = request_id or uuid.uuid4().hex
         file_state_tracker = FileStateTracker()
         deps = AgentDeps(
             session_id=session_id,
