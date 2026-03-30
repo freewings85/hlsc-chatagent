@@ -8,10 +8,9 @@ POST /classify
 1. 加载 scene_config（SceneService 单例）
 2. 构建 slot 因子
 3. 关键词因子匹配
-4. 决策树预扫描 → 收集需要的 BMA 因子
-5. 如果需要 → 直接调 Azure OpenAI 判断意图标签
-6. 走完决策树
-7. 返回场景配置
+4. 每轮全量收集所有 BMA 因子（bool + enum），调 Azure OpenAI 判断意图标签
+5. 走完决策树
+6. 返回场景配置
 """
 
 from __future__ import annotations
@@ -254,7 +253,6 @@ async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
     from hlsc.services.decision_tree_evaluator import (
         FactorValues,
         TreeEvalResult,
-        collect_bma_factors_needed,
         evaluate_keyword_factors,
         evaluate_tree,
     )
@@ -275,29 +273,26 @@ async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
     )
     factors.update(kw_results)
 
-    # 3. 决策树预扫描，收集需要的 BMA 因子
-    needed_bma: list[str] = collect_bma_factors_needed(config.tree, factors)
-
-    # 4. 如果需要 BMA 因子 → 直接调 Azure OpenAI
-    if needed_bma:
-        factor_defs: str = _build_factor_definitions(needed_bma, config)
+    # 3. 收集所有 BMA 因子（bool + enum），每轮全量调 LLM
+    all_bma_factors: list[str] = [f.name for f in config.factors.bma_bool_factors] + [f.name for f in config.factors.bma_enum_factors]
+    if all_bma_factors:
+        factor_defs: str = _build_factor_definitions(all_bma_factors, config)
         slot_summary: str = _build_slot_summary(request.slot_state)
+        turns: list[dict[str, str]] = [
+            {"role": t.role, "content": t.content} for t in request.recent_turns
+        ] if request.recent_turns else []
         try:
-            # 转换 recent_turns 为 dict 列表
-            turns: list[dict[str, str]] = [
-                {"role": t.role, "content": t.content} for t in request.recent_turns
-            ] if request.recent_turns else []
             llm_result: dict[str, Any] = await _call_llm_for_factors(
                 request.message, factor_defs, slot_summary, recent_turns=turns
             )
             bma_values: dict[str, str | bool | None] = _parse_llm_response(
-                llm_result, needed_bma
+                llm_result, all_bma_factors
             )
             factors.update(bma_values)
         except Exception:
             logger.warning("LLM 意图标签提取失败", exc_info=True)
 
-    # 5. 走完决策树
+    # 4. 走完决策树
     result: TreeEvalResult = evaluate_tree(config.tree, factors)
     scene: SceneConfig = scene_service.get_scene(result.scene_id)
 
@@ -307,7 +302,7 @@ async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
         result.path,
     )
 
-    # 6. 构建响应（将 TargetSlot dataclass 转为 dict）
+    # 5. 构建响应（将 TargetSlot dataclass 转为 dict）
     target_slots_resp: dict[str, TargetSlotResponse] = {}
     slot_name: str
     for slot_name, ts in scene.target_slots.items():

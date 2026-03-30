@@ -40,9 +40,8 @@ from hlsc.tools.submit_execution_request import submit_execution_request
 from hlsc.tools.query_execution_status import query_execution_status
 from hlsc.tools.tire_image_recognize import tire_image_recognize
 
-# 业务地图工具
-from hlsc.tools.read_business_node import read_business_node
-from hlsc.tools.update_state_tree import update_state_tree
+# 槽位更新工具
+from hlsc.tools.update_slots import update_slots
 
 
 
@@ -82,9 +81,8 @@ def create_agent_app() -> AgentApp:
         "submit_execution_request": submit_execution_request,
         # "query_execution_status": query_execution_status,
         "tire_image_recognize": tire_image_recognize,
-        # 业务地图工具
-        "read_business_node": read_business_node,
-        "update_state_tree": update_state_tree,
+        # 槽位更新
+        "update_slots": update_slots,
     }
 
     # 场景编排器（hook 和 formatter 共享状态）

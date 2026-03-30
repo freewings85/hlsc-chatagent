@@ -38,8 +38,6 @@ meta:
     keyword_factors:
       - name: intent.has_urgent
         keywords: [抛锚, 事故, 打不着火, 冒烟, 漏油严重]
-      - name: intent.has_intent_change
-        keywords: [算了, 不做了, 改成, 换个, 不想, 还是别]
 
     # BMA 因子：需要小模型判断，按需调用
     # 支持 bool 型（true/false）和 enum 型（从选项中选一个）
@@ -116,20 +114,29 @@ stages:
 
 tree:
 
-  # ── 优先级最高：跨阶段场景 ──
-
+  # 1. 紧急
   - if: intent.has_urgent
     scene: URGENT
-    label: 紧急救援
 
-  - if: intent.has_intent_change
-    scene: INTENT_CHANGE
-    label: 意图变更
+  # 2. 有明确养车意图 → 按意图路由（不管 slot 有没有值）
+  - if: intent.has_car_service
+    children:
+      - if: intent.project_category == "保险"
+        scene: INSURANCE_PROJECT
+      - if: intent.project_category == "症状"
+        scene: SYMPTOM_DIAGNOSE
+      - if: intent.expression_clarity == "specific"
+        scene: DIRECT_PROJECT
+      - if: intent.expression_clarity == "symptom"
+        scene: SYMPTOM_DIAGNOSE
+      - scene: FUZZY_PROJECT
 
-  # ── S2：项目和省钱方案都已确认 ──
+  # 3. 问平台
+  - if: intent.has_platform_question
+    scene: PLATFORM_INQUIRY
 
+  # 4. 没有明确意图 → 按 slot 状态推进
   - if: slot.project_id AND slot.saving_plan_type
-    label: S2 阶段
     children:
       - if: NOT slot.merchant
         scene: FIND_MERCHANT
@@ -137,37 +144,10 @@ tree:
         scene: CONFIRM_BOOKING
       - scene: COMPLETED
 
-  # ── S1：项目已确认，省钱方案未定 ──
-
-  - if: slot.project_id AND NOT slot.saving_plan_type
+  - if: slot.project_id
     scene: SAVING_PLAN
-    label: 待确认省钱方案
 
-  # ── S1：项目未确认，有养车意图 ──
-
-  - if: NOT slot.project_id AND intent.has_car_service
-    label: 有养车意图
-    children:
-      # 按项目大类分流（如果不同大类需要不同工具/策略）
-      # 如果处理方式相同，可以合并，不必每个大类都拆
-      - if: intent.project_category == "保险"
-        scene: INSURANCE_PROJECT
-      - if: intent.project_category == "症状"
-        scene: SYMPTOM_DIAGNOSE
-      # 按表达清晰度分流
-      - if: intent.expression_clarity == "specific"
-        scene: DIRECT_PROJECT
-      - if: intent.expression_clarity == "symptom"
-        scene: SYMPTOM_DIAGNOSE
-      - scene: FUZZY_PROJECT          # 兜底：模糊意图
-
-  # ── S1：项目未确认，问平台 ──
-
-  - if: NOT slot.project_id AND intent.has_platform_question
-    scene: PLATFORM_INQUIRY
-
-  # ── 全局兜底 ──
-
+  # 5. 兜底
   - scene: CASUAL_CHAT
 
 
@@ -209,19 +189,6 @@ scenes:
     strategy: |
       优先解决紧急问题，跳过省钱流程。
       帮用户找最近的店或叫救援。
-
-  INTENT_CHANGE:
-    name: 用户改变意图
-    stage: any
-    goal: 确认用户的新意图，重置受影响的槽位
-    target_slots: {}
-    tools: []
-    skills: []
-    exit_when: 确认用户新意图
-    strategy: |
-      确认用户确实要改变。
-      重置受影响的槽位。
-      不要反复劝说。
 
   # ────────────────────────────────
   # S1 场景

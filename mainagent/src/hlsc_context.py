@@ -85,23 +85,34 @@ class HlscContextFormatter(ContextFormatter):
         parts.append(f"[当前场景] {ctx.scene_name}")
         parts.append(f"[目标] {ctx.goal}")
 
-        # 槽位状态
-        parts.append("[已有信息]")
+        # 待办事项（target_slots 中还没有值的项）
+        todo_lines: list[str] = []
         slot_name: str
-        slot_value: Any
-        for slot_name, slot_value in ctx.slot_state.slots.items():
-            if slot_value is not None:
-                parts.append(f"  {slot_name}: {slot_value}")
-            elif slot_name in ctx.target_slots:
+        for slot_name in ctx.target_slots:
+            slot_value: Any = ctx.slot_state.slots.get(slot_name)
+            if slot_value is None:
                 ts: Any = ctx.target_slots[slot_name]
-                # target_slots 可能是 dict 或对象，兼容两种形式
                 if isinstance(ts, dict):
                     label: str = ts.get("label", slot_name)
                     method: str = ts.get("method", "")
                 else:
                     label = getattr(ts, "label", slot_name)
                     method = getattr(ts, "method", "")
-                parts.append(f"  {label}: (待收集) — {method}")
+                todo_lines.append(f"  - {label} — {method}")
+
+        if todo_lines:
+            parts.append("[待办事项]")
+            parts.extend(todo_lines)
+
+        # 已有信息（所有有值的 slot）
+        filled_lines: list[str] = []
+        for slot_name, slot_value in ctx.slot_state.slots.items():
+            if slot_value is not None:
+                filled_lines.append(f"  - {slot_name}: {slot_value}")
+
+        if filled_lines:
+            parts.append("[已有信息]")
+            parts.extend(filled_lines)
 
         # 可用工具
         tools_text: str = ", ".join(ctx.tools) if ctx.tools else "(无)"
@@ -113,8 +124,5 @@ class HlscContextFormatter(ContextFormatter):
             parts.append(f"[可用 Skill] {skills_text}")
         else:
             parts.append("[可用 Skill] (无)")
-
-        # 策略
-        parts.append(f"[策略]\n{ctx.strategy.strip()}")
 
         return "\n".join(parts)
