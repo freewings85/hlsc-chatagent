@@ -1,11 +1,12 @@
 [project]
 name = "hlsc-auctioneer"
 version = "0.1.0"
-description = "话痨说车拍卖师 Subagent：替车主向商户发起竞标、收集报价、汇总最优方案"
+description = "话痨说车拍卖师：替车主向商户发起竞标、收集报价、汇总最优方案"
 requires-python = ">=3.12"
 dependencies = [
     "agent-sdk",
     "hlsc-extensions",
+    "temporalio>=1.7.0",
 ]
 
 [tool.pytest.ini_options]
@@ -27,5 +28,5 @@ dev = [
 ]
 
 [tool.uv.sources]
-agent-sdk = { path = "../../sdk", editable = true }
-hlsc-extensions = { path = "../../extensions", editable = true }
+agent-sdk = { path = "../sdk", editable = true }
+hlsc-extensions = { path = "../extensions", editable = true }
