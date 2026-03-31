@@ -121,6 +121,7 @@ def main() -> None:
         else:
             logfire.configure(service_name=get_agent_name())
         logfire.instrument_pydantic_ai()
+        logfire.instrument_httpx()
 
     # 创建 AgentApp（业务逻辑全在 src/app.py）
     from src.app import create_agent_app

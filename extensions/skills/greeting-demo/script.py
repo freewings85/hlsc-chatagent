@@ -2,8 +2,8 @@
 
 流程：
 1. 用户触发 skill（如说"你好"）
-2. script interrupt 询问用户名字 → 终止当前 run，等待回复
-3. 用户回复名字 → resume，script 用名字打招呼并说再见
+2. ctx.interrupt() 挂起协程，等待用户回复名字
+3. 用户回复名字 → 协程恢复，用名字打招呼并说再见
 """
 
 from __future__ import annotations
@@ -18,13 +18,11 @@ class GreetingDemoScript(SkillScript):
 
     async def run(self, ctx: SkillContext) -> str:
         """执行问候流程。"""
-        # 中断点：询问用户名字
-        # 首次执行：抛 SkillInterrupt → 终止 run → 前端显示问题
-        # resume 后：直接返回用户回复的名字
-        user_name: str = await ctx.interrupt("ask_name", {
+        # 挂起等待用户回复名字（底层复用 call_interrupt）
+        user_name: str = await ctx.interrupt({
             "type": "input",
             "question": "你好！请问怎么称呼你？",
         })
 
         ctx.state["user_name"] = user_name
-        return f"很高兴认识你，{user_name}！再见！👋"
+        return f"很高兴认识你，{user_name}！再见！"
