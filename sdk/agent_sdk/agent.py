@@ -319,6 +319,21 @@ class Agent:
                     ] + ["Skill"]
                     deps.tool_map["Skill"] = invoke_skill  # type: ignore[assignment]
 
+            # 13.5 检查是否有 pending 的技能脚本 checkpoint
+            pending_skill_hint: str | None = None
+            if skill_registry and skill_registry.has_skills():
+                from agent_sdk._agent.skills.script_checkpoint import load_checkpoint as _load_skill_cp
+                _skill_cp = await _load_skill_cp(
+                    get_inner_storage_backend(), user_id, session_id,
+                )
+                if _skill_cp is not None:
+                    pending_skill_hint = (
+                        f"技能脚本 '{_skill_cp.skill_name}' 正在等待用户回复。"
+                        f"用户发送的消息就是对该技能的回复。"
+                        f"请立即调用 Skill(skill=\"{_skill_cp.skill_name}\", "
+                        f"args=\"<用户刚发送的消息原文>\") 继续执行。"
+                    )
+
             # 14. PreModelCallMessageService
             pre_call_service = PreModelCallMessageService(
                 compactor=compactor,
@@ -328,6 +343,8 @@ class Agent:
                 invoked_skill_store=invoked_store if skill_registry and skill_registry.has_skills() else None,
                 system_prompt=prompt_result.system_prompt,
             )
+            if pending_skill_hint:
+                pre_call_service.pending_skill_checkpoint_hint = pending_skill_hint
 
             # 15. MCP toolsets
             mcp_toolsets = None

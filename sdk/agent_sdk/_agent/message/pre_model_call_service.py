@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 _SYSTEM_PROMPT_SOURCE = "system_prompt"
 _SKILL_LISTING_SOURCE = "skill_listing"
 _INVOKED_SKILLS_SOURCE = "invoked_skills"
+_SKILL_CHECKPOINT_SOURCE = "skill_checkpoint_hint"
 
 
 @dataclass
@@ -97,6 +98,8 @@ class PreModelCallMessageService:
         self._system_prompt = system_prompt
         # 场景允许的 skill 列表（None = 不限制）。由 loop 每轮从 deps 同步。
         self.allowed_skills: list[str] | None = None
+        # 技能脚本 checkpoint 提示（由 Agent.run() 设置）
+        self.pending_skill_checkpoint_hint: str | None = None
 
     async def handle(self, messages: list[ModelMessage]) -> PreModelCallResult:
         """处理消息，返回 PreModelCallResult。
@@ -104,6 +107,13 @@ class PreModelCallMessageService:
         不修改传入的 messages（创建新列表后 in-place 操作）。
         """
         working: list[ModelMessage] = list(messages)
+
+        # 0c. pending skill script checkpoint hint（技能脚本等待 resume）
+        _remove_by_source(working, _SKILL_CHECKPOINT_SOURCE)
+        if self.pending_skill_checkpoint_hint:
+            working.insert(0, _make_meta_request(
+                self.pending_skill_checkpoint_hint, _SKILL_CHECKPOINT_SOURCE,
+            ))
 
         # 0b. skill_listing attachment（先插，让后续 0a 把 invoked_skills 推到 [0]）
         # 最终顺序：[0]=invoked_skills, [1]=skill_listing, [2]=context, ...
