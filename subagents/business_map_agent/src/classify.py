@@ -1,16 +1,11 @@
-"""场景分类端点：基于决策树的场景路由服务。
+"""意图因子提取端点：调小模型提取用户意图因子。
 
 POST /classify
-请求：{ message: str, slot_state: dict }
-响应：{ scene_id, scene_name, goal, target_slots, tools, strategy, eval_path }
+请求：{ message, recent_turns? }
+响应：{ factors: { "intent.xxx": value, ... } }
 
-内部流程：
-1. 加载 scene_config（SceneService 单例）
-2. 构建 slot 因子
-3. 关键词因子匹配
-4. 每轮全量收集所有 BMA 因子（bool + enum），调 Azure OpenAI 判断意图标签
-5. 走完决策树
-6. 返回场景配置
+BMA 只做意图提取，不决定 tools/skills。
+阶段判断（S1/S2）由 MainAgent hook 负责。
 """
 
 from __future__ import annotations
@@ -41,65 +36,65 @@ class RecentTurn(BaseModel):
 
 
 class ClassifyRequest(BaseModel):
-    """场景分类请求。"""
+    """意图因子提取请求。"""
 
     message: str
-    slot_state: dict[str, str | None]
     recent_turns: list[RecentTurn] = []
 
 
-class TargetSlotResponse(BaseModel):
-    """目标槽位定义（响应用）。"""
-
-    label: str
-    required: str
-    method: str
-    condition: str | None = None
-
-
 class ClassifyResponse(BaseModel):
-    """场景分类响应。"""
+    """意图因子提取响应：只返回因子值。"""
 
-    scene_id: str
-    scene_name: str
-    goal: str
-    target_slots: dict[str, TargetSlotResponse]
-    tools: list[str]
-    skills: list[str]
-    strategy: str
-    eval_path: list[str]
+    factors: dict[str, Any]
 
 
 # ============================================================
-# SceneService 加载（模块级状态）
+# 因子定义加载（从 scene_config.yaml）
 # ============================================================
 
-_scene_service_loaded: bool = False
+_factor_defs_text: str = ""
+_factor_names: list[str] = []
 
 
-def _ensure_scene_service() -> None:
-    """确保 SceneService 已加载 scene_config.yaml。"""
-    global _scene_service_loaded
-    if _scene_service_loaded:
+def _ensure_factor_defs() -> None:
+    """加载 scene_config.yaml 中的因子定义。"""
+    global _factor_defs_text, _factor_names
+    if _factor_defs_text:
         return
 
-    from hlsc.services.scene_service import scene_service
+    import yaml
 
-    config_path: str = os.getenv("SCENE_CONFIG_PATH", "")
-    if config_path:
-        scene_service.load(Path(config_path))
+    config_path_str: str = os.getenv("SCENE_CONFIG_PATH", "")
+    if config_path_str:
+        config_path: Path = Path(config_path_str)
     else:
-        # 默认路径：src/classify.py → src/ → business_map_agent/ → subagents/ → 项目根
-        #   parents[0]=src/, [1]=business_map_agent/, [2]=subagents/, [3]=项目根
-        default_path: Path = (
+        config_path = (
             Path(__file__).resolve().parents[3]
             / "extensions"
             / "business-map"
             / "scene_config.yaml"
         )
-        scene_service.load(default_path)
 
-    _scene_service_loaded = True
+    raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    factors_raw: dict[str, Any] = raw.get("factors", {})
+
+    lines: list[str] = []
+    names: list[str] = []
+
+    item: dict[str, Any]
+    for item in factors_raw.get("bool", []):
+        names.append(item["name"])
+        lines.append(f"- {item['name']} (bool): {item['description']}")
+
+    for item in factors_raw.get("enum", []):
+        names.append(item["name"])
+        options: str = " / ".join(item["options"])
+        lines.append(f"- {item['name']} (enum: {options}): {item['description']}")
+
+    _factor_defs_text = "\n".join(lines)
+    _factor_names = names
+
+    logger.info("加载 %d 个因子定义", len(names))
 
 
 # ============================================================
@@ -110,7 +105,7 @@ _SYSTEM_PROMPT: str = ""
 
 
 def _load_system_prompt() -> str:
-    """从 prompts/System.md 加载系统提示词（懒加载，只读一次）。"""
+    """从 prompts/system.md 加载系统提示词（懒加载）。"""
     global _SYSTEM_PROMPT
     if _SYSTEM_PROMPT:
         return _SYSTEM_PROMPT
@@ -118,7 +113,7 @@ def _load_system_prompt() -> str:
     if prompt_path.exists():
         _SYSTEM_PROMPT = prompt_path.read_text(encoding="utf-8").strip()
     else:
-        logger.warning("System.md 不存在: %s，使用默认提示词", prompt_path)
+        logger.warning("system.md 不存在: %s", prompt_path)
         _SYSTEM_PROMPT = "你是意图标签提取器。严格输出 JSON 对象。"
     return _SYSTEM_PROMPT
 
@@ -128,43 +123,38 @@ def _load_system_prompt() -> str:
 # ============================================================
 
 
-async def _call_llm_for_factors(
+async def _call_llm(
     message: str,
     factor_defs: str,
-    slot_summary: str,
     recent_turns: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """直接调用 Azure OpenAI 获取意图标签。
-
-    不经过 Agent SDK，使用 httpx 直调 Azure REST API，
-    以 response_format: json_object 确保结构化输出。
-    """
+    """调小模型提取意图因子。"""
     endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
     api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
     deployment: str = os.getenv("AZURE_DEPLOYMENT_NAME", "gpt-4.1-mini")
     api_version: str = os.getenv("AZURE_API_VERSION", "2024-12-01-preview")
 
     if not endpoint or not api_key:
-        logger.warning("Azure OpenAI 未配置，跳过 LLM 调用")
+        logger.warning("Azure OpenAI 未配置，返回空因子")
         return {}
 
-    url: str = f"{endpoint.rstrip('/')}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+    url: str = (
+        f"{endpoint.rstrip('/')}/openai/deployments/{deployment}"
+        f"/chat/completions?api-version={api_version}"
+    )
 
-    # 加载 System.md 提示词
     system_prompt: str = _load_system_prompt()
 
-    # 构建最近对话文本
+    # 对话历史
     history_text: str = "（无）"
     if recent_turns:
-        history_lines: list[str] = []
-        for turn in recent_turns:
-            history_lines.append(f"{turn['role']}: {turn['content']}")
+        history_lines: list[str] = [
+            f"{t['role']}: {t['content']}" for t in recent_turns
+        ]
         history_text = "\n".join(history_lines)
 
-    # 构建 user prompt
     user_prompt: str = (
         f"[标签定义]\n{factor_defs}\n\n"
-        f"[已确认信息]\n{slot_summary}\n\n"
         f"[最近对话]\n{history_text}\n\n"
         f"[用户消息]\n{message}"
     )
@@ -192,141 +182,41 @@ async def _call_llm_for_factors(
 
 
 # ============================================================
-# 因子构建辅助
-# ============================================================
-
-
-def _build_factor_definitions(
-    needed_factors: list[str],
-    config: Any,
-) -> str:
-    """构建需要 LLM 判断的因子定义文本。"""
-    lines: list[str] = []
-    factor_name: str
-    for factor_name in needed_factors:
-        # 查找 bool 因子
-        for bf in config.factors.bma_bool_factors:
-            if bf.name == factor_name:
-                lines.append(f"- {factor_name} (bool): {bf.description}")
-                break
-        # 查找 enum 因子
-        for ef in config.factors.bma_enum_factors:
-            if ef.name == factor_name:
-                options: str = " / ".join(ef.options)
-                lines.append(
-                    f"- {factor_name} (enum: {options}): {ef.description}"
-                )
-                break
-    return "\n".join(lines) if lines else ""
-
-
-def _build_slot_summary(slots: dict[str, str | None]) -> str:
-    """构建 slot 状态摘要文本。"""
-    filled: dict[str, str] = {k: v for k, v in slots.items() if v is not None}
-    if not filled:
-        return "（无）"
-    return "\n".join(f"  {k} = {v}" for k, v in filled.items())
-
-
-def _parse_llm_response(
-    raw: dict[str, Any],
-    needed_factors: list[str],
-) -> dict[str, str | bool | None]:
-    """从 LLM JSON 响应中提取所需因子值。"""
-    result: dict[str, str | bool | None] = {}
-    factor: str
-    for factor in needed_factors:
-        if factor in raw:
-            result[factor] = raw[factor]
-    return result
-
-
-# ============================================================
-# /classify 端点实现
+# /classify 端点
 # ============================================================
 
 
 async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
-    """场景分类核心逻辑。"""
-    _ensure_scene_service()
+    """提取意图因子。"""
+    _ensure_factor_defs()
 
-    from hlsc.services.decision_tree_evaluator import (
-        FactorValues,
-        TreeEvalResult,
-        evaluate_keyword_factors,
-        evaluate_tree,
-    )
-    from hlsc.services.scene_service import SceneConfig, SceneServiceConfig, scene_service
+    factors: dict[str, Any] = {}
 
-    config: SceneServiceConfig = scene_service.config
-
-    # 1. 构建 slot 因子
-    factors: FactorValues = {}
-    slot_factor: str
-    for slot_factor in config.factors.slot_factors:
-        short_name: str = slot_factor.replace("slot.", "")
-        factors[slot_factor] = request.slot_state.get(short_name)
-
-    # 2. 关键词因子匹配
-    kw_results: dict[str, bool] = evaluate_keyword_factors(
-        request.message, config.factors.keyword_factors
-    )
-    factors.update(kw_results)
-
-    # 3. 收集所有 BMA 因子（bool + enum），每轮全量调 LLM
-    all_bma_factors: list[str] = [f.name for f in config.factors.bma_bool_factors] + [f.name for f in config.factors.bma_enum_factors]
-    if all_bma_factors:
-        factor_defs: str = _build_factor_definitions(all_bma_factors, config)
-        slot_summary: str = _build_slot_summary(request.slot_state)
-        turns: list[dict[str, str]] = [
-            {"role": t.role, "content": t.content} for t in request.recent_turns
-        ] if request.recent_turns else []
-        try:
-            llm_result: dict[str, Any] = await _call_llm_for_factors(
-                request.message, factor_defs, slot_summary, recent_turns=turns
-            )
-            bma_values: dict[str, str | bool | None] = _parse_llm_response(
-                llm_result, all_bma_factors
-            )
-            factors.update(bma_values)
-        except Exception:
-            logger.warning("LLM 意图标签提取失败", exc_info=True)
-
-    # 4. 走完决策树
-    result: TreeEvalResult = evaluate_tree(config.tree, factors)
-    scene: SceneConfig = scene_service.get_scene(result.scene_id)
-
-    logger.info(
-        "场景分类完成: scene=%s, path=%s",
-        result.scene_id,
-        result.path,
-    )
-
-    # 5. 构建响应（将 TargetSlot dataclass 转为 dict）
-    target_slots_resp: dict[str, TargetSlotResponse] = {}
-    slot_name: str
-    for slot_name, ts in scene.target_slots.items():
-        target_slots_resp[slot_name] = TargetSlotResponse(
-            label=ts.label,
-            required=ts.required,
-            method=ts.method,
-            condition=ts.condition,
+    if _factor_names:
+        turns: list[dict[str, str]] = (
+            [{"role": t.role, "content": t.content} for t in request.recent_turns]
+            if request.recent_turns
+            else []
         )
+        try:
+            llm_result: dict[str, Any] = await _call_llm(
+                request.message, _factor_defs_text, recent_turns=turns
+            )
+            # 只保留声明过的因子
+            name: str
+            for name in _factor_names:
+                if name in llm_result:
+                    factors[name] = llm_result[name]
+        except Exception:
+            logger.warning("LLM 意图提取失败", exc_info=True)
 
-    return ClassifyResponse(
-        scene_id=result.scene_id,
-        scene_name=scene.name,
-        goal=scene.goal,
-        target_slots=target_slots_resp,
-        tools=scene.tools,
-        skills=scene.skills,
-        strategy=scene.strategy,
-        eval_path=result.path,
-    )
+    logger.info("意图因子提取: %s", factors)
+
+    return ClassifyResponse(factors=factors)
 
 
 # ============================================================
-# 路由挂载
+# FastAPI 应用
 # ============================================================
 
 
@@ -336,8 +226,8 @@ def create_app() -> FastAPI:
 
     app: FastAPI = FastAPI(
         title="BusinessMapAgent",
-        description="场景分类服务 — 基于决策树的场景路由",
-        version="2.0",
+        description="意图因子提取服务",
+        version="3.0",
     )
     app.add_middleware(
         CORSMiddleware,
@@ -352,7 +242,7 @@ def create_app() -> FastAPI:
 
     @app.post("/classify", response_model=ClassifyResponse)
     async def classify(request: ClassifyRequest) -> ClassifyResponse:
-        """场景分类端点：接收用户消息和槽位状态，返回场景配置。"""
+        """意图因子提取端点。"""
         return await _do_classify(request)
 
     return app

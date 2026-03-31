@@ -48,6 +48,8 @@ class AgentDeps:
     invoked_skill_store: InvokedSkillStore | None = None
     # 场景允许的 skill 名称列表（None 表示不限制，展示全部）
     allowed_skills: list[str] | None = None
+    # 当前阶段标识（hook 设置，prompt loader 等可读取）
+    current_stage: str = ""
     # 事件发射器（interrupt 等工具需要直接发出 SSE 事件）
     emitter: EventEmitter | None = None
     # 请求上下文（位置、车辆信息等），工具可通过 ctx.deps.request_context 读取

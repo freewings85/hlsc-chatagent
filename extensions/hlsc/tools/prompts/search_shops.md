@@ -1,32 +1,33 @@
-按标准条件搜索商户，返回稳定的商户详情列表。
+按位置搜索附近的商户/门店，返回门店列表。
 
-When to use:
-- 需要按位置、距离、关键词、项目、评分、营业时间等标准条件搜索候选商户
-- 需要返回普通商户清单，供后续确认、比较或推荐
+参数说明：
+- latitude: 纬度（必填）
+- longitude: 经度（必填）
+- keyword: 商户名称关键词，仅用户明确按名称搜索时传入（如"途虎"、"张江汽修"）
+- top: 返回数量，默认 5
+- radius: 搜索半径（米），默认 10000
+- order_by: 排序方式，支持 distance / rating / tradingCount，可组合如 "distance,rating"
+- commercial_type: 商户类型列表，用户未指定时不传
+- opening_hour: 营业时间筛选，格式 "HH:MM"
+- province_id / city_id / district_id: 按省/市/区筛选
+- address_name: 地址名称搜索（如"浦东"）
+- package_ids: 服务项目ID，逗号分隔
+- min_rating: 最低评分，仅用户明确给出具体数值时传入（如用户说"4.5分以上"）
+- min_trading_count: 最低成交量，仅用户明确给出具体数值时传入（如用户说"成交100单以上"）
 
-Usage notes:
-- 先确保已经有用户位置坐标；没有位置时不要硬搜
-- 这是标准商户搜索工具，优先用于直接查询附近或指定范围内的候选商户
-- 返回的是商户详情数据，不只是商户名称
-- 如果任务需要复杂排序、聚合、价格比较或额外计算，改用 `call_query_codingagent`
-- 用户未明确指定 project_ids 或 commercial_type 时，不要自行猜测填充
-- `shop_name` 只用于明确的商户名称
+使用场景：
+- "附近有什么店" → latitude, longitude（使用默认参数）
+- "找个口碑好的店" → order_by="rating"
+- "哪家修车靠谱" → order_by="tradingCount"
+- "途虎养车" → keyword="途虎"
+- "浦东的修车店" → address_name="浦东"
+- "现在还营业的店" → opening_hour="14:30"（传入当前时间）
+- "近一点的" → radius=3000
+- "评分4.0以上的" → min_rating=4.0
+- "找附近的4S店" → 传 commercial_type=[对应 typeId]
+- "综合修理厂" → 传 commercial_type=[对应 typeId]
+<!-- TODO: 商户类型 typeId 映射表待补充到 saving-playbook 商户选择 reference 中 -->
 
-返回结果中的每个商户通常包含：
-- `shop_id`
-- `name`
-- `address`
-- `province`
-- `city`
-- `district`
-- `commercial_type`
-- `latitude`
-- `longitude`
-- `distance_m`
-- `distance`
-- `rating`
-- `trading_count`
-- `phone`
-- `tags`
-- `opening_hours`
-- `images`
+IMPORTANT: 此工具需要用户位置信息（latitude/longitude）才能搜索。如果没有位置信息，需先通过其他方式获取。
+
+IMPORTANT: keyword、min_rating、min_trading_count 必须用户明确给出具体值时才传入，禁止根据模糊描述自行猜测填充。例如用户说"口碑好"不等于 min_rating=4.0，用户说"靠谱"不等于 min_trading_count=50。commercial_type 同理，用户未指定时不传。
