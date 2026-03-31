@@ -80,6 +80,7 @@ class LogfireConfig:
 
     enabled: bool = field(default_factory=lambda: os.getenv("LOGFIRE_ENABLED", "false").lower() == "true")
     endpoint: str = field(default_factory=lambda: os.getenv("LOGFIRE_ENDPOINT", ""))
+    capture_http_body: bool = field(default_factory=lambda: os.getenv("LOGFIRE_CAPTURE_HTTP_BODY", "false").lower() == "true")
 
 
 @dataclass

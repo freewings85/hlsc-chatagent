@@ -59,7 +59,10 @@ def main() -> None:
         else:
             logfire.configure(service_name=get_agent_name())
         logfire.instrument_pydantic_ai()
-        logfire.instrument_httpx()
+        logfire.instrument_httpx(
+            capture_request_body=logfire_config.capture_http_body,
+            capture_response_body=logfire_config.capture_http_body,
+        )
 
     from src.app import create_agent_app
 
