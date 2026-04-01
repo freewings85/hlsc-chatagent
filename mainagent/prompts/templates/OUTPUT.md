@@ -19,14 +19,14 @@ Supported `spec` types:
 - `PartPriceCard`
   - `props`: `{ name: string, items: [{ repairType: string, price: number }] }`
 - `CouponCard`
-  - `props`: `{ title: string, discount: string, minSpend?: number, expireDate?: string }`
+  - `props`: `{ shop_id: number, shop_name: string, activity_id: number, activity_name: string }`
 
 <example>
 你附近这两家可以看看。
 
 ```spec
 {"type":"ShopCard","props":{"shop_id":*,"name":"******"}}
-{"type":"CouponCard","props":{"title":"*","discount":"*","expireDate":"****-**-**"}}
+{"type":"CouponCard","props":{"shop_id":*,"shop_name":"*","activity_id":*,"activity_name":"*"}}
 ```
 
 要我帮你继续看哪家？

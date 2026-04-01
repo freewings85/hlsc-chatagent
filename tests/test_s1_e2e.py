@@ -454,8 +454,8 @@ async def scenario_2_normal_funnel() -> ScenarioResult:
     r1.round_num = 1
     rounds.append(r1)
 
-    if "match_project" not in r1.tool_calls:
-        reasons.append("WARN: 第1轮没调 match_project")
+    if "classify_project" not in r1.tool_calls and "match_project" not in r1.tool_calls:
+        reasons.append("WARN: 第1轮没调 classify_project 或 match_project")
         score -= 1
 
     has_saving_r1: bool = any(kw in r1.response_text for kw in SAVING_KEYWORDS)
@@ -502,10 +502,10 @@ async def scenario_2_normal_funnel() -> ScenarioResult:
     )
 
 
-async def scenario_3_user_declines_discount() -> ScenarioResult:
+async def scenario_3_user_declines_coupon() -> ScenarioResult:
     """场景 3: 用户不要优惠 — 引导提供车辆信息。"""
     session_id: str = str(uuid4())
-    user_id: str = f"e2e-nodiscount-{uuid4().hex[:8]}"
+    user_id: str = f"e2e-nocoupon-{uuid4().hex[:8]}"
 
     reasons: list[str] = []
     passed: bool = True
@@ -814,7 +814,7 @@ async def main() -> None:
         scenarios: list[tuple[str, Callable[[], Coroutine[Any, Any, ScenarioResult]]]] = [
             ("场景1", scenario_1_hacker_probe),
             ("场景2", scenario_2_normal_funnel),
-            ("场景3", scenario_3_user_declines_discount),
+            ("场景3", scenario_3_user_declines_coupon),
             ("场景4", scenario_4_chitchat_redirect),
             ("场景5", scenario_5_ask_platform),
         ]

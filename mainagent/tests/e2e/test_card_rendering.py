@@ -41,7 +41,7 @@ MOCK_RESPONSES = {
             "为您找到最优方案：\n\n",
             "```spec\n",
             '{"type":"ShopCard","props":{"name":"张江汽修中心","price":500,"rating":4.8,"distance":"2.3km"}}\n',
-            '{"type":"CouponCard","props":{"title":"新客立减50元","discount":"满300减50","expireDate":"2026-04-01"}}\n',
+            '{"type":"CouponCard","props":{"shop_id":1,"shop_name":"张江汽修中心","activity_id":101,"activity_name":"新客立减50元"}}\n',
             "```\n\n",
             "使用优惠券后实付450元。",
         ]
@@ -206,8 +206,8 @@ class TestCardRendering:
 
         # CouponCard 内容
         coupon = page.locator(".coupon-card")
+        expect(coupon).to_contain_text("张江汽修中心")
         expect(coupon).to_contain_text("新客立减50元")
-        expect(coupon).to_contain_text("满300减50")
 
     def test_project_card_render(self, chat_page: Page) -> None:
         """ProjectCard 报价卡片渲染"""

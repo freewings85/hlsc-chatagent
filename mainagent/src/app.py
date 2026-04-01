@@ -22,7 +22,7 @@ from hlsc.tools.common.geocode_location import geocode_location
 # S1 专属工具
 from hlsc.tools.s1.classify_project import classify_project
 from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
-from hlsc.tools.s1.search_discount import search_discount
+from hlsc.tools.s1.search_coupon import search_coupon
 
 # S2 专属工具
 from hlsc.tools.s2.match_project import match_project
@@ -52,7 +52,7 @@ def create_agent_app() -> AgentApp:
         # 商户
         "search_shops": search_shops,
         # 优惠查询
-        "search_discount": search_discount,
+        "search_coupon": search_coupon,
         # 省钱方案确认（S1 → S2 升级）
         "confirm_saving_plan": confirm_saving_plan,
         # 下单

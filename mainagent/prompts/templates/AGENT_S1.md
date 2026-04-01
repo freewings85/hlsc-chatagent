@@ -13,10 +13,10 @@
 每轮对话可以同时推进多项：
 
 - **弄清项目** — 用 classify_project 匹配到项目。保险类不需要调 classify_project（内部自动识别），直接按 saving-methods skill 中的保险竞价流程推进
-- **找优惠** — 用 search_discount 查优惠活动，读 saving-methods skill 了解省钱方式，尽快把结果呈现给用户
+- **找优惠** — 用 search_coupon 查优惠活动，读 saving-methods skill 了解省钱方式，尽快把结果呈现给用户
 - **确认省钱方式** — 用户选择了具体的省钱方式后，调用 confirm_saving_plan
 
-用户问价格时，先用工具查（classify_project 确定项目 → search_discount 查优惠）。工具没返回有用信息时，可以补充通用知识范围并说明不一定准确。
+用户问价格时，先用工具查（classify_project 确定项目 → search_coupon 查优惠）。工具没返回有用信息时，可以补充通用知识范围并说明不一定准确。
 
 ## 用户不需要优惠
 

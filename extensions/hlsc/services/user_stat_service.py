@@ -1,64 +1,59 @@
-"""用户状态服务：根据 user_id 返回用户当前阶段和关键状态。
+"""用户状态服务：判断用户当前阶段（S1/S2）。
 
-内存数据库实现，进程内持久化。后续接入真实数据源。
+判断逻辑：
+1. 已经标记为 S2 → 直接返回 S2
+2. 还是 S1 → 调 ListUserCarsService 检查用户是否有车
+   - 有车 → 升级到 S2
+   - 无车 / 查询失败 → 保持 S1
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-@dataclass
-class UserStat:
-    """用户状态。"""
-
-    stage: str = "S1"               # "S1" | "S2"
-    has_ordered: bool = False       # 是否下过单
-    has_vin: bool = False           # 是否上传过 VIN 码
-    has_driving_license: bool = False  # 是否上传过行驶证
-    has_bound_car: bool = False     # 是否绑定过车辆
-
-
 class UserStatService:
-    """用户状态服务（内存数据库实现）。
-
-    进程级持久化：同一进程内跨 session 有效，重启后重置。
-    后续接入真实数据源（用户中心 API）。
-    """
+    """用户状态服务（内存 stage + ListUserCarsService 检查车型）。"""
 
     def __init__(self) -> None:
-        self._store: dict[str, UserStat] = {}
+        self._store: dict[str, str] = {}  # user_id → stage
 
-    def _get_or_create(self, user_id: str) -> UserStat:
-        """获取用户状态，不存在则创建默认值。"""
-        if user_id not in self._store:
-            self._store[user_id] = UserStat()
-        return self._store[user_id]
+    async def get_stage(self, user_id: str, session_id: str = "") -> str:
+        """返回用户当前阶段："S1" 或 "S2"。"""
+        stage: str = self._store.get(user_id, "S1")
 
-    async def get_user_stat(self, user_id: str) -> UserStat:
-        """根据 user_id 返回用户状态。"""
-        stat: UserStat = self._get_or_create(user_id)
-        logger.debug("获取用户状态: user_id=%s, stage=%s", user_id, stat.stage)
-        return stat
+        if stage == "S2":
+            return "S2"
 
-    def is_s2_by_hard_signal(self, stat: UserStat) -> bool:
-        """根据硬信号判断是否已经是 S2。"""
-        return (
-            stat.stage == "S2"
-            or stat.has_ordered
-            or stat.has_vin
-            or stat.has_bound_car
-        )
+        # S1：检查用户是否有车
+        has_car: bool = await self._check_has_car(user_id, session_id)
+        if has_car:
+            self._store[user_id] = "S2"
+            logger.info("用户 %s 有车型记录，自动升级到 S2", user_id)
+            return "S2"
+
+        return "S1"
 
     async def upgrade_to_s2(self, user_id: str) -> None:
         """将用户阶段从 S1 升级到 S2。S2 不回退。"""
-        stat: UserStat = self._get_or_create(user_id)
-        if stat.stage != "S2":
-            stat.stage = "S2"
+        if self._store.get(user_id) != "S2":
+            self._store[user_id] = "S2"
             logger.info("用户 %s 升级到 S2", user_id)
+
+    async def _check_has_car(self, user_id: str, session_id: str) -> bool:
+        """检查用户是否有车型记录。"""
+        try:
+            from hlsc.services.restful.list_user_cars_service import list_user_cars_service
+
+            cars = await list_user_cars_service.get_user_cars(
+                session_id=session_id or user_id,
+            )
+            return len(cars) > 0
+        except Exception:
+            logger.debug("检查用户 %s 车型失败，默认无车", user_id, exc_info=True)
+            return False
 
 
 # 模块级单例

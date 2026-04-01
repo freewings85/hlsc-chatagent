@@ -96,20 +96,10 @@ class StageHook:
     ) -> None:
         _config_loader.ensure_loaded()
 
-        from hlsc.services.user_stat_service import UserStat, user_stat_service
+        from hlsc.services.user_stat_service import user_stat_service
 
-        stat: UserStat = await user_stat_service.get_user_stat(user_id)
-
-        stage: str
-        if user_stat_service.is_s2_by_hard_signal(stat):
-            stage = "S2"
-            logger.info(
-                "用户 %s 硬信号命中 S2 (ordered=%s, vin=%s, car=%s)",
-                user_id, stat.has_ordered, stat.has_vin, stat.has_bound_car,
-            )
-        else:
-            stage = "S1"
-            logger.info("用户 %s 无硬信号，S1", user_id)
+        stage: str = await user_stat_service.get_stage(user_id, session_id)
+        logger.info("用户 %s → %s", user_id, stage)
 
         config: StageConfig = _config_loader.get_stage(stage)
         deps.current_stage = stage

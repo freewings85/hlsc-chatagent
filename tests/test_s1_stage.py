@@ -10,8 +10,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,7 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "sdk"))
 sys.path.insert(0, str(PROJECT_ROOT / "mainagent" / "src"))
 
 from agent_sdk._agent.deps import AgentDeps  # noqa: E402
-from hlsc.services.user_stat_service import UserStat, UserStatService  # noqa: E402
+from hlsc.services.user_stat_service import UserStatService  # noqa: E402
 
 
 # ============================================================
@@ -38,67 +37,49 @@ class TestUserStatService:
         """每个用例创建独立的 service 实例，避免用例间污染。"""
         self.svc: UserStatService = UserStatService()
 
-    # ---- A1: 新用户默认 S1 ----
+    # ---- A1: 新用户默认 S1（mock _check_has_car 返回 False，避免调真实 API）----
     @pytest.mark.asyncio
     async def test_new_user_default_s1(self) -> None:
-        """新用户 get_user_stat 返回默认 S1。"""
-        stat: UserStat = await self.svc.get_user_stat("user_new")
-        assert stat.stage == "S1"
-        assert stat.has_ordered is False
-        assert stat.has_vin is False
-        assert stat.has_bound_car is False
+        """新用户 get_stage 返回默认 "S1"。"""
+        with patch.object(self.svc, "_check_has_car", new_callable=AsyncMock, return_value=False):
+            stage: str = await self.svc.get_stage("user_new", session_id="test")
+        assert stage == "S1"
 
     # ---- A2: upgrade_to_s2 后变为 S2 ----
     @pytest.mark.asyncio
     async def test_upgrade_to_s2(self) -> None:
-        """upgrade_to_s2 后 get_user_stat 返回 S2。"""
+        """upgrade_to_s2 后 get_stage 返回 "S2"。"""
         await self.svc.upgrade_to_s2("user_a2")
-        stat: UserStat = await self.svc.get_user_stat("user_a2")
-        assert stat.stage == "S2"
+        stage: str = await self.svc.get_stage("user_a2", session_id="test")
+        assert stage == "S2"
 
     # ---- A3: 已经 S2 的用户再次 upgrade 不出错 ----
     @pytest.mark.asyncio
     async def test_upgrade_s2_idempotent(self) -> None:
-        """已经 S2 的用户再次 upgrade_to_s2 不报错，仍然 S2。"""
+        """已经 S2 的用户再次 upgrade_to_s2 不报错，仍然 "S2"。"""
         await self.svc.upgrade_to_s2("user_a3")
         await self.svc.upgrade_to_s2("user_a3")  # 第二次
-        stat: UserStat = await self.svc.get_user_stat("user_a3")
-        assert stat.stage == "S2"
+        stage: str = await self.svc.get_stage("user_a3", session_id="test")
+        assert stage == "S2"
 
     # ---- A4: 不同 user_id 互不影响 ----
     @pytest.mark.asyncio
     async def test_different_users_isolated(self) -> None:
         """不同 user_id 的状态互不影响。"""
         await self.svc.upgrade_to_s2("user_x")
-        stat_x: UserStat = await self.svc.get_user_stat("user_x")
-        stat_y: UserStat = await self.svc.get_user_stat("user_y")
-        assert stat_x.stage == "S2"
-        assert stat_y.stage == "S1"
+        stage_x: str = await self.svc.get_stage("user_x", session_id="test")
+        with patch.object(self.svc, "_check_has_car", new_callable=AsyncMock, return_value=False):
+            stage_y: str = await self.svc.get_stage("user_y", session_id="test")
+        assert stage_x == "S2"
+        assert stage_y == "S1"
 
-    # ---- A5: has_vin / has_ordered / has_bound_car 各自触发 is_s2_by_hard_signal ----
+    # ---- A5: _check_has_car 返回 True 时，S1 自动升级到 S2 ----
     @pytest.mark.asyncio
-    async def test_hard_signal_has_vin(self) -> None:
-        """has_vin=True 触发 is_s2_by_hard_signal。"""
-        stat: UserStat = UserStat(has_vin=True)
-        assert self.svc.is_s2_by_hard_signal(stat) is True
-
-    @pytest.mark.asyncio
-    async def test_hard_signal_has_ordered(self) -> None:
-        """has_ordered=True 触发 is_s2_by_hard_signal。"""
-        stat: UserStat = UserStat(has_ordered=True)
-        assert self.svc.is_s2_by_hard_signal(stat) is True
-
-    @pytest.mark.asyncio
-    async def test_hard_signal_has_bound_car(self) -> None:
-        """has_bound_car=True 触发 is_s2_by_hard_signal。"""
-        stat: UserStat = UserStat(has_bound_car=True)
-        assert self.svc.is_s2_by_hard_signal(stat) is True
-
-    @pytest.mark.asyncio
-    async def test_no_hard_signal(self) -> None:
-        """所有信号为 False 且 S1 → is_s2_by_hard_signal 返回 False。"""
-        stat: UserStat = UserStat()
-        assert self.svc.is_s2_by_hard_signal(stat) is False
+    async def test_auto_upgrade_when_has_car(self) -> None:
+        """_check_has_car 返回 True 时，S1 用户自动升级到 S2。"""
+        with patch.object(self.svc, "_check_has_car", new_callable=AsyncMock, return_value=True):
+            stage: str = await self.svc.get_stage("user_a5", session_id="test")
+        assert stage == "S2"
 
 
 # ============================================================
@@ -146,12 +127,14 @@ class TestStageHook:
         hook: StageHook = StageHook()
         deps: AgentDeps = self._make_deps()
 
-        await hook(
-            user_id="new_user_b1",
-            session_id="sess-b1",
-            deps=deps,
-            message="你好",
-        )
+        # mock _check_has_car 避免调真实 API
+        with patch.object(self.user_stat_service, "_check_has_car", new_callable=AsyncMock, return_value=False):
+            await hook(
+                user_id="new_user_b1",
+                session_id="sess-b1",
+                deps=deps,
+                message="你好",
+            )
 
         assert deps.current_stage == "S1"
         assert "confirm_booking" not in deps.available_tools
@@ -187,12 +170,14 @@ class TestStageHook:
         hook: StageHook = StageHook()
         deps: AgentDeps = self._make_deps()
 
-        await hook(
-            user_id="user_b3",
-            session_id="sess-b3",
-            deps=deps,
-            message="帮我省钱",
-        )
+        # mock _check_has_car 避免调真实 API
+        with patch.object(self.user_stat_service, "_check_has_car", new_callable=AsyncMock, return_value=False):
+            await hook(
+                user_id="user_b3",
+                session_id="sess-b3",
+                deps=deps,
+                message="帮我省钱",
+            )
 
         assert deps.current_stage == "S1"
         assert "confirm_saving_plan" in deps.available_tools
@@ -260,8 +245,8 @@ class TestConfirmSavingPlan:
             saving_method="platform_offer",
         )
 
-        stat: UserStat = await self.user_stat_service.get_user_stat("user_c1")
-        assert stat.stage == "S2"
+        stage: str = await self.user_stat_service.get_stage("user_c1", session_id="test")
+        assert stage == "S2"
 
     # ---- C2: 返回值包含项目名和省钱方式 ----
     @pytest.mark.asyncio

@@ -22,7 +22,7 @@ stages:
       - collect_car_info
       - collect_location
       - geocode_location
-      - search_discount
+      - search_coupon
       - confirm_saving_plan
     skills:
       - saving-methods
