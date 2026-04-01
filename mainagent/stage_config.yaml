@@ -9,7 +9,7 @@
 
 
 # 阶段定义
-# S1 → S2 升级：S1 agent 调 confirm_saving_plan → 内部写入硬信号 → 下一轮自动 S2
+# S1 → S2 升级：S1 agent 调 proceed_to_booking → 内部写入硬信号 + 即时切换到 S2
 stages:
 
   S1:
@@ -23,7 +23,7 @@ stages:
       - collect_location
       - geocode_location
       - search_coupon
-      - confirm_saving_plan
+      - proceed_to_booking
     skills:
       - saving-methods
       - platform-intro

@@ -21,7 +21,7 @@ from hlsc.tools.common.geocode_location import geocode_location
 
 # S1 专属工具
 from hlsc.tools.s1.classify_project import classify_project
-from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
+from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
 from hlsc.tools.s1.search_coupon import search_coupon
 
 # S2 专属工具
@@ -53,8 +53,8 @@ def create_agent_app() -> AgentApp:
         "search_shops": search_shops,
         # 优惠查询
         "search_coupon": search_coupon,
-        # 省钱方案确认（S1 → S2 升级）
-        "confirm_saving_plan": confirm_saving_plan,
+        # 进入下单流程（S1 → S2 即时升级）
+        "proceed_to_booking": proceed_to_booking,
         # 下单
         "confirm_booking": confirm_booking,
         # 复杂查询

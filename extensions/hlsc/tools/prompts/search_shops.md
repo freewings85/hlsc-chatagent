@@ -3,7 +3,7 @@
 参数说明：
 - latitude: 纬度（必填）
 - longitude: 经度（必填）
-- keyword: 商户名称关键词，仅用户明确按名称搜索时传入（如"途虎"、"张江汽修"）
+- shop_name: 商户名称关键词，仅用户明确按名称搜索时传入（如"途虎"、"张江汽修"）
 - top: 返回数量，默认 5
 - radius: 搜索半径（米），默认 10000
 - order_by: 排序方式，支持 distance / rating / tradingCount，可组合如 "distance,rating"

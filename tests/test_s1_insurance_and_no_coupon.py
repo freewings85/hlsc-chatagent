@@ -219,7 +219,7 @@ async def scenario_1_insurance_bidding() -> ScenarioResult:
     """场景 1: 保险竞价完整流程。
 
     第1轮: "我要买保险" — 验证直接推进竞价，不问"要不要比价"，不暴露内部概念
-    第2轮: "行" — 验证调了 confirm_saving_plan 和 collect_car_info
+    第2轮: "行" — 验证调了 proceed_to_booking 和 collect_car_info
     """
     session_id: str = str(uuid4())
     user_id: str = f"e2e-insurance-{uuid4().hex[:8]}"
@@ -266,9 +266,9 @@ async def scenario_1_insurance_bidding() -> ScenarioResult:
         passed = False
         return ScenarioResult(name="场景1: 保险竞价完整流程", rounds=rounds, passed=passed, reasons=reasons)
 
-    # 验证：应调用 confirm_saving_plan
-    if "confirm_saving_plan" not in r2.tool_calls:
-        reasons.append("FAIL: 第2轮没调 confirm_saving_plan")
+    # 验证：应调用 proceed_to_booking
+    if "proceed_to_booking" not in r2.tool_calls:
+        reasons.append("FAIL: 第2轮没调 proceed_to_booking")
         passed = False
 
     # 验证：应调用 collect_car_info（触发 interrupt select_car）
@@ -283,7 +283,7 @@ async def scenario_1_insurance_bidding() -> ScenarioResult:
             passed = False
 
     if not reasons:
-        reasons.append("OK: 保险竞价流程正确——直接推进、不暴露内部概念、调了 confirm_saving_plan")
+        reasons.append("OK: 保险竞价流程正确——直接推进、不暴露内部概念、调了 proceed_to_booking")
 
     return ScenarioResult(
         name="场景1: 保险竞价完整流程",
@@ -297,7 +297,7 @@ async def scenario_2_no_coupon() -> ScenarioResult:
     """场景 2: 用户不需要优惠。
 
     第1轮: "我想做个保养" — 正常省钱引导
-    第2轮: "不用优惠，直接做" — 不调 confirm_saving_plan，引导车辆信息
+    第2轮: "不用优惠，直接做" — 不调 proceed_to_booking，引导车辆信息
     """
     session_id: str = str(uuid4())
     user_id: str = f"e2e-nocoupon-{uuid4().hex[:8]}"
@@ -323,9 +323,9 @@ async def scenario_2_no_coupon() -> ScenarioResult:
         passed = False
         return ScenarioResult(name="场景2: 不需要优惠", rounds=rounds, passed=passed, reasons=reasons)
 
-    # 验证：不应调用 confirm_saving_plan
-    if "confirm_saving_plan" in r2.tool_calls:
-        reasons.append("FAIL: 用户说不要优惠后不应调 confirm_saving_plan")
+    # 验证：不应调用 proceed_to_booking
+    if "proceed_to_booking" in r2.tool_calls:
+        reasons.append("FAIL: 用户说不要优惠后不应调 proceed_to_booking")
         passed = False
 
     # 验证：应引导提供车辆信息（collect_car_info 工具或文字引导）
@@ -339,7 +339,7 @@ async def scenario_2_no_coupon() -> ScenarioResult:
         passed = False
 
     if not reasons:
-        reasons.append("OK: 不需要优惠场景正确——没调 confirm_saving_plan，引导了车辆信息")
+        reasons.append("OK: 不需要优惠场景正确——没调 proceed_to_booking，引导了车辆信息")
 
     return ScenarioResult(
         name="场景2: 不需要优惠",

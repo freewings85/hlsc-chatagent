@@ -13,9 +13,9 @@ Supported `spec` types:
 - `ShopCard`
   - `props`: `{ shop_id: number, name: string }`
 - `ProjectCard`
-  - `props`: `{ name: string, laborFee: number, partsFee: number, totalPrice: number, duration?: string }`
+  - `props`: `{ name: string, labor_fee: number, parts_fee: number, total_price: number, duration?: string }`
 - `AppointmentCard`
-  - `props`: `{ shopName: string, projectName: string, time: string, price: number, status: string }`
+  - `props`: `{ shop_name: string, project_name: string, time: string, price: number, status: string }`
 - `PartPriceCard`
   - `props`: `{ name: string, items: [{ repairType: string, price: number }] }`
 - `CouponCard`

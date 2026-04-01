@@ -1,4 +1,4 @@
-"""S1 阶段单元测试：验证 UserStatService / StageHook / confirm_saving_plan 核心行为。
+"""S1 阶段单元测试：验证 UserStatService / StageHook / proceed_to_booking 核心行为。
 
 运行方式：
     cd /mnt/e/Documents/github/com.celiang.hlsc.service.ai.chatagent
@@ -161,10 +161,10 @@ class TestStageHook:
         assert deps.current_stage == "S2"
         assert "confirm_booking" in deps.available_tools
 
-    # ---- B3: S1 的 tools 含 confirm_saving_plan ----
+    # ---- B3: S1 的 tools 含 proceed_to_booking ----
     @pytest.mark.asyncio
-    async def test_s1_tools_contain_confirm_saving_plan(self) -> None:
-        """S1 阶段的 available_tools 包含 confirm_saving_plan。"""
+    async def test_s1_tools_contain_proceed_to_booking(self) -> None:
+        """S1 阶段的 available_tools 包含 proceed_to_booking。"""
         from business_map_hook import StageHook
 
         hook: StageHook = StageHook()
@@ -180,7 +180,7 @@ class TestStageHook:
             )
 
         assert deps.current_stage == "S1"
-        assert "confirm_saving_plan" in deps.available_tools
+        assert "proceed_to_booking" in deps.available_tools
 
     # ---- B4: S2 的 tools 含 confirm_booking ----
     @pytest.mark.asyncio
@@ -205,12 +205,22 @@ class TestStageHook:
 
 
 # ============================================================
-# C. confirm_saving_plan 测试
+# C. proceed_to_booking 测试
 # ============================================================
 
 
-class TestConfirmSavingPlan:
-    """confirm_saving_plan 工具单元测试。"""
+class TestProceedToBooking:
+    """proceed_to_booking 工具单元测试。"""
+
+    @pytest.fixture(autouse=True)
+    def _setup_config_path(self) -> None:
+        """将 STAGE_CONFIG_PATH 指向真实 stage_config.yaml（即时切换需要加载配置）。"""
+        config_path: str = str(PROJECT_ROOT / "mainagent" / "stage_config.yaml")
+        os.environ["STAGE_CONFIG_PATH"] = config_path
+        # 重置配置加载器缓存
+        from business_map_hook import _config_loader
+        _config_loader._loaded = False
+        _config_loader._stages = {}
 
     @pytest.fixture(autouse=True)
     def _reset_user_stat(self) -> None:
@@ -233,12 +243,12 @@ class TestConfirmSavingPlan:
     # ---- C1: 调用后 user_stat 变为 S2 ----
     @pytest.mark.asyncio
     async def test_upgrade_to_s2_after_confirm(self) -> None:
-        """confirm_saving_plan 调用后 user 阶段变为 S2。"""
-        from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
+        """proceed_to_booking 调用后 user 阶段变为 S2。"""
+        from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
 
         ctx: MagicMock = self._make_ctx(user_id="user_c1")
 
-        await confirm_saving_plan(
+        await proceed_to_booking(
             ctx,
             project_id="proj-001",
             project_name="小保养",
@@ -252,11 +262,11 @@ class TestConfirmSavingPlan:
     @pytest.mark.asyncio
     async def test_result_contains_project_and_method(self) -> None:
         """返回值包含项目名称和省钱方式中文标签。"""
-        from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
+        from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
 
         ctx: MagicMock = self._make_ctx(user_id="user_c2")
 
-        result: str = await confirm_saving_plan(
+        result: str = await proceed_to_booking(
             ctx,
             project_id="proj-002",
             project_name="更换机油",
@@ -269,11 +279,11 @@ class TestConfirmSavingPlan:
     @pytest.mark.asyncio
     async def test_result_merchant_promo(self) -> None:
         """saving_method=merchant_promo 时返回值包含商户自有优惠。"""
-        from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
+        from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
 
         ctx: MagicMock = self._make_ctx(user_id="user_c2b")
 
-        result: str = await confirm_saving_plan(
+        result: str = await proceed_to_booking(
             ctx,
             project_id="proj-003",
             project_name="轮胎更换",
@@ -286,11 +296,11 @@ class TestConfirmSavingPlan:
     @pytest.mark.asyncio
     async def test_result_platform_offer(self) -> None:
         """saving_method=platform_offer 时返回值包含平台优惠方式。"""
-        from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
+        from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
 
         ctx: MagicMock = self._make_ctx(user_id="user_c2c")
 
-        result: str = await confirm_saving_plan(
+        result: str = await proceed_to_booking(
             ctx,
             project_id="proj-004",
             project_name="喷漆",
@@ -300,11 +310,70 @@ class TestConfirmSavingPlan:
         assert "喷漆" in result
         assert "平台优惠方式" in result
 
-    # ---- C3: saving_method 只接受三种合法值 ----
+    # ---- C3: saving_method 接受四种合法值 ----
     def test_saving_method_type_literal(self) -> None:
-        """SavingMethod Literal 类型仅包含三种合法值。"""
-        from hlsc.tools.s1.confirm_saving_plan import SavingMethod
+        """SavingMethod Literal 类型包含四种合法值（含 none）。"""
+        from hlsc.tools.s1.proceed_to_booking import SavingMethod
         from typing import get_args
 
         allowed: tuple[str, ...] = get_args(SavingMethod)
-        assert set(allowed) == {"platform_offer", "insurance_bidding", "merchant_promo"}
+        assert set(allowed) == {"platform_offer", "insurance_bidding", "merchant_promo", "none"}
+
+    # ---- C4: saving_method=None（不传）时返回值包含"未指定" ----
+    @pytest.mark.asyncio
+    async def test_result_saving_method_none(self) -> None:
+        """saving_method 不传时返回值包含未指定。"""
+        from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
+
+        ctx: MagicMock = self._make_ctx(user_id="user_c4")
+
+        result: str = await proceed_to_booking(
+            ctx,
+            project_id="proj-005",
+            project_name="小保养",
+        )
+
+        assert "小保养" in result
+        assert "未指定" in result
+
+    # ---- C5: saving_method="none" 时返回值包含"无特定省钱方式" ----
+    @pytest.mark.asyncio
+    async def test_result_saving_method_explicit_none(self) -> None:
+        """saving_method="none" 时返回值包含无特定省钱方式。"""
+        from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
+
+        ctx: MagicMock = self._make_ctx(user_id="user_c5")
+
+        result: str = await proceed_to_booking(
+            ctx,
+            project_id="proj-006",
+            project_name="轮胎更换",
+            saving_method="none",
+        )
+
+        assert "轮胎更换" in result
+        assert "无特定省钱方式" in result
+
+    # ---- C6: 即时切换 — 调用后 deps 已切换到 S2 ----
+    @pytest.mark.asyncio
+    async def test_instant_switch_to_s2(self) -> None:
+        """proceed_to_booking 调用后 deps 即时切换到 S2。"""
+        from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
+
+        ctx: MagicMock = self._make_ctx(user_id="user_c6")
+
+        await proceed_to_booking(
+            ctx,
+            project_id="proj-007",
+            project_name="刹车片更换",
+            saving_method="platform_offer",
+        )
+
+        # deps 已即时切换
+        assert ctx.deps.current_stage == "S2"
+        assert "confirm_booking" in ctx.deps.available_tools
+        assert "proceed_to_booking" not in ctx.deps.available_tools
+        # system_prompt_override 已设置
+        assert ctx.deps.system_prompt_override is not None
+        assert "AGENT_S2" not in ctx.deps.system_prompt_override  # 不含文件名，含内容
+        assert len(ctx.deps.system_prompt_override) > 100  # 不为空

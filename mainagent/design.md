@@ -26,7 +26,7 @@
 |--|-----------|-----------|
 | **目标** | 引导用户确定省钱方法，建立信任 | 收集精确信息，完成下单 |
 | **用户画像** | 初次来、随便问问、未提供身份信息 | 下过单、提供过 VIN、明确要预约 |
-| **Tools** | 查询搜索 + 信息采集 + confirm_saving_plan | S1 全部 + confirm_booking |
+| **Tools** | 查询搜索 + 信息采集 + proceed_to_booking | S1 全部 + confirm_booking |
 | **Skills** | saving-methods, platform-intro | saving-playbook, booking-execution |
 | **AGENT.md** | AGENT_S1.md（主动引导，转化漏斗） | AGENT_S2.md（高效推进，先做再问） |
 
@@ -44,11 +44,11 @@
 - geocode_location — 位置确认
 
 升级触发：
-- confirm_saving_plan — 确认省钱方案（内部触发 S2 升级）
+- proceed_to_booking — 进入下单流程（内部写入硬信号 + 即时切换到 S2）
 
 ### S2 工具集
 
-S1 全部工具（除 classify_project / confirm_saving_plan）+：
+S1 全部工具（除 classify_project / proceed_to_booking）+：
 - match_project — 精确项目匹配（调外部 API）
 - call_query_codingagent — 复杂数据查询
 - get_representative_car_model — 模糊匹配车型
@@ -78,21 +78,21 @@ Hook 只做这一件事：查硬信号，决定 S1/S2，加载对应的 tools + 
 - 用户历史下过单
 - 提供过 VIN / 行驶证
 - 绑定过车辆到平台
-- 历史 session 中通过 confirm_saving_plan 升级过
+- 历史 session 中通过 proceed_to_booking 升级过
 
 ### S1 → S2 升级的两条路径
 
-**路径 A：确认省钱方式（confirm_saving_plan 工具触发）**
+**路径 A：用户表达行动意图（proceed_to_booking 工具触发，即时切换）**
 
-用户在 S1 漏斗中确认了省钱方式（平台优惠 / 保险竞价 / 商户优惠）→ S1 agent 调用 confirm_saving_plan → 内部调 upgrade_to_s2() 写入硬信号 → 下一轮自动 S2。
+用户表达了行动意图（选了省钱方式 / 要求预订 / 不需要优惠直接做）→ S1 agent 调用 proceed_to_booking → 内部写入硬信号 + 即时切换 deps（available_tools / allowed_skills / system_prompt）→ 同轮即获得 S2 能力。
 
-**路径 B：不需要优惠（硬信号触发）**
+**路径 B：有车信息自动升级（硬信号触发）**
 
-用户明确说不需要优惠 → S1 agent 引导用户提供车辆信息（VIN / 绑车）→ UserStatService 产生硬信号 → 下一轮自动 S2。
+用户提供过 VIN / 绑车 / 历史下单 → UserStatService 产生硬信号 → 下一轮自动 S2。
 
 ### 阶段切换
 
-- S1 → S2：硬信号产生时，**下一轮生效**
+- S1 → S2：proceed_to_booking **同轮即时生效**；硬信号触发时下一轮生效
 - S2 不回退到 S1：一旦升级就保持
 
 ## 文件结构

@@ -2,7 +2,7 @@
 
 升级到 S2 的路径：
 1. 硬信号（UserStatService）— VIN / 下过单 / 绑车 / 已升级过 → S2
-2. confirm_saving_plan 工具调用 — 内部调 upgrade_to_s2 写入硬信号 → 下一轮自动 S2
+2. proceed_to_booking 工具调用 — 内部写入硬信号 + 即时切换到 S2
 
 不依赖 BMA 做升级判断。
 """

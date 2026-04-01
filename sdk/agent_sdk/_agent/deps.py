@@ -56,3 +56,5 @@ class AgentDeps:
     request_context: RequestContext | None = None
     # Temporal client（call_interrupt 机制用，必须配置）
     temporal_client: TemporalClient | None = None
+    # 即时切换：工具执行后设置，下次 ModelRequestNode 前替换 system prompt
+    system_prompt_override: str | None = None

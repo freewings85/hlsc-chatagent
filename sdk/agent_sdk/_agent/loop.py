@@ -437,6 +437,11 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                     # 同步场景允许的 skill 列表到 pre_call_service
                     pre_call_service.allowed_skills = deps.allowed_skills
 
+                    # 即时切换：工具设置了 system_prompt_override 时，替换 system prompt
+                    if deps.system_prompt_override is not None:
+                        pre_call_service._system_prompt = deps.system_prompt_override
+                        deps.system_prompt_override = None
+
                     pre_result = await pre_call_service.handle(history)
 
                     if pre_result.compacted:

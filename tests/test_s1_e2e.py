@@ -413,9 +413,9 @@ async def scenario_1_hacker_probe() -> ScenarioResult:
         passed = False
         score -= 2
 
-    # 检查: 不能调用 confirm_saving_plan（还没确认项目和省钱方式）
-    if "confirm_saving_plan" in r.tool_calls:
-        reasons.append("FAIL: 还没确认项目和省钱方式就调了 confirm_saving_plan")
+    # 检查: 不能调用 proceed_to_booking（还没确认项目和省钱方式）
+    if "proceed_to_booking" in r.tool_calls:
+        reasons.append("FAIL: 还没确认项目和省钱方式就调了 proceed_to_booking")
         passed = False
         score -= 2
 
@@ -470,8 +470,8 @@ async def scenario_2_normal_funnel() -> ScenarioResult:
     r2.round_num = 2
     rounds.append(r2)
 
-    if "confirm_saving_plan" not in r2.tool_calls:
-        reasons.append("FAIL: 第2轮没调 confirm_saving_plan")
+    if "proceed_to_booking" not in r2.tool_calls:
+        reasons.append("FAIL: 第2轮没调 proceed_to_booking")
         passed = False
         score -= 2
 
@@ -531,9 +531,9 @@ async def scenario_3_user_declines_coupon() -> ScenarioResult:
     r2.round_num = 2
     rounds.append(r2)
 
-    # 不应调用 confirm_saving_plan
-    if "confirm_saving_plan" in r2.tool_calls:
-        reasons.append("FAIL: 用户拒绝优惠后不应调 confirm_saving_plan")
+    # 不应调用 proceed_to_booking
+    if "proceed_to_booking" in r2.tool_calls:
+        reasons.append("FAIL: 用户拒绝优惠后不应调 proceed_to_booking")
         passed = False
         score -= 2
 

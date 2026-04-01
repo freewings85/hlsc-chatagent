@@ -67,7 +67,7 @@ async def match_project(
         projects: list[dict] = [
             {
                 "project_id": item.get("packageId", 0),
-                "name": item.get("packageName", ""),
+                "project_name": item.get("packageName", ""),
                 "required_precision": to_project_required_precision(
                     _CAR_PRECISION_MAP.get(item.get("chooseCar", ""), CAR_PRECISION_NONE)
                 ),
@@ -75,7 +75,7 @@ async def match_project(
             for item in raw_list
         ]
 
-        data: dict = {"keyword": keyword, "projects": projects}
+        data: dict = {"project_name_keyword": keyword, "projects": projects}
         result_json: str = json.dumps(data, ensure_ascii=False)
 
         log_tool_end("match_project", sid, rid, {
