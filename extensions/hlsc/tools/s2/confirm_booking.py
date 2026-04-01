@@ -21,11 +21,11 @@ _DESCRIPTION: str = load_tool_prompt("confirm_booking")
 async def confirm_booking(
     ctx: RunContext[AgentDeps],
     plan_mode: Annotated[PlanMode, Field(description="预订模式：standard（标准预订，选择商户报价）/ commission（委托预订，车主出一口价）/ bidding（竞标预订，商户竞价）")],
-    project_ids: Annotated[list[str], Field(description="项目 ID 列表")],
-    shop_ids: Annotated[list[str], Field(description="商户 ID 列表")],
+    project_ids: Annotated[list[int], Field(description="项目 ID 列表（整数，必须来自 match_project 等工具返回的真实 ID，严禁编造）")],
+    shop_ids: Annotated[list[int], Field(description="商户 ID 列表（整数，必须来自 search_shops 等工具返回的真实 ID，严禁编造）")],
     car_model_id: Annotated[str, Field(description="车型 ID")],
-    price: Annotated[str, Field(description="预订价格")],
     booking_time: Annotated[str, Field(description="到店时间（必填），必须先向车主确认。支持具体日期时间、时间范围、或'由商户排期'（车主明确表示灵活时）")],
+    price: Annotated[str, Field(description="预订价格（bidding 模式不传，由商户竞价决定）")] = "",
 ) -> str:
     """汇总预订信息发给前端，等待用户回复。返回用户的原始回复文本。"""
     sid: str = ctx.deps.session_id
@@ -35,11 +35,12 @@ async def confirm_booking(
         "project_ids": project_ids,
         "shop_ids": shop_ids,
         "car_model_id": car_model_id,
-        "price": price,
         "booking_time": booking_time,
-        "remark": "",
         "upload_image": True,
     }
+    # bidding 模式不需要 price；其他模式带上
+    if price:
+        params["price"] = price
     log_tool_start("confirm_booking", sid, rid, params)
 
     try:
