@@ -27,5 +27,4 @@
 - **platform-intro** — 话痨平台身份、能力、九折机制
 
 ### S2（下单模式）
-- **saving-playbook** — 省钱下单全流程剧本（5 阶段 + 7 个 reference）
-- **booking-execution** — 预订执行流程（标准/委托/竞标 3 种模式）
+- **saving-playbook** — 省钱下单全流程剧本（5 阶段 + reference 子文档）

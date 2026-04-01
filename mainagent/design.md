@@ -27,7 +27,7 @@
 | **目标** | 引导用户确定省钱方法，建立信任 | 收集精确信息，完成下单 |
 | **用户画像** | 初次来、随便问问、未提供身份信息 | 下过单、提供过 VIN、明确要预约 |
 | **Tools** | 查询搜索 + 信息采集 + proceed_to_booking | S1 全部 + confirm_booking |
-| **Skills** | saving-methods, platform-intro | saving-playbook, booking-execution |
+| **Skills** | saving-methods, platform-intro | saving-playbook |
 | **AGENT.md** | AGENT_S1.md（主动引导，转化漏斗） | AGENT_S2.md（高效推进，先做再问） |
 
 ### S1 工具集
@@ -118,6 +118,5 @@ extensions/skills/
 ├── saving-methods/         → S1：省钱方式介绍
 ├── platform-intro/         → S1：话痨平台介绍
 ├── saving-playbook/        → S2：省钱下单全流程剧本
-├── booking-execution/      → S2：预订执行流程
 └── README.md
 ```

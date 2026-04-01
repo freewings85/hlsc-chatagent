@@ -5,9 +5,11 @@
 ## 两条业务线
 
 - **普通养车**（保养、维修、洗车、轮胎等）→ 按 saving-playbook 推进全流程
-- **保险项目**（保险理赔、事故维修走保险等）→ 按 insurance-bidding 走竞价流程
+- **保险项目**（车险投保、保险理赔等）→ 按 insurance-bidding 走竞价流程
 
 项目类型在对话中自然浮现，不需要开局就问。保险项目即使对话中已有商户信息，仍走 insurance-bidding 独立流程，不混入 saving-playbook。
+
+同一对话可以同时涉及普通养车和保险，各自按对应 skill 独立推进，project_ids 和 shop_ids 互不混用。car_model_id、位置等基础信息可共享。
 
 ## 工作方式
 

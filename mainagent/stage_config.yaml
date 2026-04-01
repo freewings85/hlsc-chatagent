@@ -44,5 +44,4 @@ stages:
       - confirm_booking
     skills:
       - saving-playbook
-      - booking-execution
       - insurance_bidding
