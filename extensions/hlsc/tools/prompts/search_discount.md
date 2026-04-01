@@ -9,8 +9,8 @@
 - shopActivities — 门店优惠活动列表，格式同上
 
 使用场景：
-- 用户问"有什么优惠" → 传入已确认的 project_ids
-- 用户选了门店后问"这家店有优惠吗" → 同时传入 project_ids 和 shop_ids
+- 支持同时查多个项目的优惠，传入多个 project_id 即可一次返回所有结果
+- 可同时传入 project_ids 和 shop_ids，查指定门店的优惠
 - 帮用户对比不同门店优惠 → 分别传入不同 shop_ids 查询
 
 IMPORTANT: project_ids 必须来自 classify_project 或 match_project 的返回结果，不可编造。
