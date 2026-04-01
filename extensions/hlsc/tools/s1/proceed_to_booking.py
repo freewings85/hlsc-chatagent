@@ -39,7 +39,7 @@ async def proceed_to_booking(
     await user_stat_service.upgrade_to_s2(ctx.deps.user_id)
 
     # 2. 即时切换 deps — 不等下一轮，同轮生效
-    from business_map_hook import _config_loader
+    from src.business_map_hook import _config_loader
 
     _config_loader.ensure_loaded()
     s2_config = _config_loader.get_stage("S2")
