@@ -5,7 +5,7 @@
 - shop_ids: 商户 ID 列表（可选），来自 search_shops 返回的 shop_id；未指定商户时不传或传空列表
 
 返回：
-- platformActivities — 平台优惠活动列表，每个包含 activityId、activityName、activityDes（使用限制说明）
+- platformActivities — 平台优惠活动列表，每个包含 activityId、activityName、shopId、shopName、activityDes（使用限制说明）
 - shopActivities — 门店优惠活动列表，格式同上
 
 使用场景：
@@ -15,3 +15,4 @@
 
 IMPORTANT: project_ids 必须来自 classify_project 或 match_project 的返回结果，不可编造。
 IMPORTANT: 注意向用户说明优惠活动的使用限制条件（activityDes 字段内容）。
+IMPORTANT: 查到优惠活动后，必须用 CouponCard spec 格式输出每条优惠，让前端渲染成卡片。每条活动对应一个 CouponCard，props 中 activity_id 来自 activityId，activity_name 来自 activityName，shop_id 来自 shopId，shop_name 来自 shopName。

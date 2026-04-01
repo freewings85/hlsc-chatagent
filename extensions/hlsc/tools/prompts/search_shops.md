@@ -11,7 +11,7 @@
 - opening_hour: 营业时间筛选，格式 "HH:MM"
 - province_id / city_id / district_id: 按省/市/区筛选
 - address_name: 地址名称搜索（如"浦东"）
-- package_ids: 服务项目ID，逗号分隔
+- project_ids: 服务项目ID，逗号分隔
 - min_rating: 最低评分，仅用户明确给出具体数值时传入（如用户说"4.5分以上"）
 - min_trading_count: 最低成交量，仅用户明确给出具体数值时传入（如用户说"成交100单以上"）
 
