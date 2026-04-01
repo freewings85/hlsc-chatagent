@@ -1,4 +1,4 @@
-"""拍卖 Activities：轮询订单报价 + 汇总推荐。"""
+"""拍卖 Activities：轮询报价 + 广播报价 + LLM 汇总。"""
 
 from __future__ import annotations
 
@@ -43,16 +43,43 @@ async def poll_quotes_activity(order_id: str) -> PollResult:
         activity.logger.info(
             "  ✓ %s (ID:%d) ¥%.2f", q.commercial_name, q.commercial_id, q.offer_price,
         )
-    for q in pending:
-        activity.logger.info(
-            "  … %s (ID:%d) 等待报价", q.commercial_name, q.commercial_id,
-        )
 
     return PollResult(
         order_status=order_status,
         order_status_desc=order_status_desc,
         quotes=quotes,
     )
+
+
+@activity.defn(name="broadcast_quotes")
+async def broadcast_quotes_activity(args: list) -> None:
+    """广播当前报价信息给所有商户。"""
+    order_id: str = args[0]
+    quotes: list[Quote] = [Quote(**q) if isinstance(q, dict) else q for q in args[1]]
+
+    responded: list[Quote] = [q for q in quotes if q.offer_status > 0]
+    pending: list[Quote] = [q for q in quotes if q.offer_status == 0]
+
+    # 组装广播内容
+    lines: list[str] = []
+    if responded:
+        lines.append(f"当前已有 {len(responded)} 家商户报价：")
+        for q in sorted(responded, key=lambda q: q.offer_price):
+            lines.append(f"  • {q.commercial_name}：¥{q.offer_price:.2f}")
+    if pending:
+        lines.append(f"还有 {len(pending)} 家商户尚未报价，请尽快提交。")
+
+    content: str = "\n".join(lines) if lines else "暂无报价信息，请各商户尽快报价。"
+
+    activity.logger.info("  [broadcast] order_id=%s\n%s", order_id, content)
+
+    await serviceorder_service.discuss_command(
+        order_id=order_id,
+        command="broadcast_only",
+        content=content,
+    )
+
+    activity.logger.info("  [broadcast] 广播完成")
 
 
 @activity.defn(name="summarize_quotes")

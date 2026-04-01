@@ -29,6 +29,7 @@ from hlsc.tools.s2.match_project import match_project
 from hlsc.tools.s2.confirm_booking import confirm_booking
 from hlsc.tools.s2.call_query_codingagent import call_query_codingagent
 from hlsc.tools.s2.get_representative_car_model import get_representative_car_model
+from hlsc.tools.s2.start_bidding_auction import start_bidding_auction
 
 
 def create_agent_app() -> AgentApp:
@@ -57,6 +58,8 @@ def create_agent_app() -> AgentApp:
         "proceed_to_booking": proceed_to_booking,
         # 下单
         "confirm_booking": confirm_booking,
+        # 竞价
+        "start_bidding_auction": start_bidding_auction,
         # 复杂查询
         "call_query_codingagent": call_query_codingagent,
     }
@@ -71,9 +74,23 @@ def create_agent_app() -> AgentApp:
         after_run_hooks=[ProfileTriggerHook()],
     )
 
-    return AgentApp(
+    agent_app: AgentApp = AgentApp(
         agent,
         AgentAppConfig(
             description="汽修场景主 Agent，支持工具调用、文件操作、中断确认",
         ),
     )
+
+    _register_auction_proxy(agent_app.app)
+
+    return agent_app
+
+
+def _register_auction_proxy(app: object) -> None:
+    """注册竞价状态代理端点，供前端轮询。"""
+    from hlsc.services.restful.auctioneer_service import auctioneer_service
+
+    @app.get("/auction/{task_id}/status")
+    async def auction_status(task_id: str) -> dict:
+        """代理转发到 auctioneer 服务，返回竞价进度。"""
+        return await auctioneer_service.get_auction_status(task_id)
