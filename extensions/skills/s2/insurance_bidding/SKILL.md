@@ -42,21 +42,13 @@ when_to_use: 保险相关项目需要多商户竞价报价时使用。
 
 3. **判断用户回复**：阅读 `read <skill-fs-dir>/references/bidding-reply-judgment.md`，按规则判断意图并处理
 
-4. **用户确认后，启动竞价**：调用 `start_bidding_auction(order_id=订单ID)` 启动多商户竞价
-   - 工具返回 `auction_start` 卡片（含 task_id）
-   - 前端收到 task_id 后自行轮询 `/auction/{task_id}/status` 展示竞价进度
-
-5. 告知车主竞价已启动，正在等待商户报价
-
 ## Tools
 
 - `match_project`：匹配项目 ID
 - `search_shops`：搜索参与竞价的商户
 - `collect_car_info`：收集车型信息
 - `confirm_booking`：汇总预订信息发给前端确认（interrupt），返回车主纯文本回复
-- `start_bidding_auction`：启动竞价，返回 auction_start 卡片供前端轮询
 
 ## 完成标准
 
-- 竞价已成功启动，auction_start 卡片已返回给前端
-- 或车主取消了竞标预订
+- 预订信息已确认（或取消），且结果已告知车主
