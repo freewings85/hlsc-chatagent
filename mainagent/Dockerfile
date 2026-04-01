@@ -47,6 +47,7 @@ RUN mainagent/.venv/bin/python extensions/business-map/convert_tree.py \
 COPY mainagent/server.py mainagent/
 COPY mainagent/src mainagent/src
 COPY mainagent/prompts mainagent/prompts
+COPY mainagent/stage_config.yaml mainagent/
 
 # 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
 # 不拷贝 .env.local（开发用）
