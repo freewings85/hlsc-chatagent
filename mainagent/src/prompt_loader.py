@@ -22,11 +22,12 @@ SYSTEM_PROMPT_PARTS: list[Path] = [
     _TEMPLATES_DIR / "OUTPUT.md",
 ]
 
-_AGENT_MD_PATH: Path = _TEMPLATES_DIR / "AGENT.md"
+_AGENT_S1_MD_PATH: Path = _TEMPLATES_DIR / "AGENT_S1.md"
+_AGENT_S2_MD_PATH: Path = _TEMPLATES_DIR / "AGENT_S2.md"
 
 
 class MainPromptLoader(TemplatePromptLoader):
-    """MainAgent PromptLoader：加载统一 AGENT.md 作为业务指令。"""
+    """MainAgent PromptLoader：根据阶段加载对应 AGENT.md。"""
 
     async def get_agent_md_content(
         self,
@@ -35,9 +36,13 @@ class MainPromptLoader(TemplatePromptLoader):
         deps: Any | None = None,
         message: str | None = None,
     ) -> str | None:
-        if not _AGENT_MD_PATH.exists():
+        # 根据 deps.current_stage 选择 AGENT.md
+        path: Path = _AGENT_S2_MD_PATH  # 默认 S2
+        if deps is not None and getattr(deps, "current_stage", "") == "S1":
+            path = _AGENT_S1_MD_PATH
+        if not path.exists():
             return None
-        content: str = _AGENT_MD_PATH.read_text(encoding="utf-8").strip()
+        content: str = path.read_text(encoding="utf-8").strip()
         return content or None
 
 

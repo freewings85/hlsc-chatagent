@@ -236,8 +236,8 @@ scenes:
         label: 车型信息
         required: conditional
         condition: match_project 返回的项目需要车型时
-        method: 调用 ask_user_car_info 引导用户提供
-    tools: [match_project, ask_user_car_info]
+        method: 调用 collect_car_info 引导用户提供
+    tools: [match_project, collect_car_info]
     skills: []
     exit_when: "slot.project_id"
     strategy: |
@@ -352,8 +352,8 @@ scenes:
         label: 用户位置
         required: conditional
         condition: 需要搜索附近商户时
-        method: 调用 ask_user_location 获取位置
-    tools: [search_shops, ask_user_location]
+        method: 调用 collect_location 获取位置
+    tools: [search_shops, collect_location]
     skills: [merchant-search-and-confirm]
     exit_when: "slot.merchant"
     strategy: |
@@ -419,7 +419,7 @@ scenes:
 #           label: 检测项目ID
 #           required: true
 #           method: 确认检测类型（全车/指定部位），匹配对应项目
-#       tools: [match_project, ask_user_car_info]
+#       tools: [match_project, collect_car_info]
 #       exit_when: "slot.project_id"
 #       strategy: |
 #         确认是买车前检测还是日常检测。

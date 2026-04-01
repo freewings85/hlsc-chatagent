@@ -1,0 +1,47 @@
+# ============================================================
+# MainAgent 阶段配置
+#
+# S1/S2 的区别：S2 多了 confirm_booking（触达商家）
+# 升级路径：
+#   1. 硬信号（UserStatService）→ 一定 S2
+#   2. 软信号（BMA 意图提取）→ 也放过去
+# ============================================================
+
+
+# 阶段定义
+# S1 → S2 升级：S1 agent 调 confirm_saving_plan → 内部写入硬信号 → 下一轮自动 S2
+stages:
+
+  S1:
+    name: 体验模式
+    agent_md: AGENT_S1.md
+    tools:
+      - classify_project
+      - search_shops
+      - list_user_cars
+      - collect_car_info
+      - collect_location
+      - geocode_location
+      - search_discount
+      - confirm_saving_plan
+    skills:
+      - saving-methods
+      - platform-intro
+
+  S2:
+    name: 下单模式
+    agent_md: AGENT_S2.md
+    tools:
+      - match_project
+      - search_shops
+      - call_recommend_project
+      - call_query_codingagent
+      - list_user_cars
+      - get_representative_car_model
+      - collect_car_info
+      - collect_location
+      - geocode_location
+      - confirm_booking
+    skills:
+      - saving-playbook
+      - booking-execution

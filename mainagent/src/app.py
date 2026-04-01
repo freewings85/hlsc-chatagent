@@ -7,43 +7,28 @@ from __future__ import annotations
 
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ProfileTriggerHook, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
-from src.business_map_hook import scene_orchestrator
+from src.business_map_hook import StageHook
 from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 
+# common 工具（S1+S2 共用）
+from hlsc.tools.common.search_shops import search_shops
+from hlsc.tools.s2.call_recommend_project import call_recommend_project
+from hlsc.tools.common.list_user_cars import list_user_cars
+from hlsc.tools.common.collect_car_info import collect_car_info
+from hlsc.tools.common.collect_location import collect_location
+from hlsc.tools.common.geocode_location import geocode_location
 
-# subagent 调用工具
-from src.tools.call_demo_price_finder import call_demo_price_finder
-from hlsc.tools.call_query_codingagent import call_query_codingagent
-from hlsc.tools.call_recommend_project import call_recommend_project
+# S1 专属工具
+from hlsc.tools.s1.classify_project import classify_project
+from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
+from hlsc.tools.s1.search_discount import search_discount
 
-# extensions 业务工具
-from hlsc.tools.get_representative_car_model import get_representative_car_model
-from hlsc.tools.list_user_cars import list_user_cars
-from hlsc.tools.ask_user_car_info import ask_user_car_info
-from hlsc.tools.geocode_location import geocode_location
-from hlsc.tools.ask_user_location import ask_user_location
-from hlsc.tools.match_project import match_project
-from hlsc.tools.get_visited_shops import get_visited_shops
-from hlsc.tools.get_shop_types import get_shop_types
-
-# 新版业务工具（stub，待实现）
-from hlsc.tools.knowledge_base_search import knowledge_base_search
-from hlsc.tools.search_nearby_shops import search_shops
-from hlsc.tools.invite_merchant import invite_merchant
-from hlsc.tools.check_coupon_eligibility import check_coupon_eligibility
-from hlsc.tools.purchase_coupon import purchase_coupon
-from hlsc.tools.confirm_booking import confirm_booking
-from hlsc.tools.push_order_to_merchant import push_order_to_merchant
-from hlsc.tools.handle_bidding_timeout import handle_bidding_timeout
-from hlsc.tools.submit_execution_request import submit_execution_request
-from hlsc.tools.query_execution_status import query_execution_status
-from hlsc.tools.tire_image_recognize import tire_image_recognize
-
-# 槽位更新工具
-from hlsc.tools.update_slots import update_slots
-
-
+# S2 专属工具
+from hlsc.tools.s2.match_project import match_project
+from hlsc.tools.s2.confirm_booking import confirm_booking
+from hlsc.tools.s2.call_query_codingagent import call_query_codingagent
+from hlsc.tools.s2.get_representative_car_model import get_representative_car_model
 
 
 def create_agent_app() -> AgentApp:
@@ -53,48 +38,36 @@ def create_agent_app() -> AgentApp:
     # SDK 内置工具 + subagent 调用 + extensions 业务工具
     tool_map = {
         **create_default_tool_map(),
-        # subagent 调用
-        "call_query_codingagent": call_query_codingagent,
-        # "call_demo_price_finder": call_demo_price_finder,
+        # 项目分类与匹配
+        "classify_project": classify_project,
+        "match_project": match_project,
         "call_recommend_project": call_recommend_project,
         # 车辆信息
         "get_representative_car_model": get_representative_car_model,
         "list_user_cars": list_user_cars,
-        "ask_user_car_info": ask_user_car_info,
-        # 位置信息
+        "collect_car_info": collect_car_info,
+        # 位置
         "geocode_location": geocode_location,
-        "ask_user_location": ask_user_location,
-        # 项目
-        "match_project": match_project,
-        # 商户查询
-        "get_visited_shops": get_visited_shops,
-        "get_shop_types": get_shop_types,
-        # 新版业务工具（stub，待实现真实逻辑）
-        "knowledge_base_search": knowledge_base_search,
+        "collect_location": collect_location,
+        # 商户
         "search_shops": search_shops,
-        "invite_merchant": invite_merchant,
-        "check_coupon_eligibility": check_coupon_eligibility,
-        "purchase_coupon": purchase_coupon,
+        # 优惠查询
+        "search_discount": search_discount,
+        # 省钱方案确认（S1 → S2 升级）
+        "confirm_saving_plan": confirm_saving_plan,
+        # 下单
         "confirm_booking": confirm_booking,
-        "push_order_to_merchant": push_order_to_merchant,
-        "handle_bidding_timeout": handle_bidding_timeout,
-        "submit_execution_request": submit_execution_request,
-        # "query_execution_status": query_execution_status,
-        "tire_image_recognize": tire_image_recognize,
-        # 槽位更新
-        "update_slots": update_slots,
+        # 复杂查询
+        "call_query_codingagent": call_query_codingagent,
     }
 
-    # 场景编排器（hook 和 formatter 共享状态）
-    formatter: HlscContextFormatter = HlscContextFormatter(
-        orchestrator=scene_orchestrator
-    )
+    formatter: HlscContextFormatter = HlscContextFormatter()
 
     agent = Agent(
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
         context_formatter=formatter,
-        before_agent_run_hook=scene_orchestrator,
+        before_agent_run_hook=StageHook(),
         after_run_hooks=[ProfileTriggerHook()],
     )
 

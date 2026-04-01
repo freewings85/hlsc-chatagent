@@ -170,8 +170,8 @@ class TestCarContextFlow:
         assert "get_car_price" in tool_calls, f"应调用 get_car_price，实际: {tool_calls}"
 
         # 不应触发任何 confirm 工具
-        assert "ask_user_car_info" not in tool_calls
-        assert "ask_user_location" not in tool_calls
+        assert "collect_car_info" not in tool_calls
+        assert "collect_location" not in tool_calls
         assert "get_representative_car_model" not in tool_calls
         assert "geocode_location" not in tool_calls
 

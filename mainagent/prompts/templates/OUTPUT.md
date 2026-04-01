@@ -40,12 +40,11 @@ Supported `spec` types:
 Supported `action` types:
 
 - `change_car`
+  - Use only when your reply mentions a specific car model — provides an entry for user to correct it if wrong. Requires a valid current_car_model_id. Do NOT use when there is no car info yet — use the collect_car_info tool to collect car info from scratch.
   - fields: `{ "action": "change_car", "current_car_model_id": string }`
 - `invite_shop`
-  - PREREQUISITE: You MUST first call the `search_shops` tool with the shop name as keyword. Only use this action when `search_shops` returns no results.
-  - NEVER generate this action without first calling `search_shops` — even if you believe the shop is not on the platform.
-  - Guide the user to invite the shop to join.
-  - fields: `{ "action": "invite_shop", "shop_name": string }`
+  - Show an invite button when search_shops returns no results.
+  - fields: `{ "action": "invite_shop" }`
 
 <example>
 那我按 `2021款大众朗逸 1.5L` 继续帮你看。
@@ -59,10 +58,10 @@ Supported `action` types:
 
 ---
 
-很抱歉，"***修理厂"目前还没有入驻话痨说车平台。您可以邀请他们加入，入驻后预订还能享受话痨预订9折优惠哦！
-
 <example>
+这家店暂时没有入驻平台，您可以邀请他们加入。
+
 ```action
-{"action":"invite_shop","shop_name":"******"}
+{"action":"invite_shop"}
 ```
 </example>
