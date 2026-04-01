@@ -45,3 +45,4 @@ stages:
     skills:
       - saving-playbook
       - booking-execution
+      - insurance_bidding
