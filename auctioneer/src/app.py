@@ -5,12 +5,19 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException
+from pydantic import BaseModel, Field
 
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ToolConfig
 from src.auctioneer_context import AuctioneerContextFormatter
 from src.models import AuctionParams, AuctionStatus
 from src.prompt_loader import create_auctioneer_prompt_loader
 from src.tools import create_auctioneer_tool_map
+
+
+class StartAuctionRequest(BaseModel):
+    """前端启动拍卖的请求体。"""
+    order_id: str = Field(alias="orderId", description="服务订单 ID")
+    session_id: str = Field(default="", alias="sessionId", description="会话 ID（可选）")
 
 
 def create_agent_app() -> AgentApp:
@@ -43,10 +50,14 @@ def _register_auction_routes(app: object) -> None:
     from src.temporal.workflows import AuctionWorkflow
 
     @app.post("/auction/start")
-    async def start_auction(params: AuctionParams) -> dict[str, str]:
-        """接受预定单，通过 Temporal 启动拍卖工作流。"""
+    async def start_auction(req: StartAuctionRequest) -> dict[str, str]:
+        """接受 orderId，通过 Temporal 启动拍卖工作流。"""
         client = await get_client()
         task_id: str = f"auction-{uuid.uuid4().hex[:8]}"
+        params: AuctionParams = AuctionParams(
+            order_id=req.order_id,
+            session_id=req.session_id,
+        )
         await client.start_workflow(
             AuctionWorkflow.run,
             params,
@@ -55,8 +66,9 @@ def _register_auction_routes(app: object) -> None:
         )
         return {
             "task_id": task_id,
+            "order_id": req.order_id,
             "status": "started",
-            "message": "竞标任务已启动，10秒轮询一次，60秒后触发汇总",
+            "message": "竞标任务已启动，定时轮询报价中",
         }
 
     @app.get("/auction/{task_id}/status")

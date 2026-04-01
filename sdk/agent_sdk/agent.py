@@ -412,6 +412,7 @@ class Agent:
                 "user_id": user_id,
                 "agent_name": self._agent_name,
                 "is_sub_agent": is_sub_agent,
+                "user_message": message[:50] if message else "",
             }
             if parent_request_id:
                 span_attrs["parent_request_id"] = parent_request_id

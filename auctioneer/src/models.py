@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -16,31 +15,50 @@ class AuctionStatus(str, Enum):
     FAILED = "failed"
 
 
+class OrderStatus:
+    """服务订单状态常量（对应 /serviceorder/detail 的 orderStatus）。"""
+    CANCELLED: int = -10
+    INQUIRING: int = 0
+    MERCHANT_QUOTED: int = 10
+    OWNER_ORDERED: int = 20
+    ARRIVED: int = 30
+    COMPLETED: int = 40
+    VERIFIED: int = 50
+
+
 class AuctionParams(BaseModel):
-    """拍卖任务参数。"""
-    session_id: str = Field(description="会话 ID")
-    project_ids: list[str] = Field(description="项目 ID 列表")
-    shop_ids: list[str] = Field(description="参与竞标的商户 ID 列表")
-    car_model_id: str = Field(default="", description="车型 ID")
-    price: str = Field(default="", description="车主期望价格（commission 模式）")
-    plan_mode: Literal["commission", "bidding"] = Field(description="预订模式")
-    booking_time: str = Field(default="", description="到店时间")
+    """拍卖任务参数（前端只需传 order_id）。"""
+    order_id: str = Field(description="服务订单 ID")
+    session_id: str = Field(default="", description="会话 ID")
 
 
 class Quote(BaseModel):
-    """商户报价。"""
-    shop_id: str
-    shop_name: str
-    quote_price: float
-    responded_at: float = Field(default=0.0, description="响应时间戳")
+    """商户报价（对齐 /serviceorder/detail 的 offers 结构）。"""
+    offer_id: str = Field(description="报价 ID")
+    commercial_id: int = Field(description="商户 ID（用于 commit 接口）")
+    commercial_name: str = Field(description="商户名称")
+    offer_status: int = Field(default=0, description="报价状态：0=未报价, 10=已报价")
+    offer_price: float = Field(default=0.0, description="报价金额")
+    offer_remark: str = Field(default="", description="报价备注")
+    offer_time: str | None = Field(default=None, description="报价时间")
+
+
+class PollResult(BaseModel):
+    """单次轮询结果（activity 返回给 workflow）。"""
+    order_status: int = Field(description="订单状态码")
+    order_status_desc: str = Field(default="", description="订单状态描述")
+    quotes: list[Quote] = Field(default_factory=list, description="所有报价（含未报价的）")
 
 
 class AuctionResult(BaseModel):
     """拍卖任务结果。"""
-    task_id: str
-    status: AuctionStatus
-    total_merchants: int
-    total_responded: int
-    quotes: list[Quote] = Field(default_factory=list)
-    best_offer: Quote | None = None
-    recommendation: str = ""
+    task_id: str = Field(description="Temporal workflow ID")
+    order_id: str = Field(description="服务订单 ID")
+    order_status: int = Field(default=0, description="订单状态码")
+    order_status_desc: str = Field(default="", description="订单状态描述")
+    status: AuctionStatus = Field(description="拍卖任务状态")
+    total_merchants: int = Field(default=0, description="参与商户总数")
+    total_responded: int = Field(default=0, description="已报价商户数")
+    quotes: list[Quote] = Field(default_factory=list, description="已报价列表（按价格排序）")
+    best_offer: Quote | None = Field(default=None, description="最优报价")
+    recommendation: str = Field(default="", description="LLM 推荐文本")
