@@ -17,6 +17,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 async def execute_skill_script(
     script: SkillScript,
     run_context: RunContext[AgentDeps],
+    args: str = "",
 ) -> str:
     """执行技能脚本，返回结果文本。
 
@@ -26,12 +27,14 @@ async def execute_skill_script(
     Args:
         script: 要执行的技能脚本实例。
         run_context: Pydantic AI RunContext（传给 SkillContext 用于 call_interrupt）。
+        args: LLM 调用 invoke_skill 时传入的参数字符串。
 
     Returns:
         脚本返回的结果文本。
     """
     ctx: SkillContext = SkillContext(
         _run_context=run_context,
+        state={"args": args} if args else {},
     )
 
     logger.info("执行技能脚本: skill=%s", script.name)
