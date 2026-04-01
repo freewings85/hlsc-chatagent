@@ -16,13 +16,14 @@ stages:
     name: 体验模式
     agent_md: AGENT_S1.md
     tools:
-      - match_project
+      - classify_project
       - search_shops
       - call_recommend_project
       - list_user_cars
       - ask_user_car_info
       - ask_user_location
       - geocode_location
+      - search_discount
       - confirm_saving_plan
     skills:
       - saving-methods

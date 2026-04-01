@@ -12,7 +12,6 @@ from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 
 # common 工具（S1+S2 共用）
-from hlsc.tools.common.match_project import match_project
 from hlsc.tools.common.search_shops import search_shops
 from hlsc.tools.common.call_recommend_project import call_recommend_project
 from hlsc.tools.common.list_user_cars import list_user_cars
@@ -21,9 +20,12 @@ from hlsc.tools.common.ask_user_location import ask_user_location
 from hlsc.tools.common.geocode_location import geocode_location
 
 # S1 专属工具
+from hlsc.tools.s1.classify_project import classify_project
 from hlsc.tools.s1.confirm_saving_plan import confirm_saving_plan
+from hlsc.tools.s1.search_discount import search_discount
 
 # S2 专属工具
+from hlsc.tools.s2.match_project import match_project
 from hlsc.tools.s2.confirm_booking import confirm_booking
 from hlsc.tools.s2.call_query_codingagent import call_query_codingagent
 from hlsc.tools.s2.get_representative_car_model import get_representative_car_model
@@ -36,7 +38,8 @@ def create_agent_app() -> AgentApp:
     # SDK 内置工具 + subagent 调用 + extensions 业务工具
     tool_map = {
         **create_default_tool_map(),
-        # 项目匹配与推荐
+        # 项目分类与匹配
+        "classify_project": classify_project,
         "match_project": match_project,
         "call_recommend_project": call_recommend_project,
         # 车辆信息
@@ -48,6 +51,8 @@ def create_agent_app() -> AgentApp:
         "ask_user_location": ask_user_location,
         # 商户
         "search_shops": search_shops,
+        # 优惠查询
+        "search_discount": search_discount,
         # 省钱方案确认（S1 → S2 升级）
         "confirm_saving_plan": confirm_saving_plan,
         # 下单

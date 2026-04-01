@@ -33,7 +33,7 @@
 ### S1 工具集
 
 查询搜索（不触达商家）：
-- match_project — 匹配项目
+- classify_project — 粗粒度项目分类（归到大类，不调外部 API）
 - search_shops — 搜索商户
 - call_recommend_project — 推荐项目
 - list_user_cars — 查用户车库
@@ -48,7 +48,10 @@
 
 ### S2 工具集
 
-S1 全部工具 +：
+S1 全部工具（除 classify_project / confirm_saving_plan）+：
+- match_project — 精确项目匹配（调外部 API）
+- call_query_codingagent — 复杂数据查询
+- get_representative_car_model — 模糊匹配车型
 - confirm_booking — 预订确认（触达商家）
 
 ### 省钱方式

@@ -36,10 +36,11 @@ _DESCRIPTION: str = load_tool_prompt("match_project")
 
 async def match_project(
     ctx: RunContext[AgentDeps],
-    keyword: Annotated[str, Field(description="项目关键词，如'洗车'、'四轮定位'、'保养'")],
+    project_name_keyword: Annotated[str, Field(description="用户提到的养车项目名称关键词，如'洗车'、'四轮定位'、'保养'、'换机油'")],
 ) -> str:
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
+    keyword: str = project_name_keyword
     log_tool_start("match_project", sid, rid, {"keyword": keyword})
 
     try:
