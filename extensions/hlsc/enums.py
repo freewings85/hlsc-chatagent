@@ -40,7 +40,7 @@ PROJECT_REQUIRED_PRECISION_LABELS: Final[dict[str, str]] = {
 
 
 def to_required_precision(car_precision: str) -> RequiredCarPrecision | None:
-    """Convert internal car precision to ask_user_car_info precision."""
+    """Convert internal car precision to collect_car_info precision."""
     return CAR_PRECISION_TO_REQUIRED.get(car_precision)
 
 

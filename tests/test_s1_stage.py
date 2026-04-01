@@ -119,7 +119,7 @@ class TestStageHook:
     def _reset_state(self) -> None:
         """每个用例重置 StageHook 的配置加载器和 UserStatService 单例。"""
         # 重置配置加载器，避免前一个用例的缓存影响
-        from mainagent.src.business_map_hook import _config_loader
+        from business_map_hook import _config_loader
         _config_loader._loaded = False
         _config_loader._stages = {}
 
@@ -141,7 +141,7 @@ class TestStageHook:
     @pytest.mark.asyncio
     async def test_new_user_gets_s1(self) -> None:
         """新用户经过 StageHook 后 → S1，tools 不含 confirm_booking。"""
-        from mainagent.src.business_map_hook import StageHook
+        from business_map_hook import StageHook
 
         hook: StageHook = StageHook()
         deps: AgentDeps = self._make_deps()
@@ -160,7 +160,7 @@ class TestStageHook:
     @pytest.mark.asyncio
     async def test_upgraded_user_gets_s2(self) -> None:
         """已升级到 S2 的用户 → S2，tools 含 confirm_booking。"""
-        from mainagent.src.business_map_hook import StageHook
+        from business_map_hook import StageHook
 
         # 先升级
         await self.user_stat_service.upgrade_to_s2("upgraded_user_b2")
@@ -182,7 +182,7 @@ class TestStageHook:
     @pytest.mark.asyncio
     async def test_s1_tools_contain_confirm_saving_plan(self) -> None:
         """S1 阶段的 available_tools 包含 confirm_saving_plan。"""
-        from mainagent.src.business_map_hook import StageHook
+        from business_map_hook import StageHook
 
         hook: StageHook = StageHook()
         deps: AgentDeps = self._make_deps()
@@ -201,7 +201,7 @@ class TestStageHook:
     @pytest.mark.asyncio
     async def test_s2_tools_contain_confirm_booking(self) -> None:
         """S2 阶段的 available_tools 包含 confirm_booking。"""
-        from mainagent.src.business_map_hook import StageHook
+        from business_map_hook import StageHook
 
         await self.user_stat_service.upgrade_to_s2("user_b4")
 

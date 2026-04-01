@@ -39,8 +39,8 @@
 - list_user_cars — 查用户车库
 
 信息采集：
-- ask_user_car_info — 引导用户提供车型/VIN
-- ask_user_location — 引导用户提供位置
+- collect_car_info — 触发车辆信息收集界面，收集车型/VIN
+- collect_location — 触发位置信息收集界面，收集用户位置
 - geocode_location — 位置确认
 
 升级触发：

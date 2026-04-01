@@ -1,4 +1,4 @@
-"""ask_user_car_info 工具：按所需精度向用户收集车辆信息。"""
+"""collect_car_info 工具：触发车辆信息收集界面，按所需精度收集车辆信息。"""
 
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ from hlsc.enums import (
 )
 from hlsc.tools.prompt_loader import load_tool_prompt
 
-_DESCRIPTION = load_tool_prompt("ask_user_car_info")
+_DESCRIPTION = load_tool_prompt("collect_car_info")
 
 
-async def ask_user_car_info(
+async def collect_car_info(
     ctx: RunContext[AgentDeps],
     reason: Annotated[str, Field(description="需要车辆信息的原因，如'查询报价需要知道您的车型'")],
     required_precision: Annotated[
@@ -31,7 +31,7 @@ async def ask_user_car_info(
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
     allow_select: bool = required_precision == REQUIRED_PRECISION_EXACT_MODEL
     log_tool_start(
-        "ask_user_car_info",
+        "collect_car_info",
         sid,
         rid,
         {"reason": reason, "required_precision": required_precision, "allow_select": allow_select},
@@ -57,7 +57,7 @@ async def ask_user_car_info(
                 else required_precision == REQUIRED_PRECISION_VIN and bool(car_model_id and vin_code)
             )
             if precision_ok:
-                log_tool_end("ask_user_car_info", sid, rid, {
+                log_tool_end("collect_car_info", sid, rid, {
                     "car_model_id": car_model_id, "vin_code": vin_code, "required_precision": required_precision,
                 })
                 result: str = f"用户选择车型：car_model_id={car_model_id}, car_model_name={car_model_name}"
@@ -74,8 +74,8 @@ async def ask_user_car_info(
         return "用户未提供车辆信息"
 
     except Exception as e:
-        log_tool_end("ask_user_car_info", sid, rid, exc=e)
-        return f"Error: ask_user_car_info failed - {e}"
+        log_tool_end("collect_car_info", sid, rid, exc=e)
+        return f"Error: collect_car_info failed - {e}"
 
 
-ask_user_car_info.__doc__ = _DESCRIPTION
+collect_car_info.__doc__ = _DESCRIPTION

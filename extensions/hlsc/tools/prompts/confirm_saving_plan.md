@@ -22,9 +22,10 @@
 
 - 用户说"不需要优惠""不用了直接做" → 不调用此工具，改为引导提供车辆信息
 - 项目还没确认（没调过 classify_project 且不是保险类）→ 先确认项目
+- 用户只是想找新商户对比价格 → 不调用此工具，用 search_shops 搜索即可
 
 ## 参数来源
 
-- project_id 和 project_name 来自 classify_project 的返回结果
+- project_id 和 project_name 来自 classify_project 返回的 project_id 和 project_name
 - 保险类项目固定：project_id="9999"，project_name="保险项目"，不需要调 classify_project
 - 不可编造，必须基于 classify_project 返回值或保险固定值

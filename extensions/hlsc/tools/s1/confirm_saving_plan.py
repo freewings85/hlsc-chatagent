@@ -18,8 +18,8 @@ _DESCRIPTION: str = load_tool_prompt("confirm_saving_plan")
 
 async def confirm_saving_plan(
     ctx: RunContext[AgentDeps],
-    project_id: Annotated[str, Field(description="项目标识（来自 classify_project 的 category_id 或 default_project_id）")],
-    project_name: Annotated[str, Field(description="项目名称（来自 classify_project 的 category_name 或 default_project_name）")],
+    project_id: Annotated[str, Field(description="项目标识（来自 classify_project 返回的 project_id，保险类固定为 '9999'）")],
+    project_name: Annotated[str, Field(description="项目名称（来自 classify_project 返回的 project_name，保险类固定为 '保险项目'）")],
     saving_method: Annotated[SavingMethod, Field(description="用户确认的省钱方式：platform_offer（平台优惠方式）/ insurance_bidding（保险竞价）/ merchant_promo（商户自有优惠）")],
 ) -> str:
     """确认省钱方案，记录项目和省钱方式。"""

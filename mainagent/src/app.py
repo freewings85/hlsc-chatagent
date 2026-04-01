@@ -13,10 +13,10 @@ from src.prompt_loader import create_main_prompt_loader
 
 # common 工具（S1+S2 共用）
 from hlsc.tools.common.search_shops import search_shops
-from hlsc.tools.common.call_recommend_project import call_recommend_project
+from hlsc.tools.s2.call_recommend_project import call_recommend_project
 from hlsc.tools.common.list_user_cars import list_user_cars
-from hlsc.tools.common.ask_user_car_info import ask_user_car_info
-from hlsc.tools.common.ask_user_location import ask_user_location
+from hlsc.tools.common.collect_car_info import collect_car_info
+from hlsc.tools.common.collect_location import collect_location
 from hlsc.tools.common.geocode_location import geocode_location
 
 # S1 专属工具
@@ -45,10 +45,10 @@ def create_agent_app() -> AgentApp:
         # 车辆信息
         "get_representative_car_model": get_representative_car_model,
         "list_user_cars": list_user_cars,
-        "ask_user_car_info": ask_user_car_info,
+        "collect_car_info": collect_car_info,
         # 位置
         "geocode_location": geocode_location,
-        "ask_user_location": ask_user_location,
+        "collect_location": collect_location,
         # 商户
         "search_shops": search_shops,
         # 优惠查询

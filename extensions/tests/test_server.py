@@ -67,9 +67,9 @@ def main() -> None:
     # Extension tools（真实 tool，service 层在无 URL 时会抛异常被 tool 捕获）
     from hlsc.tools.s2.get_representative_car_model import get_representative_car_model
     from hlsc.tools.common.list_user_cars import list_user_cars
-    from hlsc.tools.common.ask_user_car_info import ask_user_car_info
+    from hlsc.tools.common.collect_car_info import collect_car_info
     from hlsc.tools.common.geocode_location import geocode_location
-    from hlsc.tools.common.ask_user_location import ask_user_location
+    from hlsc.tools.common.collect_location import collect_location
 
     # Context formatter
     from agent_sdk._common.request_context import ContextFormatter, RequestContext
@@ -139,9 +139,9 @@ def main() -> None:
         "get_car_price": mock_get_car_price,
         "get_representative_car_model": get_representative_car_model,
         "list_user_cars": list_user_cars,
-        "ask_user_car_info": ask_user_car_info,
+        "collect_car_info": collect_car_info,
         "geocode_location": geocode_location,
-        "ask_user_location": ask_user_location,
+        "collect_location": collect_location,
     }
     if diagnose_tool:
         tool_map["call_diagnose_agent"] = diagnose_tool
