@@ -1,6 +1,6 @@
 ---
 name: insurance_bidding
-description: 保险项目相关
+description: 保险项目相关（竞价、预定、报价）
 when_to_use: 保险相关项目需要多商户竞价报价时使用。
 ---
 
@@ -12,7 +12,7 @@ when_to_use: 保险相关项目需要多商户竞价报价时使用。
 
 ## 前置条件
 
-- project_ids 已确认（保险相关项目），如果没有的话调用`match_project`
+- project_ids 已确认（保险相关项目），如果没有的话就用 1461
 - shop_ids 已确认（参与竞价的商户范围）,如果没有的话，先调用`search_shops`，根据已确认的project_ids和radius=100000，获取shop_ids
 - car_model_id 已确认,如果没有的话，先调用`collect_car_info`
 
