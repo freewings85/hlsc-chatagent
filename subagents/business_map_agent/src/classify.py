@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -80,8 +81,15 @@ def _load_system_prompt() -> str:
 async def _call_llm(
     message: str,
     recent_turns: list[dict[str, str]] | None = None,
+    use_multi_turn: bool = False,
 ) -> dict[str, Any]:
-    """调小模型进行场景分类。支持 Azure OpenAI 和 OpenAI-compatible API（如 DashScope）。"""
+    """调小模型进行场景分类。支持 Azure OpenAI 和 OpenAI-compatible API（如 DashScope）。
+
+    Args:
+        message: 用户当前消息
+        recent_turns: 最近对话历史
+        use_multi_turn: False=方案A（历史拼入user prompt），True=方案B（历史作为独立message）
+    """
     # 优先 Azure OpenAI，其次 OpenAI-compatible（DashScope 等）
     azure_endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
     azure_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
@@ -110,24 +118,48 @@ async def _call_llm(
 
     system_prompt: str = _load_system_prompt()
 
-    # 对话历史
-    history_text: str = "（无）"
-    if recent_turns:
-        history_lines: list[str] = [
-            f"{t['role']}: {t['content']}" for t in recent_turns
-        ]
-        history_text = "\n".join(history_lines)
+    if use_multi_turn:
+        # 方案 B：recent_turns 作为独立 message 对象
+        messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+        if recent_turns:
+            for turn in recent_turns:
+                role: str = turn["role"]
+                content: str = turn["content"]
+                # 截断过长的 assistant 回复（去掉 spec 块，只保留文本）
+                if role == "assistant" and len(content) > 200:
+                    content = re.sub(r'```spec\n.*?```', '[优惠卡片数据]', content, flags=re.DOTALL)
+                    if len(content) > 200:
+                        content = content[:200] + "..."
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": message})
+    else:
+        # 方案 A：历史拼入 user prompt
+        history_text: str = "（无）"
+        if recent_turns:
+            history_lines: list[str] = []
+            for t in recent_turns:
+                role_label: str = "[User]" if t["role"] == "user" else "[Assistant]"
+                content: str = t["content"]
+                # assistant 回复截断：spec 卡片替换为 [卡片]，超长截断
+                if t["role"] == "assistant":
+                    content = re.sub(r'```spec\n.*?```', '[卡片]', content, flags=re.DOTALL)
+                    content = re.sub(r'```action\n.*?```', '[操作]', content, flags=re.DOTALL)
+                    if len(content) > 100:
+                        content = content[:100] + "..."
+                history_lines.append(f"{role_label} {content}")
+            history_text = "\n".join(history_lines)
 
-    user_prompt: str = (
-        f"[最近对话]\n{history_text}\n\n"
-        f"[用户消息]\n{message}"
-    )
-
-    request_body: dict[str, Any] = {
-        "messages": [
+        user_prompt: str = (
+            f"Recent (last {len(recent_turns) if recent_turns else 0}):\n{history_text}\n\n"
+            f"Current:\n[User] {message}"
+        )
+        messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
-        ],
+        ]
+
+    request_body: dict[str, Any] = {
+        "messages": messages,
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
@@ -139,8 +171,8 @@ async def _call_llm(
         resp: httpx.Response = await client.post(url, headers=headers, json=request_body)
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
-        content: str = data["choices"][0]["message"]["content"]
-        return json.loads(content)
+        raw_content: str = data["choices"][0]["message"]["content"]
+        return json.loads(raw_content)
 
 
 # ============================================================
@@ -148,29 +180,41 @@ async def _call_llm(
 # ============================================================
 
 
-async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
-    """场景分类。"""
+async def _do_classify(
+    request: ClassifyRequest,
+    use_multi_turn: bool = False,
+) -> ClassifyResponse:
+    """场景分类。
+
+    Args:
+        request: 分类请求
+        use_multi_turn: False=方案A，True=方案B（multi-turn messages）
+    """
     scenes: list[str] = []
+    scheme_label: str = "B" if use_multi_turn else "A"
 
     turns: list[dict[str, str]] = (
         [{"role": t.role, "content": t.content} for t in request.recent_turns]
         if request.recent_turns
         else []
     )
-    logger.info("BMA classify: message='%s', recent_turns=%d条", request.message, len(turns))
+    logger.info(
+        "BMA classify(方案%s): message='%s', recent_turns=%d条",
+        scheme_label, request.message, len(turns),
+    )
     if turns:
         logger.info("BMA recent_turns: %s", turns[-4:])
 
     try:
         llm_result: dict[str, Any] = await _call_llm(
-            request.message, recent_turns=turns
+            request.message, recent_turns=turns, use_multi_turn=use_multi_turn,
         )
         raw_scenes: list[str] = llm_result.get("scenes", [])
         scenes = [s for s in raw_scenes if s in VALID_SCENES]
     except Exception:
-        logger.warning("LLM 场景分类失败", exc_info=True)
+        logger.warning("LLM 场景分类失败（方案%s）", scheme_label, exc_info=True)
 
-    logger.info("场景分类结果: %s", scenes)
+    logger.info("场景分类结果（方案%s）: %s", scheme_label, scenes)
     return ClassifyResponse(scenes=scenes)
 
 
@@ -210,7 +254,12 @@ def create_app() -> FastAPI:
 
     @app.post("/classify", response_model=ClassifyResponse)
     async def classify(request: ClassifyRequest) -> ClassifyResponse:
-        """场景分类端点。"""
-        return await _do_classify(request)
+        """场景分类端点（方案 A：历史拼入 user prompt）。"""
+        return await _do_classify(request, use_multi_turn=False)
+
+    @app.post("/classify_b", response_model=ClassifyResponse)
+    async def classify_b(request: ClassifyRequest) -> ClassifyResponse:
+        """场景分类端点（方案 B：历史作为独立 multi-turn messages）。"""
+        return await _do_classify(request, use_multi_turn=True)
 
     return app
