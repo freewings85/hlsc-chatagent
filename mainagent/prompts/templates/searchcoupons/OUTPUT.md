@@ -11,7 +11,7 @@ Supported `spec` types:
 - `CouponCard`
   - `props`: `{ shop_id: number, shop_name: string, activity_id: number, activity_name: string }`
 - `ShopCard`
-  - `props`: `{ shop_id: number, name: string }`
+  - `props`: `{ shop_id: number, name: string, address?: string, phone?: string, distance?: string, rating?: number }`
 
 <example>
 帮你找到这些优惠。

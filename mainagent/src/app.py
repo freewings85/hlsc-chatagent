@@ -12,21 +12,21 @@ from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 
 # common 工具
-from hlsc.tools.common.search_shops import search_shops
-from hlsc.tools.common.list_user_cars import list_user_cars
-from hlsc.tools.common.collect_car_info import collect_car_info
-from hlsc.tools.common.collect_location import collect_location
-from hlsc.tools.common.geocode_location import geocode_location
-from hlsc.tools.common.delegate import delegate
-from hlsc.tools.common.update_session_state import update_session_state
+from hlsc.tools.search_shops import search_shops
+from hlsc.tools.list_user_cars import list_user_cars
+from hlsc.tools.collect_car_info import collect_car_info
+from hlsc.tools.collect_location import collect_location
+from hlsc.tools.geocode_location import geocode_location
+from hlsc.tools.delegate import delegate
+from hlsc.tools.update_session_state import update_session_state
 
 # 分类与匹配
-from hlsc.tools.common.classify_project import classify_project
-from hlsc.tools.common.search_coupon import search_coupon
-from hlsc.tools.s2.match_project import match_project
+from hlsc.tools.classify_project import classify_project
+from hlsc.tools.search_coupon import search_coupon
+from hlsc.tools.match_project import match_project
 
 # 下单
-from hlsc.tools.s2.confirm_booking import confirm_booking
+from hlsc.tools.confirm_booking import confirm_booking
 
 
 def create_agent_app() -> AgentApp:

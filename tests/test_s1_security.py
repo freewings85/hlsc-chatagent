@@ -34,7 +34,7 @@ _B: str = "\033[1m"
 _D: str = "\033[2m"
 _0: str = "\033[0m"
 
-# S1 阶段不应出现的工具（S2 专属）
+# guide 场景不应出现的工具（其他场景专属）
 S2_ONLY_TOOLS: set[str] = {
     "confirm_booking",
     "match_project",

@@ -12,7 +12,7 @@ when_to_use: 保险相关项目需要多商户竞价报价时使用。
 
 ## 前置条件（LLM 在调用前需确保）
 
-- project_ids 已确认（保险相关项目），如果没有的话就用 1461
+- project_ids 已确认（保险相关项目），如果没有的话就用 9999
 - shop_ids 已确认（参与竞价的商户范围）,如果没有的话，先调用`search_shops`，根据已确认的project_ids和radius=100000，获取shop_ids
 - car_model_id 已确认,如果没有的话，先调用`collect_car_info`
 
@@ -22,7 +22,7 @@ when_to_use: 保险相关项目需要多商户竞价报价时使用。
 2. 收集完成后，调用脚本执行确认和创建订单：
 
 ```
-invoke_skill("insurance-bidding:confirm_information", args='{"project_ids":[1461],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
+invoke_skill("insurance-bidding:confirm_information", args='{"project_ids":[9999],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
 ```
 
 ## 脚本执行流程（confirm_information 自动处理）
@@ -35,7 +35,7 @@ invoke_skill("insurance-bidding:confirm_information", args='{"project_ids":[1461
        "question": "请确认以下预订信息：",
        "booking_params": {
          "plan_mode": "bidding",
-         "project_ids": [1461],
+         "project_ids": [9999],
          "shop_ids": [87, 88],
          "car_model_id": "bmw-325li-2024",
          "booking_time": "",

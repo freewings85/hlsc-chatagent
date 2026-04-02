@@ -9,7 +9,7 @@
 Supported `spec` types:
 
 - `ShopCard`
-  - `props`: `{ shop_id: number, name: string }`
+  - `props`: `{ shop_id: number, name: string, address?: string, phone?: string, distance?: string, rating?: number }`
 - `AppointmentCard`
   - `props`: `{ shop_name: string, project_name: string, time: string, price: number, status: string }`
 

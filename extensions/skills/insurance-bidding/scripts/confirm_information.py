@@ -1,7 +1,7 @@
 """insurance-bidding SkillScript：确认竞标信息 → 创建订单 → 返回卡片。
 
 LLM 调用示例：
-    invoke_skill("insurance-bidding", args='{"project_ids":[1461],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
+    invoke_skill("insurance-bidding", args='{"project_ids":[9999],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
 """
 
 from __future__ import annotations

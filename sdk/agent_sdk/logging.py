@@ -8,9 +8,9 @@ SDK 统一日志接口，所有 agent 和 extensions 共用。
 
     # tool 层（从 ctx.deps 取 ID）
     sid, rid = ctx.deps.session_id, ctx.deps.request_id
-    log_tool_start("get_representative_car_model", sid, rid, {"car_model_keyword": "卡罗拉"})
+    log_tool_start("match_project", sid, rid, {"keyword": "保养"})
     ...
-    log_tool_end("get_representative_car_model", sid, rid, {"matched": True})
+    log_tool_end("match_project", sid, rid, {"matched": True})
 
     # service 层（ID 从 tool 层传入）
     log_http_request(url, "POST", sid, rid, payload)

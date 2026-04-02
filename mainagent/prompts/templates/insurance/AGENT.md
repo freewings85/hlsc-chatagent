@@ -5,7 +5,7 @@
 ## 能力边界
 
 - 能匹配项目（match_project）、搜商户（search_shops）、收集车辆信息（collect_car_info）、确认预订（confirm_booking）
-- 保险竞价不需要 classify_project，project_id 固定使用 1461
+- 保险竞价不需要 classify_project，project_id 固定使用 9999
 - 只处理保险相关需求（车险投保、保险理赔），普通养车不在本场景
 - 不能直接向保险公司官方购买，通过保险代理/经纪机构办理
 

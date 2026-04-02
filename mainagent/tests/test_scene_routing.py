@@ -150,7 +150,7 @@ class TestDelegateTool:
     @pytest.mark.asyncio
     async def test_delegate_valid_scene(self) -> None:
         """delegate("platform", "查保养报价") → 返回非空字符串。"""
-        from hlsc.tools.common.delegate import delegate, _DELEGATABLE_SCENES
+        from hlsc.tools.delegate import delegate, _DELEGATABLE_SCENES
 
         # 验证白名单包含 4 个业务场景
         assert _DELEGATABLE_SCENES == {"platform", "searchshops", "searchcoupons", "insurance"}
@@ -158,7 +158,7 @@ class TestDelegateTool:
     @pytest.mark.asyncio
     async def test_delegate_guide_rejected(self) -> None:
         """delegate("guide", ...) → 返回错误。"""
-        from hlsc.tools.common.delegate import delegate
+        from hlsc.tools.delegate import delegate
 
         # 创建 mock ctx
         mock_ctx: Any = AsyncMock()
@@ -171,7 +171,7 @@ class TestDelegateTool:
     @pytest.mark.asyncio
     async def test_delegate_orchestrator_rejected(self) -> None:
         """delegate("orchestrator", ...) → 返回错误。"""
-        from hlsc.tools.common.delegate import delegate
+        from hlsc.tools.delegate import delegate
 
         mock_ctx: Any = AsyncMock()
         mock_ctx.deps = AgentDeps(user_id="test", session_id="test")
@@ -182,7 +182,7 @@ class TestDelegateTool:
     @pytest.mark.asyncio
     async def test_delegate_nonexistent_rejected(self) -> None:
         """delegate("nonexistent", ...) → 返回错误。"""
-        from hlsc.tools.common.delegate import delegate
+        from hlsc.tools.delegate import delegate
 
         mock_ctx: Any = AsyncMock()
         mock_ctx.deps = AgentDeps(user_id="test", session_id="test")
@@ -331,7 +331,7 @@ class TestSecurity:
 
     def test_delegate_whitelist_excludes_guide_and_orchestrator(self) -> None:
         """delegate 白名单不含 guide 和 orchestrator。"""
-        from hlsc.tools.common.delegate import _DELEGATABLE_SCENES
+        from hlsc.tools.delegate import _DELEGATABLE_SCENES
 
         assert "guide" not in _DELEGATABLE_SCENES
         assert "orchestrator" not in _DELEGATABLE_SCENES

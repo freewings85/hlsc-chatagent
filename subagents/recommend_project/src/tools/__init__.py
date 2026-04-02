@@ -4,7 +4,7 @@ from typing import Any
 
 from src.tools.recommend_projects import recommend_projects
 from src.tools.ask_user_select_project import ask_user_select_project
-from hlsc.tools.s2.get_representative_car_model import get_representative_car_model
+from hlsc.tools.get_representative_car_model import get_representative_car_model
 
 
 def create_recommend_project_tool_map() -> dict[str, Any]:

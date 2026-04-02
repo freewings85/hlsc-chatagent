@@ -9,7 +9,7 @@
 Supported `spec` types:
 
 - `ShopCard`
-  - `props`: `{ shop_id: number, name: string }`
+  - `props`: `{ shop_id: number, name: string, address?: string, phone?: string, distance?: string, rating?: number }`
 
 <example>
 你附近这两家可以看看。

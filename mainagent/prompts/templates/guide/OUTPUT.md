@@ -13,5 +13,5 @@
 {"action":"change_car","current_car_model_id":"******"}
 ```
 
-接下来帮你估个价。
+接下来帮你看看怎么省钱。
 </example>

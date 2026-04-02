@@ -15,12 +15,9 @@ scenes:
     agent_md: guide/AGENT.md
     tools:
       - classify_project
-      - search_shops
-      - search_coupon
       - list_user_cars
       - collect_car_info
-      - collect_location
-      - geocode_location
+      - update_session_state
     skills:
       - saving-methods
       - platform-intro
@@ -46,6 +43,7 @@ scenes:
     agent_md: searchshops/AGENT.md
     tools:
       - search_shops
+      - collect_car_info
       - collect_location
       - geocode_location
       - match_project
@@ -63,6 +61,7 @@ scenes:
       - search_shops
       - classify_project
       - match_project
+      - collect_car_info
       - collect_location
       - geocode_location
       - list_user_cars
@@ -75,7 +74,6 @@ scenes:
     prompt_parts: [SYSTEM.md, SOUL.md, insurance/OUTPUT.md]
     agent_md: insurance/AGENT.md
     tools:
-      - match_project
       - search_shops
       - collect_car_info
       - collect_location

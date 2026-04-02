@@ -65,11 +65,11 @@ def main() -> None:
     from agent_sdk.prompt_loader import TemplatePromptLoader
 
     # Extension tools（真实 tool，service 层在无 URL 时会抛异常被 tool 捕获）
-    from hlsc.tools.s2.get_representative_car_model import get_representative_car_model
-    from hlsc.tools.common.list_user_cars import list_user_cars
-    from hlsc.tools.common.collect_car_info import collect_car_info
-    from hlsc.tools.common.geocode_location import geocode_location
-    from hlsc.tools.common.collect_location import collect_location
+    from hlsc.tools.get_representative_car_model import get_representative_car_model
+    from hlsc.tools.list_user_cars import list_user_cars
+    from hlsc.tools.collect_car_info import collect_car_info
+    from hlsc.tools.geocode_location import geocode_location
+    from hlsc.tools.collect_location import collect_location
 
     # Context formatter
     from agent_sdk._common.request_context import ContextFormatter, RequestContext

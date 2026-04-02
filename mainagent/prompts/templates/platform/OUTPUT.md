@@ -9,9 +9,9 @@
 Supported `spec` types:
 
 - `ProjectCard`
-  - `props`: `{ name: string, labor_fee: number, parts_fee: number, total_price: number, duration?: string }`
+  - `props`: `{ name: string, required_precision?: string }`
 - `ShopCard`
-  - `props`: `{ shop_id: number, name: string }`
+  - `props`: `{ shop_id: number, name: string, address?: string, phone?: string, distance?: string, rating?: number }`
 - `CouponCard`
   - `props`: `{ shop_id: number, shop_name: string, activity_id: number, activity_name: string }`
 - `AppointmentCard`
