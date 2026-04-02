@@ -48,7 +48,6 @@ scenes:
       - geocode_location
       - match_project
       - list_user_cars
-      - confirm_booking
       - update_session_state
     skills:
       - saving-playbook
@@ -58,17 +57,16 @@ scenes:
     agent_md: searchcoupons/AGENT.md
     tools:
       - search_coupon
-      - search_shops
+      - apply_coupon
       - classify_project
       - match_project
       - collect_car_info
       - collect_location
       - geocode_location
       - list_user_cars
-      - confirm_booking
       - update_session_state
     skills:
-      - saving-playbook
+      - saving-methods
 
   insurance:
     prompt_parts: [SYSTEM.md, SOUL.md, insurance/OUTPUT.md]

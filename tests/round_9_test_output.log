@@ -1,0 +1,25 @@
+Uninstalled 2 packages in 51ms
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 4 packages in 501ms
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /mnt/e/Documents/github/com.celiang.hlsc.service.ai.chatagent/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /mnt/e/Documents/github/com.celiang.hlsc.service.ai.chatagent
+configfile: pyproject.toml
+plugins: anyio-4.12.1, logfire-4.28.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 0 items
+
+=============================== warnings summary ===============================
+tests/test_searchcoupons_e2e.py:44
+  /mnt/e/Documents/github/com.celiang.hlsc.service.ai.chatagent/tests/test_searchcoupons_e2e.py:44: PytestCollectionWarning: cannot collect test class 'TestStatus' because it has a __init__ constructor (from: tests/test_searchcoupons_e2e.py)
+    class TestStatus(Enum):
+
+tests/test_searchcoupons_e2e.py:65
+  /mnt/e/Documents/github/com.celiang.hlsc.service.ai.chatagent/tests/test_searchcoupons_e2e.py:65: PytestCollectionWarning: cannot collect test class 'TestResult' because it has a __init__ constructor (from: tests/test_searchcoupons_e2e.py)
+    @dataclass
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= 2 warnings in 0.35s ==============================

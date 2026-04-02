@@ -28,6 +28,9 @@ from hlsc.tools.match_project import match_project
 # 下单
 from hlsc.tools.confirm_booking import confirm_booking
 
+# 优惠申领
+from hlsc.tools.apply_coupon import apply_coupon
+
 
 def create_agent_app() -> AgentApp:
     """创建 HLSC 主 AgentApp"""
@@ -47,8 +50,9 @@ def create_agent_app() -> AgentApp:
         "collect_location": collect_location,
         # 商户
         "search_shops": search_shops,
-        # 优惠查询
+        # 优惠查询与申领
         "search_coupon": search_coupon,
+        "apply_coupon": apply_coupon,
         # 下单
         "confirm_booking": confirm_booking,
         # 会话状态

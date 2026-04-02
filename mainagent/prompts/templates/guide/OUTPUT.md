@@ -3,7 +3,8 @@
 ## `action`
 
 - `change_car`
-  - Use only when your reply mentions a specific car model — provides an entry for user to correct it if wrong. Requires a valid current_car_model_id. Do NOT use when there is no car info yet — use the collect_car_info tool to collect car info from scratch.
+  - 触发条件：你的回复中提到了用户的具体车型（如"按您的 2021 朗逸来看"）→ 附带 change_car action，让用户发现车型不对时可以纠正
+  - 不适用：用户还没有车型信息时，不要用 change_car。应调用 collect_car_info 工具从头收集
   - fields: `{ "action": "change_car", "current_car_model_id": string }`
 
 <example>
