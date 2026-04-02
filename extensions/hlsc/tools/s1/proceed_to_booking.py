@@ -44,16 +44,34 @@ async def proceed_to_booking(
     _config_loader.ensure_loaded()
     s2_config = _config_loader.get_stage("S2")
     ctx.deps.current_stage = "S2"
+    ctx.deps.current_scene = "multi"
     ctx.deps.available_tools = s2_config.tools
     ctx.deps.allowed_skills = s2_config.skills
 
     # 3. 加载 S2 的 system prompt，写入 deps 让 loop 下次 ModelRequestNode 前替换
+    #    OUTPUT.md 是 Jinja2 模板，需要渲染
+    from jinja2 import Template
+
     templates_dir: Path = Path(__file__).resolve().parents[4] / "mainagent" / "prompts" / "templates"
-    parts: list[str] = ["SYSTEM.md", "SOUL.md", "OUTPUT.md", "AGENT_S2.md"]
-    system_prompt: str = "\n\n".join(
+    static_parts: list[str] = ["SYSTEM.md", "SOUL.md"]
+    prompt_sections: list[str] = [
         (templates_dir / p).read_text(encoding="utf-8").strip()
-        for p in parts if (templates_dir / p).exists()
-    )
+        for p in static_parts if (templates_dir / p).exists()
+    ]
+    # 渲染 OUTPUT.md
+    output_path: Path = templates_dir / "OUTPUT.md"
+    if output_path.exists():
+        output_raw: str = output_path.read_text(encoding="utf-8").strip()
+        output_rendered: str = Template(output_raw).render(stage="S2", scene="multi").strip()
+        if output_rendered:
+            prompt_sections.append(output_rendered)
+    # AGENT_S2.md
+    agent_path: Path = templates_dir / "AGENT_S2.md"
+    if agent_path.exists():
+        agent_content: str = agent_path.read_text(encoding="utf-8").strip()
+        if agent_content:
+            prompt_sections.append(agent_content)
+    system_prompt: str = "\n\n".join(prompt_sections)
     ctx.deps.system_prompt_override = system_prompt
 
     # 构建返回值

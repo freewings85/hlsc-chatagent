@@ -5,6 +5,11 @@
 # 升级路径：
 #   1. 硬信号（UserStatService）→ 一定 S2
 #   2. 软信号（BMA 意图提取）→ 也放过去
+#
+# S2 场景路由：BMA 每轮分类 → 单场景走专属配置
+#   - 单场景 → 走该场景
+#   - 多场景 → 走 multi（全量工具）
+#   - 空列表 → 走 none（极简配置）
 # ============================================================
 
 
@@ -30,18 +35,67 @@ stages:
 
   S2:
     name: 下单模式
-    agent_md: AGENT_S2.md
-    tools:
-      - match_project
-      - search_shops
-      - call_recommend_project
-      - call_query_codingagent
-      - list_user_cars
-      - get_representative_car_model
-      - collect_car_info
-      - collect_location
-      - geocode_location
-      - confirm_booking
-    skills:
-      - saving-playbook
-      - insurance_bidding
+    scenes:
+      none:
+        agent_md: AGENT_S2_none.md
+        tools:
+          - classify_project
+          - search_shops
+          - list_user_cars
+          - collect_car_info
+          - collect_location
+          - geocode_location
+          - search_coupon
+        skills:
+          - saving-methods
+          - platform-intro
+      multi:
+        agent_md: AGENT_S2.md
+        tools:
+          - match_project
+          - search_shops
+          - call_recommend_project
+          - call_query_codingagent
+          - list_user_cars
+          - get_representative_car_model
+          - collect_car_info
+          - collect_location
+          - geocode_location
+          - confirm_booking
+          - search_coupon
+        skills:
+          - saving-playbook
+          - insurance-bidding
+      saving:
+        agent_md: AGENT_S2_saving.md
+        tools:
+          - match_project
+          - search_coupon
+          - search_shops
+          - collect_car_info
+          - collect_location
+          - geocode_location
+          - confirm_booking
+        skills:
+          - saving-playbook
+      shop:
+        agent_md: AGENT_S2_shop.md
+        tools:
+          - search_shops
+          - collect_location
+          - geocode_location
+          - match_project
+          - confirm_booking
+        skills:
+          - saving-playbook
+      insurance:
+        agent_md: AGENT_S2_insurance.md
+        tools:
+          - match_project
+          - search_shops
+          - collect_car_info
+          - collect_location
+          - geocode_location
+          - confirm_booking
+        skills:
+          - insurance-bidding

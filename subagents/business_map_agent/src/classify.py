@@ -1,10 +1,10 @@
-"""意图因子提取端点：调小模型提取用户意图因子。
+"""场景分类端点：调小模型判断用户意图所属场景。
 
 POST /classify
 请求：{ message, recent_turns? }
-响应：{ factors: { "intent.xxx": value, ... } }
+响应：{ scenes: ["saving"] } 或 { scenes: ["saving", "shop"] } 或 { scenes: [] }
 
-BMA 只做意图提取，不决定 tools/skills。
+BMA 只做场景分类，不决定 tools/skills。
 阶段判断（S1/S2）由 MainAgent hook 负责。
 """
 
@@ -23,6 +23,10 @@ from pydantic import BaseModel
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+# 合法场景 id 列表
+VALID_SCENES: list[str] = ["saving", "shop", "insurance"]
+
+
 # ============================================================
 # 请求 / 响应模型
 # ============================================================
@@ -36,30 +40,29 @@ class RecentTurn(BaseModel):
 
 
 class ClassifyRequest(BaseModel):
-    """意图因子提取请求。"""
+    """场景分类请求。"""
 
     message: str
     recent_turns: list[RecentTurn] = []
 
 
 class ClassifyResponse(BaseModel):
-    """意图因子提取响应：只返回因子值。"""
+    """场景分类响应：返回匹配的场景列表。"""
 
-    factors: dict[str, Any]
+    scenes: list[str]
 
 
 # ============================================================
-# 因子定义加载（从 scene_config.yaml）
+# 场景定义加载（从 scene_config.yaml）
 # ============================================================
 
-_factor_defs_text: str = ""
-_factor_names: list[str] = []
+_scene_defs_text: str = ""
 
 
-def _ensure_factor_defs() -> None:
-    """加载 scene_config.yaml 中的因子定义。"""
-    global _factor_defs_text, _factor_names
-    if _factor_defs_text:
+def _ensure_scene_defs() -> None:
+    """加载 scene_config.yaml 中的场景定义。"""
+    global _scene_defs_text
+    if _scene_defs_text:
         return
 
     import yaml
@@ -76,25 +79,19 @@ def _ensure_factor_defs() -> None:
         )
 
     raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    factors_raw: dict[str, Any] = raw.get("factors", {})
+    scenes_raw: list[dict[str, Any]] = raw.get("scenes", [])
 
     lines: list[str] = []
-    names: list[str] = []
+    scene: dict[str, Any]
+    for scene in scenes_raw:
+        scene_id: str = scene["id"]
+        desc: str = scene["description"]
+        keywords: list[str] = scene.get("keywords", [])
+        keywords_str: str = "、".join(keywords)
+        lines.append(f"- {scene_id}: {desc}（关键词：{keywords_str}）")
 
-    item: dict[str, Any]
-    for item in factors_raw.get("bool", []):
-        names.append(item["name"])
-        lines.append(f"- {item['name']} (bool): {item['description']}")
-
-    for item in factors_raw.get("enum", []):
-        names.append(item["name"])
-        options: str = " / ".join(item["options"])
-        lines.append(f"- {item['name']} (enum: {options}): {item['description']}")
-
-    _factor_defs_text = "\n".join(lines)
-    _factor_names = names
-
-    logger.info("加载 %d 个因子定义", len(names))
+    _scene_defs_text = "\n".join(lines)
+    logger.info("加载 %d 个场景定义", len(scenes_raw))
 
 
 # ============================================================
@@ -114,7 +111,7 @@ def _load_system_prompt() -> str:
         _SYSTEM_PROMPT = prompt_path.read_text(encoding="utf-8").strip()
     else:
         logger.warning("system.md 不存在: %s", prompt_path)
-        _SYSTEM_PROMPT = "你是意图标签提取器。严格输出 JSON 对象。"
+        _SYSTEM_PROMPT = "你是场景分类器。严格输出 JSON 对象，格式为 {\"scenes\": [...]}。"
     return _SYSTEM_PROMPT
 
 
@@ -125,18 +122,18 @@ def _load_system_prompt() -> str:
 
 async def _call_llm(
     message: str,
-    factor_defs: str,
+    scene_defs: str,
     recent_turns: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """调小模型提取意图因子。"""
+    """调小模型进行场景分类。"""
     endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
     api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
     deployment: str = os.getenv("AZURE_DEPLOYMENT_NAME", "gpt-4.1-mini")
     api_version: str = os.getenv("AZURE_API_VERSION", "2024-12-01-preview")
 
     if not endpoint or not api_key:
-        logger.warning("Azure OpenAI 未配置，返回空因子")
-        return {}
+        logger.warning("Azure OpenAI 未配置，返回空场景列表")
+        return {"scenes": []}
 
     url: str = (
         f"{endpoint.rstrip('/')}/openai/deployments/{deployment}"
@@ -154,7 +151,7 @@ async def _call_llm(
         history_text = "\n".join(history_lines)
 
     user_prompt: str = (
-        f"[标签定义]\n{factor_defs}\n\n"
+        f"[场景定义]\n{scene_defs}\n\n"
         f"[最近对话]\n{history_text}\n\n"
         f"[用户消息]\n{message}"
     )
@@ -187,12 +184,12 @@ async def _call_llm(
 
 
 async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
-    """提取意图因子。"""
-    _ensure_factor_defs()
+    """场景分类。"""
+    _ensure_scene_defs()
 
-    factors: dict[str, Any] = {}
+    scenes: list[str] = []
 
-    if _factor_names:
+    if _scene_defs_text:
         turns: list[dict[str, str]] = (
             [{"role": t.role, "content": t.content} for t in request.recent_turns]
             if request.recent_turns
@@ -200,19 +197,17 @@ async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
         )
         try:
             llm_result: dict[str, Any] = await _call_llm(
-                request.message, _factor_defs_text, recent_turns=turns
+                request.message, _scene_defs_text, recent_turns=turns
             )
-            # 只保留声明过的因子
-            name: str
-            for name in _factor_names:
-                if name in llm_result:
-                    factors[name] = llm_result[name]
+            # 只保留合法的场景 id
+            raw_scenes: list[str] = llm_result.get("scenes", [])
+            scenes = [s for s in raw_scenes if s in VALID_SCENES]
         except Exception:
-            logger.warning("LLM 意图提取失败", exc_info=True)
+            logger.warning("LLM 场景分类失败", exc_info=True)
 
-    logger.info("意图因子提取: %s", factors)
+    logger.info("场景分类结果: %s", scenes)
 
-    return ClassifyResponse(factors=factors)
+    return ClassifyResponse(scenes=scenes)
 
 
 # ============================================================
@@ -226,8 +221,8 @@ def create_app() -> FastAPI:
 
     app: FastAPI = FastAPI(
         title="BusinessMapAgent",
-        description="意图因子提取服务",
-        version="3.0",
+        description="场景分类服务",
+        version="4.0",
     )
     app.add_middleware(
         CORSMiddleware,
@@ -242,7 +237,7 @@ def create_app() -> FastAPI:
 
     @app.post("/classify", response_model=ClassifyResponse)
     async def classify(request: ClassifyRequest) -> ClassifyResponse:
-        """意图因子提取端点。"""
+        """场景分类端点。"""
         return await _do_classify(request)
 
     return app

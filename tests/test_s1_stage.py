@@ -1,4 +1,8 @@
-"""S1 阶段单元测试：验证 UserStatService / StageHook / proceed_to_booking 核心行为。
+"""阶段 + 场景路由单元测试：验证 UserStatService / StageHook / proceed_to_booking / Jinja2 渲染。
+
+场景模型（3+2）：
+  S2 scenes: saving, shop, insurance（业务场景）
+             none（BMA 返回空）, multi（BMA 返回多场景）
 
 运行方式：
     cd /mnt/e/Documents/github/com.celiang.hlsc.service.ai.chatagent
@@ -103,6 +107,7 @@ class TestStageHook:
         from business_map_hook import _config_loader
         _config_loader._loaded = False
         _config_loader._stages = {}
+        _config_loader._s2_scenes = {}
 
         # 重置 UserStatService 单例
         import hlsc.services.user_stat_service as uss_mod
@@ -139,10 +144,10 @@ class TestStageHook:
         assert deps.current_stage == "S1"
         assert "confirm_booking" not in deps.available_tools
 
-    # ---- B2: 已升级用户 → S2，available_tools 含 confirm_booking ----
+    # ---- B2: 已升级用户 → S2，BMA 返回 multi 场景 → tools 含 confirm_booking ----
     @pytest.mark.asyncio
     async def test_upgraded_user_gets_s2(self) -> None:
-        """已升级到 S2 的用户 → S2，tools 含 confirm_booking。"""
+        """已升级到 S2 的用户 → S2，multi 场景 tools 含 confirm_booking。"""
         from business_map_hook import StageHook
 
         # 先升级
@@ -151,14 +156,17 @@ class TestStageHook:
         hook: StageHook = StageHook()
         deps: AgentDeps = self._make_deps()
 
-        await hook(
-            user_id="upgraded_user_b2",
-            session_id="sess-b2",
-            deps=deps,
-            message="我要下单",
-        )
+        # S2 会调 BMA，mock 返回多场景 → multi
+        with patch("business_map_hook._call_bma_classify", new_callable=AsyncMock, return_value=["saving", "shop"]):
+            await hook(
+                user_id="upgraded_user_b2",
+                session_id="sess-b2",
+                deps=deps,
+                message="我要下单",
+            )
 
         assert deps.current_stage == "S2"
+        assert deps.current_scene == "multi"
         assert "confirm_booking" in deps.available_tools
 
     # ---- B3: S1 的 tools 含 proceed_to_booking ----
@@ -182,10 +190,10 @@ class TestStageHook:
         assert deps.current_stage == "S1"
         assert "proceed_to_booking" in deps.available_tools
 
-    # ---- B4: S2 的 tools 含 confirm_booking ----
+    # ---- B4: S2 saving 场景 → tools 含 confirm_booking ----
     @pytest.mark.asyncio
     async def test_s2_tools_contain_confirm_booking(self) -> None:
-        """S2 阶段的 available_tools 包含 confirm_booking。"""
+        """S2 saving 场景的 available_tools 包含 confirm_booking。"""
         from business_map_hook import StageHook
 
         await self.user_stat_service.upgrade_to_s2("user_b4")
@@ -193,14 +201,17 @@ class TestStageHook:
         hook: StageHook = StageHook()
         deps: AgentDeps = self._make_deps()
 
-        await hook(
-            user_id="user_b4",
-            session_id="sess-b4",
-            deps=deps,
-            message="预订",
-        )
+        # mock BMA 返回单场景 saving → confirm_booking 可用
+        with patch("business_map_hook._call_bma_classify", new_callable=AsyncMock, return_value=["saving"]):
+            await hook(
+                user_id="user_b4",
+                session_id="sess-b4",
+                deps=deps,
+                message="预订",
+            )
 
         assert deps.current_stage == "S2"
+        assert deps.current_scene == "saving"
         assert "confirm_booking" in deps.available_tools
 
 
@@ -221,6 +232,7 @@ class TestProceedToBooking:
         from business_map_hook import _config_loader
         _config_loader._loaded = False
         _config_loader._stages = {}
+        _config_loader._s2_scenes = {}
 
     @pytest.fixture(autouse=True)
     def _reset_user_stat(self) -> None:
@@ -371,9 +383,373 @@ class TestProceedToBooking:
 
         # deps 已即时切换
         assert ctx.deps.current_stage == "S2"
+        assert ctx.deps.current_scene == "multi"
         assert "confirm_booking" in ctx.deps.available_tools
         assert "proceed_to_booking" not in ctx.deps.available_tools
         # system_prompt_override 已设置
         assert ctx.deps.system_prompt_override is not None
         assert "AGENT_S2" not in ctx.deps.system_prompt_override  # 不含文件名，含内容
         assert len(ctx.deps.system_prompt_override) > 100  # 不为空
+
+
+# ============================================================
+# D. S2 场景路由测试（BMA mock）
+# ============================================================
+
+
+class TestS2SceneRouting:
+    """S2 场景路由测试：mock BMA 调用，验证不同场景分类结果下的 deps 写入。"""
+
+    @pytest.fixture(autouse=True)
+    def _setup_config_path(self) -> None:
+        """将 STAGE_CONFIG_PATH 指向真实 stage_config.yaml。"""
+        config_path: str = str(PROJECT_ROOT / "mainagent" / "stage_config.yaml")
+        os.environ["STAGE_CONFIG_PATH"] = config_path
+
+    @pytest.fixture(autouse=True)
+    def _reset_state(self) -> None:
+        """每个用例重置配置加载器和 UserStatService 单例。"""
+        from business_map_hook import _config_loader
+        _config_loader._loaded = False
+        _config_loader._stages = {}
+        _config_loader._s2_scenes = {}
+
+        import hlsc.services.user_stat_service as uss_mod
+        uss_mod.user_stat_service = UserStatService()
+        self.user_stat_service: UserStatService = uss_mod.user_stat_service
+
+    def _make_deps(self) -> AgentDeps:
+        """构建测试用 AgentDeps。"""
+        return AgentDeps(
+            session_id="test-session",
+            request_id="test-req",
+            user_id="test-user",
+        )
+
+    async def _setup_s2_user(self, user_id: str) -> None:
+        """将用户升级到 S2。"""
+        await self.user_stat_service.upgrade_to_s2(user_id)
+
+    # ---- D1: BMA 返回 ["saving"] → 走 saving 场景 ----
+    @pytest.mark.asyncio
+    async def test_s2_single_scene_saving(self) -> None:
+        """S2 用户 + BMA 返回 ["saving"] → deps.available_tools 包含 search_coupon。"""
+        from business_map_hook import StageHook
+
+        user_id: str = "user_d1"
+        await self._setup_s2_user(user_id)
+
+        hook: StageHook = StageHook()
+        deps: AgentDeps = self._make_deps()
+
+        with patch("business_map_hook._call_bma_classify", new_callable=AsyncMock, return_value=["saving"]):
+            await hook(user_id=user_id, session_id="sess-d1", deps=deps, message="有什么优惠券")
+
+        assert deps.current_stage == "S2"
+        assert deps.current_scene == "saving"
+        assert "search_coupon" in deps.available_tools
+        assert "confirm_booking" in deps.available_tools
+        assert deps.current_scene_agent_md == "AGENT_S2_saving.md"
+        # saving 场景不含 call_recommend_project（multi 才有）
+        assert "call_recommend_project" not in deps.available_tools
+
+    # ---- D2: BMA 返回 ["saving", "shop"] → 走 multi（多场景） ----
+    @pytest.mark.asyncio
+    async def test_s2_multi_scene_fallback_to_multi(self) -> None:
+        """S2 用户 + BMA 返回多场景 → 走 multi，deps.available_tools 包含全量工具。"""
+        from business_map_hook import StageHook
+
+        user_id: str = "user_d2"
+        await self._setup_s2_user(user_id)
+
+        hook: StageHook = StageHook()
+        deps: AgentDeps = self._make_deps()
+
+        with patch("business_map_hook._call_bma_classify", new_callable=AsyncMock, return_value=["saving", "shop"]):
+            await hook(user_id=user_id, session_id="sess-d2", deps=deps, message="找个便宜的店")
+
+        assert deps.current_stage == "S2"
+        assert deps.current_scene == "multi"
+        # multi 全量工具
+        assert "match_project" in deps.available_tools
+        assert "call_recommend_project" in deps.available_tools
+        assert "confirm_booking" in deps.available_tools
+        assert "search_coupon" in deps.available_tools
+        # multi 的 agent_md
+        assert deps.current_scene_agent_md == "AGENT_S2.md"
+
+    # ---- D3: BMA 返回 [] → 走 none（极简配置，无 confirm_booking） ----
+    @pytest.mark.asyncio
+    async def test_s2_empty_scene_goes_to_none(self) -> None:
+        """S2 用户 + BMA 返回 [] → 走 none 场景（极简，不含 confirm_booking）。"""
+        from business_map_hook import StageHook
+
+        user_id: str = "user_d3"
+        await self._setup_s2_user(user_id)
+
+        hook: StageHook = StageHook()
+        deps: AgentDeps = self._make_deps()
+
+        with patch("business_map_hook._call_bma_classify", new_callable=AsyncMock, return_value=[]):
+            await hook(user_id=user_id, session_id="sess-d3", deps=deps, message="你好")
+
+        assert deps.current_stage == "S2"
+        assert deps.current_scene == "none"
+        assert deps.current_scene_agent_md == "AGENT_S2_none.md"
+        # none 场景：极简工具，不含 confirm_booking
+        assert "confirm_booking" not in deps.available_tools
+        assert "classify_project" in deps.available_tools
+        assert "search_shops" in deps.available_tools
+
+    # ---- D4: BMA 不可达 → 走 none（容错） ----
+    @pytest.mark.asyncio
+    async def test_s2_bma_unreachable_goes_to_none(self) -> None:
+        """S2 用户 + BMA 不可达 → _call_bma_classify 返回 []，走 none。"""
+        from business_map_hook import StageHook
+
+        user_id: str = "user_d4"
+        await self._setup_s2_user(user_id)
+
+        hook: StageHook = StageHook()
+        deps: AgentDeps = self._make_deps()
+
+        # mock BMA 调用返回 []（模拟不可达或无法分类）
+        with patch("business_map_hook._call_bma_classify", new_callable=AsyncMock, return_value=[]):
+            await hook(user_id=user_id, session_id="sess-d4", deps=deps, message="帮我看看")
+
+        assert deps.current_stage == "S2"
+        assert deps.current_scene == "none"
+        # none 场景不含 confirm_booking
+        assert "confirm_booking" not in deps.available_tools
+
+    # ---- D5: BMA 返回 ["insurance"] → 走 insurance 场景 ----
+    @pytest.mark.asyncio
+    async def test_s2_single_scene_insurance(self) -> None:
+        """S2 用户 + BMA 返回 ["insurance"] → deps.allowed_skills 包含 insurance-bidding。"""
+        from business_map_hook import StageHook
+
+        user_id: str = "user_d5"
+        await self._setup_s2_user(user_id)
+
+        hook: StageHook = StageHook()
+        deps: AgentDeps = self._make_deps()
+
+        with patch("business_map_hook._call_bma_classify", new_callable=AsyncMock, return_value=["insurance"]):
+            await hook(user_id=user_id, session_id="sess-d5", deps=deps, message="我要买保险")
+
+        assert deps.current_stage == "S2"
+        assert deps.current_scene == "insurance"
+        assert "insurance-bidding" in deps.allowed_skills
+        assert deps.current_scene_agent_md == "AGENT_S2_insurance.md"
+
+    # ---- D6: S1 用户不调 BMA ----
+    @pytest.mark.asyncio
+    async def test_s1_does_not_call_bma(self) -> None:
+        """S1 用户不调用 BMA 分类。"""
+        from business_map_hook import StageHook
+
+        hook: StageHook = StageHook()
+        deps: AgentDeps = self._make_deps()
+
+        mock_bma: AsyncMock = AsyncMock(return_value=["coupon"])
+        with patch.object(self.user_stat_service, "_check_has_car", new_callable=AsyncMock, return_value=False):
+            with patch("business_map_hook._call_bma_classify", mock_bma):
+                await hook(user_id="user_d6", session_id="sess-d6", deps=deps, message="你好")
+
+        assert deps.current_stage == "S1"
+        mock_bma.assert_not_called()
+
+
+# ============================================================
+# E. prompt_loader 测试
+# ============================================================
+
+
+class TestPromptLoader:
+    """prompt_loader 测试：验证不同 stage/scene 下加载正确的 AGENT.md。"""
+
+    @pytest.fixture(autouse=True)
+    def _setup_cwd(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """切换 cwd 到 mainagent/，因为 prompt_loader 用相对路径读模板。"""
+        monkeypatch.chdir(PROJECT_ROOT / "mainagent")
+
+    # ---- E1: S1 用户 → 加载 AGENT_S1.md ----
+    @pytest.mark.asyncio
+    async def test_s1_loads_agent_s1(self) -> None:
+        """S1 用户 → get_agent_md_content 返回 AGENT_S1.md 内容。"""
+        from prompt_loader import MainPromptLoader
+
+        loader: MainPromptLoader = MainPromptLoader(template_parts=[])
+        deps: MagicMock = MagicMock()
+        deps.current_stage = "S1"
+        deps.current_scene_agent_md = None
+
+        content: str | None = await loader.get_agent_md_content(
+            user_id="u1", session_id="s1", deps=deps,
+        )
+
+        assert content is not None
+        assert len(content) > 0
+
+    # ---- E2: S2 default → 加载 AGENT_S2.md ----
+    @pytest.mark.asyncio
+    async def test_s2_default_loads_agent_s2(self) -> None:
+        """S2 default → get_agent_md_content 返回 AGENT_S2.md 内容。"""
+        from prompt_loader import MainPromptLoader
+
+        loader: MainPromptLoader = MainPromptLoader(template_parts=[])
+        deps: MagicMock = MagicMock()
+        deps.current_stage = "S2"
+        deps.current_scene_agent_md = None
+
+        content: str | None = await loader.get_agent_md_content(
+            user_id="u2", session_id="s2", deps=deps,
+        )
+
+        assert content is not None
+        assert len(content) > 0
+
+    # ---- E3: S2 saving → 加载 AGENT_S2_saving.md ----
+    @pytest.mark.asyncio
+    async def test_s2_saving_loads_scene_md(self) -> None:
+        """S2 saving → get_agent_md_content 返回 AGENT_S2_saving.md 内容。"""
+        from prompt_loader import MainPromptLoader
+
+        loader: MainPromptLoader = MainPromptLoader(template_parts=[])
+        deps: MagicMock = MagicMock()
+        deps.current_stage = "S2"
+        deps.current_scene_agent_md = "AGENT_S2_saving.md"
+
+        content: str | None = await loader.get_agent_md_content(
+            user_id="u3", session_id="s3", deps=deps,
+        )
+
+        # 应该加载 AGENT_S2_saving.md 而不是 AGENT_S2.md
+        assert content is not None
+        assert len(content) > 0
+
+    # ---- E4: scene_agent_md 指向不存在的文件 → 回退到 AGENT_S2.md ----
+    @pytest.mark.asyncio
+    async def test_s2_invalid_scene_md_fallback(self) -> None:
+        """scene_agent_md 指向不存在文件 → 回退到 AGENT_S2.md。"""
+        from prompt_loader import MainPromptLoader
+
+        loader: MainPromptLoader = MainPromptLoader(template_parts=[])
+        deps: MagicMock = MagicMock()
+        deps.current_stage = "S2"
+        deps.current_scene_agent_md = "AGENT_S2_nonexistent.md"
+
+        content: str | None = await loader.get_agent_md_content(
+            user_id="u4", session_id="s4", deps=deps,
+        )
+
+        # 文件不存在时回退到 default AGENT_S2.md
+        assert content is not None
+
+
+# ============================================================
+# F. Jinja2 OUTPUT.md 渲染测试
+# ============================================================
+
+
+class TestOutputMdRendering:
+    """OUTPUT.md Jinja2 模板渲染测试：验证不同 stage/scene 组合下的输出内容。"""
+
+    @pytest.fixture(autouse=True)
+    def _setup_cwd(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """切换 cwd 到 mainagent/，因为 prompt_loader 用相对路径读模板。"""
+        monkeypatch.chdir(PROJECT_ROOT / "mainagent")
+
+    @pytest.fixture(autouse=True)
+    def _reset_template_cache(self) -> None:
+        """重置 OUTPUT.md 模板缓存，避免用例间污染。"""
+        import prompt_loader
+        prompt_loader._output_template = None
+
+    # ---- F1: S1, scene=none → 无 spec/action 输出 ----
+    def test_s1_none_no_spec_action(self) -> None:
+        """S1 + scene=none → 渲染结果无 spec/action 块（只有 # Output 标题）。"""
+        from prompt_loader import _render_output_md
+
+        rendered: str = _render_output_md(stage="S1", scene="none")
+        assert "`spec`" not in rendered
+        assert "`action`" not in rendered
+        assert "ShopCard" not in rendered
+        assert "CouponCard" not in rendered
+
+    # ---- F2: S2, scene=saving → 有 CouponCard + ShopCard ----
+    def test_s2_saving_has_coupon_and_shop_card(self) -> None:
+        """S2 + scene=saving → 渲染结果包含 CouponCard 和 ShopCard。"""
+        from prompt_loader import _render_output_md
+
+        rendered: str = _render_output_md(stage="S2", scene="saving")
+        assert "CouponCard" in rendered
+        assert "ShopCard" in rendered
+        assert "ProjectCard" in rendered
+        # saving 不含 AppointmentCard / PartPriceCard / RecommendProjectsCard
+        assert "AppointmentCard" not in rendered
+        assert "PartPriceCard" not in rendered
+        assert "RecommendProjectsCard" not in rendered
+        # 有 spec 段
+        assert "`spec`" in rendered
+        # 有 change_car action
+        assert "change_car" in rendered
+        # saving 不含 invite_shop
+        assert "invite_shop" not in rendered
+
+    # ---- F3: S2, scene=shop → 有 ShopCard，无 CouponCard ----
+    def test_s2_shop_has_shop_card_only(self) -> None:
+        """S2 + scene=shop → 渲染结果只含 ShopCard。"""
+        from prompt_loader import _render_output_md
+
+        rendered: str = _render_output_md(stage="S2", scene="shop")
+        assert "ShopCard" in rendered
+        assert "CouponCard" not in rendered
+        assert "ProjectCard" not in rendered
+        # shop 有 invite_shop action
+        assert "invite_shop" in rendered
+        # shop 没有 change_car
+        assert "change_car" not in rendered
+
+    # ---- F4: S2, scene=insurance → 有 RecommendProjectsCard + ShopCard + CouponCard ----
+    def test_s2_insurance_has_full_cards(self) -> None:
+        """S2 + scene=insurance → 渲染结果包含 RecommendProjectsCard、ShopCard、CouponCard。"""
+        from prompt_loader import _render_output_md
+
+        rendered: str = _render_output_md(stage="S2", scene="insurance")
+        assert "RecommendProjectsCard" in rendered
+        assert "ShopCard" in rendered
+        assert "ProjectCard" in rendered
+        assert "AppointmentCard" in rendered
+        assert "CouponCard" in rendered
+        # insurance 不含 PartPriceCard
+        assert "PartPriceCard" not in rendered
+        # insurance 有 change_car
+        assert "change_car" in rendered
+
+    # ---- F5: S2, scene=multi → 全量卡片 ----
+    def test_s2_multi_has_all_cards(self) -> None:
+        """S2 + scene=multi → 渲染结果包含所有卡片类型。"""
+        from prompt_loader import _render_output_md
+
+        rendered: str = _render_output_md(stage="S2", scene="multi")
+        assert "RecommendProjectsCard" in rendered
+        assert "ShopCard" in rendered
+        assert "ProjectCard" in rendered
+        assert "AppointmentCard" in rendered
+        assert "PartPriceCard" in rendered
+        assert "CouponCard" in rendered
+        # multi 同时有 change_car 和 invite_shop
+        assert "change_car" in rendered
+        assert "invite_shop" in rendered
+
+    # ---- F6: S2, scene=none → 无 spec/action 输出 ----
+    def test_s2_none_no_spec_action(self) -> None:
+        """S2 + scene=none → 渲染结果无 spec/action 块（只有 # Output 标题）。"""
+        from prompt_loader import _render_output_md
+
+        rendered: str = _render_output_md(stage="S2", scene="none")
+        assert "`spec`" not in rendered
+        assert "`action`" not in rendered
+        assert "ShopCard" not in rendered
+        assert "CouponCard" not in rendered

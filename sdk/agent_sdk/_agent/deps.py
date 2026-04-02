@@ -58,3 +58,7 @@ class AgentDeps:
     temporal_client: TemporalClient | None = None
     # 即时切换：工具执行后设置，下次 ModelRequestNode 前替换 system prompt
     system_prompt_override: str | None = None
+    # 场景级 agent_md 文件名（由 hook 设置，prompt_loader 优先使用）
+    current_scene_agent_md: str | None = None
+    # 当前场景标识（hook 设置，prompt_loader 用于渲染 OUTPUT.md 模板）
+    current_scene: str = "none"
