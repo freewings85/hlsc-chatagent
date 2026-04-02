@@ -29,7 +29,7 @@ from hlsc.tools.match_project import match_project
 from hlsc.tools.confirm_booking import confirm_booking
 
 # 优惠申领
-from hlsc.tools.apply_coupon import apply_coupon
+from hlsc.tools.book_coupon import book_coupon
 
 
 def create_agent_app() -> AgentApp:
@@ -52,7 +52,7 @@ def create_agent_app() -> AgentApp:
         "search_shops": search_shops,
         # 优惠查询与申领
         "search_coupon": search_coupon,
-        "apply_coupon": apply_coupon,
+        "book_coupon": book_coupon,
         # 下单
         "confirm_booking": confirm_booking,
         # 会话状态

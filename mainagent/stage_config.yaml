@@ -55,7 +55,7 @@ scenes:
     agent_md: searchcoupons/AGENT.md
     tools:
       - search_coupon
-      - apply_coupon
+      - book_coupon
       - classify_project
       - collect_location
       - geocode_location

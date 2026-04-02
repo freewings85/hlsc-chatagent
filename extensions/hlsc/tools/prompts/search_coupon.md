@@ -4,9 +4,9 @@
 - project_ids: 项目 ID 列表（可选），来自 classify_project。无明确项目时传 null
 - shop_ids: 商户 ID 列表（可选），未指定商户时传空列表
 - city: 城市名称（可选），用于按地域筛选（如"北京"）
-- latitude: 用户纬度（可选），来自 geocode_location 返回，配合 radius 做距离筛选
-- longitude: 用户经度（可选），来自 geocode_location 返回
-- radius: 搜索半径（米）。配合 latitude/longitude 使用。用户没有明确指定距离时不要传此参数，后端会使用默认配置
+- latitude: 用户纬度（必填）。来源优先级：request_context 已有 → 直接用；session_state 已有 → 直接用；都没有 → 先调 collect_location + geocode_location 获取
+- longitude: 用户经度（必填）。来源同 latitude
+- radius: 搜索半径（米，可选）。用户明确指定距离时传（如"5公里内"传 5000），否则不传，后端使用默认配置
 - date: 查询日期（YYYY-MM-DD，可选），过滤该日期有效的优惠。用户说"这周末"→ 根据当前日期算出具体日期。默认当天
 - semantic_query: 用户对优惠的自然语言偏好描述（可选）。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数。例如"支付宝支付的满减活动、送洗车的"
 - sort_by: 排序方式 — default（默认热度）/ discount_amount（优惠金额）/ validity_end（即将过期优先）
