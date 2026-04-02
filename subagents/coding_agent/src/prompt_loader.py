@@ -10,7 +10,7 @@ _PROMPTS_DIR = Path("prompts")
 _TEMPLATES_DIR = _PROMPTS_DIR / "templates"
 
 SYSTEM_PROMPT_PARTS = [
-    _TEMPLATES_DIR / "system.md",
+    _TEMPLATES_DIR / "SYSTEM.md",
 ]
 
 

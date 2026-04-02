@@ -12,7 +12,7 @@ _TEMPLATES_DIR = _PROMPTS_DIR / "templates"
 
 # 系统提示词模板（按拼接顺序排列）
 SYSTEM_PROMPT_PARTS: list[Path] = [
-    _TEMPLATES_DIR / "system.md",
+    _TEMPLATES_DIR / "SYSTEM.md",
 ]
 
 

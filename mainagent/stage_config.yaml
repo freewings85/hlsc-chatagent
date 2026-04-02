@@ -14,7 +14,6 @@ scenes:
     prompt_parts: [SYSTEM.md, SOUL.md, guide/OUTPUT.md]
     agent_md: guide/AGENT.md
     tools:
-      - classify_project
       - list_user_cars
       - collect_car_info
       - update_session_state

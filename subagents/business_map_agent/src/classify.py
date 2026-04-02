@@ -63,11 +63,11 @@ def _load_system_prompt() -> str:
     global _SYSTEM_PROMPT
     if _SYSTEM_PROMPT:
         return _SYSTEM_PROMPT
-    prompt_path: Path = Path(__file__).resolve().parent.parent / "prompts" / "system.md"
+    prompt_path: Path = Path(__file__).resolve().parent.parent / "prompts" / "SYSTEM.md"
     if prompt_path.exists():
         _SYSTEM_PROMPT = prompt_path.read_text(encoding="utf-8").strip()
     else:
-        logger.warning("system.md 不存在: %s", prompt_path)
+        logger.warning("SYSTEM.md 不存在: %s", prompt_path)
         _SYSTEM_PROMPT = "你是场景分类器。严格输出 JSON 对象，格式为 {\"scenes\": [...]}。"
     return _SYSTEM_PROMPT
 
