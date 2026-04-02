@@ -14,7 +14,7 @@
 返回：
 - platformActivities — 平台优惠活动列表
 - shopActivities — 门店优惠活动列表
-- 每条包含 activity_id、activity_name、shop_id、shop_name、activity_description、address、phone、rating
+- 每条包含 coupon_id、coupon_name、shop_id、shop_name、coupon_description、address、phone、rating
 
 使用场景：
 - 有项目：search_coupon(project_ids=["换机油ID"], top_k=10)

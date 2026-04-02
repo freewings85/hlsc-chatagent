@@ -9,48 +9,35 @@
 Supported `spec` types:
 
 - `CouponCard`
-  - `props`: `{ shop_id: number, shop_name: string, activity_id: string, activity_name: string, discount_amount?: number, validity_end?: string, usage_condition?: string }`
+  - `props`: `{ shop_id: number, shop_name: string, coupon_id: string, coupon_name: string, discount_amount?: number, validity_end?: string, usage_condition?: string }`
 
 <example>
 帮你找到这些优惠。
 
 ```spec
-{"type":"CouponCard","props":{"shop_id":1001,"shop_name":"店A","activity_id":"ACT123","activity_name":"机油享 8 折","discount_amount":80,"validity_end":"2026-04-30","usage_condition":"满 500 元可用"}}
-{"type":"CouponCard","props":{"shop_id":1002,"shop_name":"店B","activity_id":"ACT456","activity_name":"机油享 7.5 折","discount_amount":100,"validity_end":"2026-05-15","usage_condition":"满 500 元可用"}}
+{"type":"CouponCard","props":{"shop_id":1001,"shop_name":"途虎养车朝阳店","coupon_id":"2001","coupon_name":"换机油满500减80","discount_amount":80,"validity_end":"2026-06-30","usage_condition":"满500元可用"}}
 ```
 
 要我帮你申请哪个？
+</example>
 
-```action
-{"action":"apply_coupon","activity_id":"ACT123","shop_id":"1001","visit_time":"明天下午3点"}
+- `CouponOrderCard`
+  - 申领成功后展示。
+  - `props`: `{ order_id: string, shop_name: string, coupon_name: string, visit_time: string }`
+
+<example>
+已帮你申领成功！
+
+```spec
+{"type":"CouponOrderCard","props":{"order_id":"ORD-20260402-001","shop_name":"途虎养车朝阳店","coupon_name":"换机油满500减80","visit_time":"明天下午3点"}}
 ```
+
+商家会收到你的预约信息，到店时报订单号即可。
 </example>
 
 ## `action`
 
-- `apply_coupon`
-  - When user wants to apply/book a coupon. Generates a contact slip, not a complete booking.
-  - fields: `{ "action": "apply_coupon", "activity_id": string, "shop_id": string, "visit_time": string }`
-  - `visit_time`: 到店时间，支持自然语言（如"明天下午3点"、"周六上午"、"这周五"）；用户未指定时不填
-
-<example>
-机油 8 折很划算，要我帮你申请吗？
-
-```action
-{"action":"apply_coupon","activity_id":"ACT123","shop_id":"1001","visit_time":"明天下午3点"}
-```
-</example>
-
 - `change_car`
-  - Use only when your reply mentions a specific car model — provides an entry for user to correct it if wrong. Requires a valid current_car_model_id. Do NOT use when there is no car info yet.
+  - 触发条件：你的回复中提到了用户的具体车型 → 附带 change_car action，让用户纠正
+  - 不适用：用户还没有车型信息时，应调用 collect_car_info 工具从头收集
   - fields: `{ "action": "change_car", "current_car_model_id": string }`
-
-<example>
-那我按 `2021款大众朗逸 1.5L` 继续帮你看。
-
-```action
-{"action":"change_car","current_car_model_id":"******"}
-```
-
-接下来帮你查优惠。
-</example>
