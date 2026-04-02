@@ -19,6 +19,53 @@ import yaml
 
 from agent_sdk._agent.deps import AgentDeps
 
+
+# ============================================================
+# 对话历史提取（给 BMA 做分类用）
+# ============================================================
+
+
+def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dict[str, str]]:
+    """从 inner_storage_backend 加载最近几轮对话，格式化为 BMA 需要的 recent_turns。
+
+    返回 [{"role": "user"|"assistant", "content": "..."}]，最多 max_turns 轮。
+    加载失败时返回空列表（不影响分类，BMA 会退化为只看当前消息）。
+    """
+    try:
+        backend = deps.inner_storage_backend
+        if backend is None:
+            return []
+
+        import json
+
+        # 读取 messages.jsonl（和 MemoryMessageService 同路径）
+        messages_path: str = f"sessions/{deps.session_id}/messages.jsonl"
+        raw: str = backend.read(messages_path)
+        if not raw:
+            return []
+
+        turns: list[dict[str, str]] = []
+        for line in raw.strip().split("\n"):
+            if not line.strip():
+                continue
+            msg: dict[str, Any] = json.loads(line)
+            role: str = msg.get("role", "")
+            # 提取文本内容
+            parts: list[dict[str, Any]] = msg.get("parts", [])
+            content_parts: list[str] = []
+            for part in parts:
+                if isinstance(part, dict) and part.get("content"):
+                    content_parts.append(str(part["content"]))
+            content: str = " ".join(content_parts).strip()
+            if role in ("user", "assistant") and content:
+                turns.append({"role": role, "content": content})
+
+        # 返回最近 max_turns 轮
+        return turns[-max_turns * 2:]  # 每轮包含 user + assistant
+    except Exception:
+        logger.debug("提取 recent_turns 失败，BMA 将只使用当前消息", exc_info=True)
+        return []
+
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -144,8 +191,11 @@ class StageHook:
     ) -> None:
         _config_loader.ensure_loaded()
 
+        # 提取最近几轮对话历史给 BMA
+        recent_turns: list[dict[str, str]] = _extract_recent_turns(deps, max_turns=5)
+
         # 调 BMA 分类
-        scenes: list[str] = await _call_bma_classify(message)
+        scenes: list[str] = await _call_bma_classify(message, recent_turns=recent_turns)
 
         # 路由决策
         scene: str
