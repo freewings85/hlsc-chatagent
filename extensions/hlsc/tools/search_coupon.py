@@ -20,6 +20,7 @@ from hlsc.tools.prompt_loader import load_tool_prompt
 
 DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 _COUPON_SEARCH_URL: str = os.getenv("COUPON_SEARCH_URL", "")
+_DEFAULT_RADIUS: int = int(os.getenv("SEARCH_COUPON_DEFAULT_RADIUS", "100000"))
 
 _DESCRIPTION: str = load_tool_prompt("search_coupon")
 
@@ -31,7 +32,7 @@ async def search_coupon(
     city: Annotated[str, Field(description="城市名称（如'北京'），用于按地域筛选优惠")] = "",
     latitude: Annotated[float | None, Field(description="用户纬度，来自 geocode_location 返回。用于按距离筛选附近的优惠")] = None,
     longitude: Annotated[float | None, Field(description="用户经度，来自 geocode_location 返回")] = None,
-    radius: Annotated[int, Field(description="搜索半径（米），默认不限。配合 latitude/longitude 使用，如 5000 表示 5 公里")] = 0,
+    radius: Annotated[int, Field(description="搜索半径（米）。配合 latitude/longitude 使用。用户没有明确指定距离时不要传此参数")] = 0,
     date: Annotated[str, Field(description="查询日期（YYYY-MM-DD），用于过滤该日期有效的优惠。默认当天")] = "",
     semantic_query: Annotated[str, Field(description="用户对优惠的自然语言偏好描述（如'支付宝支付的满减活动、送洗车的'）。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数")] = "",
     sort_by: Annotated[str, Field(description="排序方式：default（默认热度）/ discount_amount（优惠金额）/ validity_end（即将过期优先）")] = "default",
@@ -74,8 +75,9 @@ async def search_coupon(
     if latitude is not None and longitude is not None:
         payload["latitude"] = latitude
         payload["longitude"] = longitude
-        if radius > 0:
-            payload["radius"] = radius
+        # 用户指定了距离就用用户的，否则用配置默认值
+        actual_radius: int = radius if radius > 0 else _DEFAULT_RADIUS
+        payload["radius"] = actual_radius
     if date:
         payload["date"] = date
     if semantic_query:

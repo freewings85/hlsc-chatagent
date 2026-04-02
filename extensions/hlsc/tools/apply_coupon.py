@@ -1,6 +1,6 @@
 """apply_coupon 工具：为用户申领商户优惠，生成联系单。
 
-调用 web_owner 的 task/submit 接口，
+调用 service_ai_datamanager 的 task/submit 接口，
 生成用户与商家的联系单，返回联系单 ID（taskId）。
 """
 
@@ -18,7 +18,7 @@ from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end, log_http_request, log_http_response
 from hlsc.tools.prompt_loader import load_tool_prompt
 
-WEB_OWNER_URL: str = os.getenv("WEB_OWNER_URL", "")
+DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 
 _DESCRIPTION: str = load_tool_prompt("apply_coupon")
 
@@ -38,10 +38,10 @@ async def apply_coupon(
         "visit_time": visit_time,
     })
 
-    if not WEB_OWNER_URL:
-        return "Error: WEB_OWNER_URL 未配置"
+    if not DATA_MANAGER_URL:
+        return "Error: DATA_MANAGER_URL 未配置"
 
-    url: str = f"{WEB_OWNER_URL}/web_owner/task/submit"
+    url: str = f"{DATA_MANAGER_URL}/service_ai_datamanager/task/submit"
 
     payload: dict[str, object] = {
         "conversationId": sid,

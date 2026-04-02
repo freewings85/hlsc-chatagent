@@ -157,6 +157,10 @@ async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
         if request.recent_turns
         else []
     )
+    logger.info("BMA classify: message='%s', recent_turns=%d条", request.message, len(turns))
+    if turns:
+        logger.info("BMA recent_turns: %s", turns[-4:])
+
     try:
         llm_result: dict[str, Any] = await _call_llm(
             request.message, recent_turns=turns
@@ -178,6 +182,15 @@ async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
 def create_app() -> FastAPI:
     """创建 FastAPI 应用。"""
     from fastapi.middleware.cors import CORSMiddleware
+
+    # 配置日志输出到文件
+    log_dir: Path = Path(__file__).resolve().parent.parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    file_handler: logging.FileHandler = logging.FileHandler(log_dir / "bma.log", encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s"))
+    logging.getLogger().addHandler(file_handler)
+    logging.getLogger().setLevel(logging.INFO)
 
     app: FastAPI = FastAPI(
         title="BusinessMapAgent",

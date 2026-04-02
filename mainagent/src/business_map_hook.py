@@ -25,43 +25,48 @@ from agent_sdk._agent.deps import AgentDeps
 # ============================================================
 
 
-def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dict[str, str]]:
-    """从 inner_storage_backend 加载最近几轮对话，格式化为 BMA 需要的 recent_turns。
+async def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dict[str, str]]:
+    """通过 deps.memory_service 加载最近几轮对话，格式化为 BMA 需要的 recent_turns。
 
     返回 [{"role": "user"|"assistant", "content": "..."}]，最多 max_turns 轮。
     加载失败时返回空列表（不影响分类，BMA 会退化为只看当前消息）。
     """
     try:
-        backend = deps.inner_storage_backend
-        if backend is None:
+        memory_service = getattr(deps, "memory_service", None)
+        if memory_service is None:
+            logger.debug("deps 上没有 memory_service，跳过 recent_turns 提取")
             return []
 
-        import json
+        user_id: str = deps.user_id if hasattr(deps, "user_id") else ""
+        session_id: str = deps.session_id
 
-        # 读取 messages.jsonl（和 MemoryMessageService 同路径）
-        messages_path: str = f"sessions/{deps.session_id}/messages.jsonl"
-        raw: str = backend.read(messages_path)
-        if not raw:
-            return []
+        # 用 memory_service 加载历史消息
+        agent_messages = await memory_service.load(user_id, session_id)
 
         turns: list[dict[str, str]] = []
-        for line in raw.strip().split("\n"):
-            if not line.strip():
-                continue
-            msg: dict[str, Any] = json.loads(line)
-            role: str = msg.get("role", "")
+        for msg in agent_messages:
+            role: str = getattr(msg, "role", "")
+            content: str = ""
             # 提取文本内容
-            parts: list[dict[str, Any]] = msg.get("parts", [])
-            content_parts: list[str] = []
-            for part in parts:
-                if isinstance(part, dict) and part.get("content"):
-                    content_parts.append(str(part["content"]))
-            content: str = " ".join(content_parts).strip()
+            parts = getattr(msg, "parts", [])
+            if parts:
+                content_parts: list[str] = []
+                for part in parts:
+                    if isinstance(part, dict) and part.get("content"):
+                        content_parts.append(str(part["content"]))
+                    elif isinstance(part, str):
+                        content_parts.append(part)
+                    elif hasattr(part, "content") and part.content:
+                        content_parts.append(str(part.content))
+                content = " ".join(content_parts).strip()
+            elif hasattr(msg, "content") and msg.content:
+                content = str(msg.content).strip()
+
             if role in ("user", "assistant") and content:
                 turns.append({"role": role, "content": content})
 
         # 返回最近 max_turns 轮
-        return turns[-max_turns * 2:]  # 每轮包含 user + assistant
+        return turns[-max_turns * 2:]
     except Exception:
         logger.debug("提取 recent_turns 失败，BMA 将只使用当前消息", exc_info=True)
         return []
@@ -192,7 +197,9 @@ class StageHook:
         _config_loader.ensure_loaded()
 
         # 提取最近几轮对话历史给 BMA
-        recent_turns: list[dict[str, str]] = _extract_recent_turns(deps, max_turns=5)
+        max_turns: int = int(os.getenv("CLASSIFY_RECENT_TURNS", "5"))
+        recent_turns: list[dict[str, str]] = await _extract_recent_turns(deps, max_turns=max_turns)
+        logger.info("BMA recent_turns 数量: %d, 内容: %s", len(recent_turns), recent_turns[:4] if recent_turns else "[]")
 
         # 调 BMA 分类
         scenes: list[str] = await _call_bma_classify(message, recent_turns=recent_turns)

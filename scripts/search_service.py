@@ -11,7 +11,7 @@ app: FastAPI = FastAPI(title="Coupon Search Service")
 
 # Milvus 连接
 connections.connect(host="localhost", port="19530")
-collection: Collection = Collection("coupon_activities")
+collection: Collection = Collection("coupon_vectors")
 collection.load()
 
 # LLM 配置

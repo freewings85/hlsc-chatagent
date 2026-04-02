@@ -15,7 +15,6 @@ scenes:
     agent_md: guide/AGENT.md
     tools:
       - list_user_cars
-      - collect_car_info
       - update_session_state
     skills:
       - saving-methods

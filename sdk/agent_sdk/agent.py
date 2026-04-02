@@ -249,7 +249,11 @@ class Agent:
         # Logfire span：将 session_id/request_id 注入 OpenTelemetry trace，
         # 所有子 span（hook、LLM 调用、工具调用）自动继承
         async def _run_request() -> str:
-            # 4. Agent 运行前钩子（可用于 scene 判定等预处理）
+            # 4. 构建 memory_service 并挂到 deps（供 hook 读取历史消息）
+            memory_service = self._build_memory_service()
+            deps.memory_service = memory_service
+
+            # 5. Agent 运行前钩子（可用于 scene 判定等预处理）
             if self._before_agent_run_hook is not None:
                 await self._before_agent_run_hook(
                     user_id,
@@ -269,8 +273,7 @@ class Agent:
             # 6. 构建 model
             model = self._build_model()
 
-            # 7. 构建服务
-            memory_service = self._build_memory_service()
+            # 7. 构建服务（memory_service 已在 hook 前构建）
             transcript_service = self._build_transcript_service()
             internal_compact_config = self._build_compact_config()
 

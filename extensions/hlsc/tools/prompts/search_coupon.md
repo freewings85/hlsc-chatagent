@@ -6,7 +6,7 @@
 - city: 城市名称（可选），用于按地域筛选（如"北京"）
 - latitude: 用户纬度（可选），来自 geocode_location 返回，配合 radius 做距离筛选
 - longitude: 用户经度（可选），来自 geocode_location 返回
-- radius: 搜索半径（米，可选），如 5000 表示 5 公里。需配合 latitude/longitude
+- radius: 搜索半径（米）。配合 latitude/longitude 使用。用户没有明确指定距离时不要传此参数，后端会使用默认配置
 - date: 查询日期（YYYY-MM-DD，可选），过滤该日期有效的优惠。用户说"这周末"→ 根据当前日期算出具体日期。默认当天
 - semantic_query: 用户对优惠的自然语言偏好描述（可选）。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数。例如"支付宝支付的满减活动、送洗车的"
 - sort_by: 排序方式 — default（默认热度）/ discount_amount（优惠金额）/ validity_end（即将过期优先）
