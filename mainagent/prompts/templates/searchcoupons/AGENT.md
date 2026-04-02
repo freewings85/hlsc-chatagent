@@ -19,4 +19,3 @@
 ## 可用 skill
 
 - **saving-playbook**：价格与优惠阶段的推进参考（Which 条件收集）
-- **saving-methods**：四种省钱方式的详细介绍，用于向用户解释和推荐

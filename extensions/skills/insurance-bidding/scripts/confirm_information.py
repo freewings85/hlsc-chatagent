@@ -1,7 +1,7 @@
-"""insurance_bidding SkillScript：确认竞标信息 → 创建订单 → 返回卡片。
+"""insurance-bidding SkillScript：确认竞标信息 → 创建订单 → 返回卡片。
 
 LLM 调用示例：
-    invoke_skill("insurance_bidding", args='{"project_ids":[1461],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
+    invoke_skill("insurance-bidding", args='{"project_ids":[1461],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def _judge_reply(reply: str) -> str:
 class InsuranceBiddingScript(SkillScript):
     """保险竞标预订脚本：confirm_booking 中断 + 创建订单。"""
 
-    name: str = "insurance_bidding"
+    name: str = "insurance-bidding"
 
     async def run(self, ctx: SkillContext) -> str:
         # ── 1. 解析参数 ──────────────────────────────────────────

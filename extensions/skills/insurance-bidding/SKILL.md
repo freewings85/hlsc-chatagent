@@ -1,5 +1,5 @@
 ---
-name: insurance_bidding
+name: insurance-bidding
 description: 保险项目竞标预订 — 确认预订信息、创建订单、返回 order_id 给前端。
 when_to_use: 保险相关项目需要多商户竞价报价时使用。
 ---
@@ -22,7 +22,7 @@ when_to_use: 保险相关项目需要多商户竞价报价时使用。
 2. 收集完成后，调用脚本执行确认和创建订单：
 
 ```
-invoke_skill("insurance_bidding:confirm_information", args='{"project_ids":[1461],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
+invoke_skill("insurance-bidding:confirm_information", args='{"project_ids":[1461],"shop_ids":[87,88],"car_model_id":"bmw-325li-2024","booking_time":"这周末"}')
 ```
 
 ## 脚本执行流程（confirm_information 自动处理）
