@@ -19,3 +19,13 @@
 ## 可用 skill
 
 - **saving-playbook**：商户选择阶段的推进参考（Where 条件收集）
+
+## 信息记录
+
+用户确认选择后，调用 update_session_state 记录：
+- 确认位置 → {"latitude": xxx, "longitude": xxx, "address": "xxx"}
+- 确认商户 → {"shop_id": "xxx", "shop_name": "xxx"}
+- 确认项目（如有） → {"project_ids": [...], "project_names": [...]}
+- 用户意图 → {"intent": "booking"} 或 {"intent": "contact_only"}
+
+只在用户明确确认后记录。

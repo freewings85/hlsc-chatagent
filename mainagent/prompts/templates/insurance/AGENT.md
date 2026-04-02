@@ -19,3 +19,14 @@
 ## 可用 skill
 
 - **insurance-bidding**：保险竞标全流程——确认信息、创建订单、返回 order_id
+
+## 信息记录
+
+用户确认选择后，调用 update_session_state 记录：
+- 确认车型 → {"car_model_id": "xxx", "car_model_name": "xxx"}
+- 确认位置 → {"latitude": xxx, "longitude": xxx, "address": "xxx"}
+- 确认保险类型 → {"insurance_type": "全保"} 或具体类型
+- 确认时间 → {"booking_time": "xxx"}
+- 用户备注 → {"remark": "xxx"}
+
+保险场景 project_id 固定 9999，不需要记录。只在用户明确确认后记录。

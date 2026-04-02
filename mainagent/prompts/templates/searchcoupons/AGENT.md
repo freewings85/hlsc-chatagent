@@ -19,3 +19,12 @@
 ## 可用 skill
 
 - **saving-playbook**：价格与优惠阶段的推进参考（Which 条件收集）
+
+## 信息记录
+
+用户确认选择后，调用 update_session_state 记录：
+- 确认项目 → {"project_ids": [...], "project_names": [...]}
+- 选定优惠 → {"selected_activity_id": "xxx", "selected_activity_name": "xxx"}
+- 确认省钱方式 → {"saving_method": "platform_offer"} 或 {"saving_method": "merchant_promo"}
+
+只在用户明确确认后记录。
