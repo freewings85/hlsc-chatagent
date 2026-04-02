@@ -32,6 +32,7 @@ async def search_coupon(
     latitude: Annotated[float | None, Field(description="用户纬度，来自 geocode_location 返回。用于按距离筛选附近的优惠")] = None,
     longitude: Annotated[float | None, Field(description="用户经度，来自 geocode_location 返回")] = None,
     radius: Annotated[int, Field(description="搜索半径（米），默认不限。配合 latitude/longitude 使用，如 5000 表示 5 公里")] = 0,
+    date: Annotated[str, Field(description="查询日期（YYYY-MM-DD），用于过滤该日期有效的优惠。默认当天")] = "",
     semantic_query: Annotated[str, Field(description="用户对优惠的自然语言偏好描述（如'支付宝支付的满减活动、送洗车的'）。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数")] = "",
     sort_by: Annotated[str, Field(description="排序方式：default（默认热度）/ discount_amount（优惠金额）/ validity_end（即将过期优先）")] = "default",
     top_k: Annotated[int, Field(description="返回数量上限，默认 10")] = 10,
@@ -46,6 +47,7 @@ async def search_coupon(
         "latitude": latitude,
         "longitude": longitude,
         "radius": radius,
+        "date": date,
         "semantic_query": semantic_query,
         "sort_by": sort_by,
         "top_k": top_k,
@@ -74,6 +76,8 @@ async def search_coupon(
         payload["longitude"] = longitude
         if radius > 0:
             payload["radius"] = radius
+    if date:
+        payload["date"] = date
     if semantic_query:
         payload["semanticQuery"] = semantic_query
     if sort_by != "default":

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -100,6 +101,8 @@ class MainPromptLoader(TemplatePromptLoader):
                 scene_path: Path = _TEMPLATES_DIR / scene_agent_md
                 if scene_path.exists():
                     content: str = scene_path.read_text(encoding="utf-8").strip()
+                    # 模板变量替换
+                    content = content.replace("{{current_date}}", date.today().isoformat())
                     return content or None
         return None
 
