@@ -2,10 +2,10 @@
 
 POST /classify
 请求：{ message, recent_turns? }
-响应：{ scenes: ["saving"] } 或 { scenes: ["saving", "shop"] } 或 { scenes: [] }
+响应：{ scenes: ["platform"] } 或 { scenes: ["platform", "searchshops"] } 或 { scenes: [] }
 
 BMA 只做场景分类，不决定 tools/skills。
-阶段判断（S1/S2）由 MainAgent hook 负责。
+MainAgent hook 根据分类结果加载对应场景配置。
 """
 
 from __future__ import annotations
@@ -22,9 +22,8 @@ from pydantic import BaseModel
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-
 # 合法场景 id 列表
-VALID_SCENES: list[str] = ["saving", "shop", "insurance"]
+VALID_SCENES: list[str] = ["platform", "searchshops", "searchcoupons", "insurance"]
 
 
 # ============================================================
@@ -50,48 +49,6 @@ class ClassifyResponse(BaseModel):
     """场景分类响应：返回匹配的场景列表。"""
 
     scenes: list[str]
-
-
-# ============================================================
-# 场景定义加载（从 scene_config.yaml）
-# ============================================================
-
-_scene_defs_text: str = ""
-
-
-def _ensure_scene_defs() -> None:
-    """加载 scene_config.yaml 中的场景定义。"""
-    global _scene_defs_text
-    if _scene_defs_text:
-        return
-
-    import yaml
-
-    config_path_str: str = os.getenv("SCENE_CONFIG_PATH", "")
-    if config_path_str:
-        config_path: Path = Path(config_path_str)
-    else:
-        config_path = (
-            Path(__file__).resolve().parents[3]
-            / "extensions"
-            / "business-map"
-            / "scene_config.yaml"
-        )
-
-    raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    scenes_raw: list[dict[str, Any]] = raw.get("scenes", [])
-
-    lines: list[str] = []
-    scene: dict[str, Any]
-    for scene in scenes_raw:
-        scene_id: str = scene["id"]
-        desc: str = scene["description"]
-        keywords: list[str] = scene.get("keywords", [])
-        keywords_str: str = "、".join(keywords)
-        lines.append(f"- {scene_id}: {desc}（关键词：{keywords_str}）")
-
-    _scene_defs_text = "\n".join(lines)
-    logger.info("加载 %d 个场景定义", len(scenes_raw))
 
 
 # ============================================================
@@ -122,7 +79,6 @@ def _load_system_prompt() -> str:
 
 async def _call_llm(
     message: str,
-    scene_defs: str,
     recent_turns: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """调小模型进行场景分类。"""
@@ -151,7 +107,6 @@ async def _call_llm(
         history_text = "\n".join(history_lines)
 
     user_prompt: str = (
-        f"[场景定义]\n{scene_defs}\n\n"
         f"[最近对话]\n{history_text}\n\n"
         f"[用户消息]\n{message}"
     )
@@ -185,28 +140,23 @@ async def _call_llm(
 
 async def _do_classify(request: ClassifyRequest) -> ClassifyResponse:
     """场景分类。"""
-    _ensure_scene_defs()
-
     scenes: list[str] = []
 
-    if _scene_defs_text:
-        turns: list[dict[str, str]] = (
-            [{"role": t.role, "content": t.content} for t in request.recent_turns]
-            if request.recent_turns
-            else []
+    turns: list[dict[str, str]] = (
+        [{"role": t.role, "content": t.content} for t in request.recent_turns]
+        if request.recent_turns
+        else []
+    )
+    try:
+        llm_result: dict[str, Any] = await _call_llm(
+            request.message, recent_turns=turns
         )
-        try:
-            llm_result: dict[str, Any] = await _call_llm(
-                request.message, _scene_defs_text, recent_turns=turns
-            )
-            # 只保留合法的场景 id
-            raw_scenes: list[str] = llm_result.get("scenes", [])
-            scenes = [s for s in raw_scenes if s in VALID_SCENES]
-        except Exception:
-            logger.warning("LLM 场景分类失败", exc_info=True)
+        raw_scenes: list[str] = llm_result.get("scenes", [])
+        scenes = [s for s in raw_scenes if s in VALID_SCENES]
+    except Exception:
+        logger.warning("LLM 场景分类失败", exc_info=True)
 
     logger.info("场景分类结果: %s", scenes)
-
     return ClassifyResponse(scenes=scenes)
 
 

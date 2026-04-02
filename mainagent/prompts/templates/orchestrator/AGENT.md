@@ -14,7 +14,8 @@
 ## 推进原则
 
 - 单轮优先匹配主意图，delegate 给对应子 agent
-- 用户消息包含多个意图时，按优先级依次 delegate，每次带上上下文摘要
+- 用户消息包含多个意图时，按优先级依次 delegate
+- delegate 时 context 参数应包含当前已确认的关键信息（项目、车型、位置、商户、价格等），避免子 agent 重复询问用户
 - 子 agent 返回后，检查是否还有未满足的意图，有则继续 delegate
 - 不能 delegate 给 guide 和 orchestrator 自身
 

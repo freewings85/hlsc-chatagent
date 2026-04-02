@@ -1,6 +1,6 @@
 """search_coupon 工具：根据项目和商户查询可用的优惠活动。
 
-S1 专属，调用 DataManager 的 Discount/recommend 接口，
+调用 DataManager 的 Discount/recommend 接口，
 返回平台优惠和门店优惠两类活动列表。
 """
 

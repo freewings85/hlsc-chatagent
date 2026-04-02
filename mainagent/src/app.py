@@ -21,8 +21,8 @@ from hlsc.tools.common.delegate import delegate
 from hlsc.tools.common.update_session_state import update_session_state
 
 # 分类与匹配
-from hlsc.tools.s1.classify_project import classify_project
-from hlsc.tools.s1.search_coupon import search_coupon
+from hlsc.tools.common.classify_project import classify_project
+from hlsc.tools.common.search_coupon import search_coupon
 from hlsc.tools.s2.match_project import match_project
 
 # 下单
