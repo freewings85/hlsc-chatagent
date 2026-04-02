@@ -81,20 +81,32 @@ async def _call_llm(
     message: str,
     recent_turns: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """调小模型进行场景分类。"""
-    endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
-    api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
-    deployment: str = os.getenv("AZURE_DEPLOYMENT_NAME", "gpt-4.1-mini")
-    api_version: str = os.getenv("AZURE_API_VERSION", "2024-12-01-preview")
+    """调小模型进行场景分类。支持 Azure OpenAI 和 OpenAI-compatible API（如 DashScope）。"""
+    # 优先 Azure OpenAI，其次 OpenAI-compatible（DashScope 等）
+    azure_endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+    azure_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
+    openai_endpoint: str = os.getenv("BMA_LLM_ENDPOINT", "")
+    openai_key: str = os.getenv("BMA_LLM_API_KEY", "")
+    openai_model: str = os.getenv("BMA_LLM_MODEL", "qwen3-30b-a3b")
 
-    if not endpoint or not api_key:
-        logger.warning("Azure OpenAI 未配置，返回空场景列表")
+    use_azure: bool = bool(azure_endpoint and azure_key)
+    use_openai_compat: bool = bool(openai_endpoint and openai_key)
+
+    if not use_azure and not use_openai_compat:
+        logger.warning("LLM 未配置（Azure/OpenAI-compatible 均无），返回空场景列表")
         return {"scenes": []}
 
-    url: str = (
-        f"{endpoint.rstrip('/')}/openai/deployments/{deployment}"
-        f"/chat/completions?api-version={api_version}"
-    )
+    if use_azure:
+        deployment: str = os.getenv("AZURE_DEPLOYMENT_NAME", "gpt-4.1-mini")
+        api_version: str = os.getenv("AZURE_API_VERSION", "2024-12-01-preview")
+        url: str = (
+            f"{azure_endpoint.rstrip('/')}/openai/deployments/{deployment}"
+            f"/chat/completions?api-version={api_version}"
+        )
+        headers: dict[str, str] = {"api-key": azure_key, "Content-Type": "application/json"}
+    else:
+        url = f"{openai_endpoint.rstrip('/')}/chat/completions"
+        headers = {"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
 
     system_prompt: str = _load_system_prompt()
 
@@ -111,22 +123,20 @@ async def _call_llm(
         f"[用户消息]\n{message}"
     )
 
+    request_body: dict[str, Any] = {
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+    }
+    if not use_azure:
+        request_body["model"] = openai_model
+        request_body["enable_thinking"] = False
+
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp: httpx.Response = await client.post(
-            url,
-            headers={
-                "api-key": api_key,
-                "Content-Type": "application/json",
-            },
-            json={
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0,
-                "response_format": {"type": "json_object"},
-            },
-        )
+        resp: httpx.Response = await client.post(url, headers=headers, json=request_body)
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
         content: str = data["choices"][0]["message"]["content"]

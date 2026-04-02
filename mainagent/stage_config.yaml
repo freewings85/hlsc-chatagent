@@ -59,11 +59,8 @@ scenes:
       - search_coupon
       - apply_coupon
       - classify_project
-      - match_project
-      - collect_car_info
       - collect_location
       - geocode_location
-      - list_user_cars
       - update_session_state
     skills:
       - saving-methods
