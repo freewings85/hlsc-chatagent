@@ -48,8 +48,6 @@ class AgentDeps:
     invoked_skill_store: InvokedSkillStore | None = None
     # 场景允许的 skill 名称列表（None 表示不限制，展示全部）
     allowed_skills: list[str] | None = None
-    # 当前阶段标识（hook 设置，prompt loader 等可读取）
-    current_stage: str = ""
     # 事件发射器（interrupt 等工具需要直接发出 SSE 事件）
     emitter: EventEmitter | None = None
     # 请求上下文（位置、车辆信息等），工具可通过 ctx.deps.request_context 读取
@@ -60,5 +58,5 @@ class AgentDeps:
     system_prompt_override: str | None = None
     # 场景级 agent_md 文件名（由 hook 设置，prompt_loader 优先使用）
     current_scene_agent_md: str | None = None
-    # 当前场景标识（hook 设置，prompt_loader 用于渲染 OUTPUT.md 模板）
-    current_scene: str = "none"
+    # 当前场景标识（hook 设置，prompt_loader 按场景加载 prompt）
+    current_scene: str = "guide"

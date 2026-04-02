@@ -1,101 +1,90 @@
 # ============================================================
-# MainAgent 阶段配置
+# MainAgent 场景配置
 #
-# S1/S2 的区别：S2 多了 confirm_booking（触达商家）
-# 升级路径：
-#   1. 硬信号（UserStatService）→ 一定 S2
-#   2. 软信号（BMA 意图提取）→ 也放过去
+# 6 个平等场景，由 BMA 每轮分类路由：
+#   - BMA 返回 [] → guide（引导）
+#   - BMA 返回 1 个场景 → 该场景
+#   - BMA 返回多个场景 → orchestrator（delegate 协调）
 #
-# S2 场景路由：BMA 每轮分类 → 单场景走专属配置
-#   - 单场景 → 走该场景
-#   - 多场景 → 走 multi（全量工具）
-#   - 空列表 → 走 none（极简配置）
+# 每个场景独立定义 prompt_parts / agent_md / tools / skills
 # ============================================================
 
-
-# 阶段定义
-# S1 → S2 升级：S1 agent 调 proceed_to_booking → 内部写入硬信号 + 即时切换到 S2
-stages:
-
-  S1:
-    name: 体验模式
-    agent_md: AGENT_S1.md
+scenes:
+  guide:
+    prompt_parts: [SYSTEM.md, SOUL.md, guide/OUTPUT.md]
+    agent_md: guide/AGENT.md
     tools:
       - classify_project
       - search_shops
+      - search_coupon
       - list_user_cars
       - collect_car_info
       - collect_location
       - geocode_location
-      - search_coupon
-      - proceed_to_booking
     skills:
       - saving-methods
       - platform-intro
 
-  S2:
-    name: 下单模式
-    scenes:
-      none:
-        agent_md: AGENT_S2_none.md
-        tools:
-          - classify_project
-          - search_shops
-          - list_user_cars
-          - collect_car_info
-          - collect_location
-          - geocode_location
-          - search_coupon
-        skills:
-          - saving-methods
-          - platform-intro
-      multi:
-        agent_md: AGENT_S2.md
-        tools:
-          - match_project
-          - search_shops
-          - call_recommend_project
-          - call_query_codingagent
-          - list_user_cars
-          - get_representative_car_model
-          - collect_car_info
-          - collect_location
-          - geocode_location
-          - confirm_booking
-          - search_coupon
-        skills:
-          - saving-playbook
-          - insurance-bidding
-      saving:
-        agent_md: AGENT_S2_saving.md
-        tools:
-          - match_project
-          - search_coupon
-          - search_shops
-          - collect_car_info
-          - collect_location
-          - geocode_location
-          - confirm_booking
-        skills:
-          - saving-playbook
-      shop:
-        agent_md: AGENT_S2_shop.md
-        tools:
-          - search_shops
-          - collect_location
-          - geocode_location
-          - match_project
-          - confirm_booking
-        skills:
-          - saving-playbook
-      insurance:
-        agent_md: AGENT_S2_insurance.md
-        tools:
-          - match_project
-          - search_shops
-          - collect_car_info
-          - collect_location
-          - geocode_location
-          - confirm_booking
-        skills:
-          - insurance-bidding
+  platform:
+    prompt_parts: [SYSTEM.md, SOUL.md, platform/OUTPUT.md]
+    agent_md: platform/AGENT.md
+    tools:
+      - match_project
+      - search_shops
+      - search_coupon
+      - collect_car_info
+      - collect_location
+      - geocode_location
+      - list_user_cars
+      - confirm_booking
+    skills:
+      - saving-playbook
+
+  searchshops:
+    prompt_parts: [SYSTEM.md, SOUL.md, searchshops/OUTPUT.md]
+    agent_md: searchshops/AGENT.md
+    tools:
+      - search_shops
+      - collect_location
+      - geocode_location
+      - match_project
+      - list_user_cars
+      - confirm_booking
+    skills:
+      - saving-playbook
+
+  searchcoupons:
+    prompt_parts: [SYSTEM.md, SOUL.md, searchcoupons/OUTPUT.md]
+    agent_md: searchcoupons/AGENT.md
+    tools:
+      - search_coupon
+      - search_shops
+      - classify_project
+      - match_project
+      - collect_location
+      - geocode_location
+      - list_user_cars
+      - confirm_booking
+    skills:
+      - saving-playbook
+
+  insurance:
+    prompt_parts: [SYSTEM.md, SOUL.md, insurance/OUTPUT.md]
+    agent_md: insurance/AGENT.md
+    tools:
+      - match_project
+      - search_shops
+      - collect_car_info
+      - collect_location
+      - geocode_location
+      - list_user_cars
+      - confirm_booking
+    skills:
+      - insurance-bidding
+
+  orchestrator:
+    prompt_parts: [SYSTEM.md, SOUL.md, orchestrator/OUTPUT.md]
+    agent_md: orchestrator/AGENT.md
+    tools:
+      - delegate
+    skills: []

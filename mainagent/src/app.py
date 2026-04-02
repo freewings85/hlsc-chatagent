@@ -11,39 +11,34 @@ from src.business_map_hook import StageHook
 from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 
-# common 工具（S1+S2 共用）
+# common 工具
 from hlsc.tools.common.search_shops import search_shops
-from hlsc.tools.s2.call_recommend_project import call_recommend_project
 from hlsc.tools.common.list_user_cars import list_user_cars
 from hlsc.tools.common.collect_car_info import collect_car_info
 from hlsc.tools.common.collect_location import collect_location
 from hlsc.tools.common.geocode_location import geocode_location
+from hlsc.tools.common.delegate import delegate
 
-# S1 专属工具
+# 分类与匹配
 from hlsc.tools.s1.classify_project import classify_project
-from hlsc.tools.s1.proceed_to_booking import proceed_to_booking
 from hlsc.tools.s1.search_coupon import search_coupon
-
-# S2 专属工具
 from hlsc.tools.s2.match_project import match_project
+
+# 下单
 from hlsc.tools.s2.confirm_booking import confirm_booking
-from hlsc.tools.s2.call_query_codingagent import call_query_codingagent
-from hlsc.tools.s2.get_representative_car_model import get_representative_car_model
 
 
 def create_agent_app() -> AgentApp:
     """创建 HLSC 主 AgentApp"""
     prompt_loader = create_main_prompt_loader()
 
-    # SDK 内置工具 + subagent 调用 + extensions 业务工具
+    # SDK 内置工具 + 业务工具
     tool_map = {
         **create_default_tool_map(),
         # 项目分类与匹配
         "classify_project": classify_project,
         "match_project": match_project,
-        "call_recommend_project": call_recommend_project,
         # 车辆信息
-        "get_representative_car_model": get_representative_car_model,
         "list_user_cars": list_user_cars,
         "collect_car_info": collect_car_info,
         # 位置
@@ -53,12 +48,10 @@ def create_agent_app() -> AgentApp:
         "search_shops": search_shops,
         # 优惠查询
         "search_coupon": search_coupon,
-        # 进入下单流程（S1 → S2 即时升级）
-        "proceed_to_booking": proceed_to_booking,
         # 下单
         "confirm_booking": confirm_booking,
-        # 复杂查询
-        "call_query_codingagent": call_query_codingagent,
+        # orchestrator 委派
+        "delegate": delegate,
     }
 
     formatter: HlscContextFormatter = HlscContextFormatter()

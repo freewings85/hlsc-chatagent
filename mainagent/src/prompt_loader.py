@@ -1,63 +1,51 @@
 """HLSC 主 Agent 的 PromptLoader 实现
 
-复用 SDK 的 TemplatePromptLoader + 业务特有的 context diff 逻辑。
-OUTPUT.md 使用 Jinja2 模板，按 stage/scene 条件渲染。
+按场景配置的 prompt_parts 列表拼接 system prompt，
+按 agent_md 加载场景级 AGENT.md 注入 context messages。
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Template
+import yaml
 
 from agent_sdk.prompt_loader import PromptResult, TemplatePromptLoader
 
 
 # 提示词根目录（相对于 mainagent/ 目录）
-_PROMPTS_DIR = Path("prompts")
-_TEMPLATES_DIR = _PROMPTS_DIR / "templates"
+_TEMPLATES_DIR: Path = Path("prompts") / "templates"
 
-# 系统提示词模板（按拼接顺序排列）
-# OUTPUT.md 单独处理（Jinja2 渲染），不放入 SYSTEM_PROMPT_PARTS
-_STATIC_PARTS: list[Path] = [
-    _TEMPLATES_DIR / "SYSTEM.md",
-    _TEMPLATES_DIR / "SOUL.md",
-]
-
-_OUTPUT_MD_PATH: Path = _TEMPLATES_DIR / "OUTPUT.md"
-
-_AGENT_S1_MD_PATH: Path = _TEMPLATES_DIR / "AGENT_S1.md"
-_AGENT_S2_MD_PATH: Path = _TEMPLATES_DIR / "AGENT_S2.md"
-
-# OUTPUT.md Jinja2 模板（懒加载）
-_output_template: Template | None = None
+# 场景配置缓存
+_scene_prompt_parts: dict[str, list[str]] | None = None
 
 
-def _get_output_template() -> Template | None:
-    """加载 OUTPUT.md Jinja2 模板（懒加载）。"""
-    global _output_template
-    if _output_template is not None:
-        return _output_template
-    if _OUTPUT_MD_PATH.exists():
-        raw: str = _OUTPUT_MD_PATH.read_text(encoding="utf-8").strip()
-        if raw:
-            _output_template = Template(raw)
-            return _output_template
-    return None
+def _load_scene_prompt_parts() -> dict[str, list[str]]:
+    """从 stage_config.yaml 加载每个场景的 prompt_parts（懒加载 + 缓存）。"""
+    global _scene_prompt_parts
+    if _scene_prompt_parts is not None:
+        return _scene_prompt_parts
 
+    config_path_str: str = os.getenv("STAGE_CONFIG_PATH", "")
+    if config_path_str:
+        config_path: Path = Path(config_path_str)
+    else:
+        config_path = Path(__file__).resolve().parent.parent / "stage_config.yaml"
 
-def _render_output_md(stage: str, scene: str) -> str:
-    """用 Jinja2 渲染 OUTPUT.md 模板。"""
-    tmpl: Template | None = _get_output_template()
-    if tmpl is None:
-        return ""
-    rendered: str = tmpl.render(stage=stage, scene=scene).strip()
-    return rendered
+    raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    _scene_prompt_parts = {}
+    scene_id: str
+    scene_data: dict[str, Any]
+    for scene_id, scene_data in raw.get("scenes", {}).items():
+        _scene_prompt_parts[scene_id] = scene_data.get("prompt_parts", [])
+
+    return _scene_prompt_parts
 
 
 class MainPromptLoader(TemplatePromptLoader):
-    """MainAgent PromptLoader：根据阶段和场景加载对应 AGENT.md，渲染 OUTPUT.md。"""
+    """MainAgent PromptLoader：按场景 prompt_parts 拼接 system prompt + agent_md 注入。"""
 
     async def load(
         self,
@@ -66,15 +54,11 @@ class MainPromptLoader(TemplatePromptLoader):
         deps: Any | None = None,
         message: str | None = None,
     ) -> PromptResult:
-        # 获取 stage 和 scene
-        stage: str = getattr(deps, "current_stage", "S1") if deps else "S1"
-        scene: str = getattr(deps, "current_scene", "none") if deps else "none"
+        # 获取当前场景
+        scene: str = getattr(deps, "current_scene", "guide") if deps else "guide"
 
-        # 拼接静态部分 + 渲染后的 OUTPUT.md
-        system_prompt: str = self._load_system_prompt()
-        output_section: str = _render_output_md(stage, scene)
-        if output_section:
-            system_prompt = system_prompt + "\n\n" + output_section
+        # 按场景的 prompt_parts 拼接 system prompt
+        system_prompt: str = self._load_scene_system_prompt(scene)
 
         # 调父类的 load 获取 context_messages（agent_md + memory_md）
         result: PromptResult = await super().load(
@@ -83,9 +67,24 @@ class MainPromptLoader(TemplatePromptLoader):
             deps=deps,
             message=message,
         )
-        # 替换 system_prompt（父类用的是缓存的不含 OUTPUT 的版本）
+        # 替换 system_prompt（父类用的是静态 template_parts 版本）
         result.system_prompt = system_prompt
         return result
+
+    def _load_scene_system_prompt(self, scene: str) -> str:
+        """按场景配置的 prompt_parts 列表拼接 system prompt。"""
+        scene_parts_map: dict[str, list[str]] = _load_scene_prompt_parts()
+        prompt_part_files: list[str] = scene_parts_map.get(scene, scene_parts_map.get("guide", []))
+
+        parts: list[str] = []
+        for filename in prompt_part_files:
+            filepath: Path = _TEMPLATES_DIR / filename
+            if filepath.exists():
+                content: str = filepath.read_text(encoding="utf-8").strip()
+                if content:
+                    parts.append(content)
+
+        return "\n\n".join(parts)
 
     async def get_agent_md_content(
         self,
@@ -94,7 +93,7 @@ class MainPromptLoader(TemplatePromptLoader):
         deps: Any | None = None,
         message: str | None = None,
     ) -> str | None:
-        # 优先使用 hook 设置的场景级 agent_md
+        # 使用 hook 设置的场景级 agent_md
         if deps is not None:
             scene_agent_md: str | None = getattr(deps, "current_scene_agent_md", None)
             if scene_agent_md:
@@ -102,17 +101,10 @@ class MainPromptLoader(TemplatePromptLoader):
                 if scene_path.exists():
                     content: str = scene_path.read_text(encoding="utf-8").strip()
                     return content or None
-
-        # 回退：根据 deps.current_stage 选择 AGENT.md
-        path: Path = _AGENT_S2_MD_PATH  # 默认 S2
-        if deps is not None and getattr(deps, "current_stage", "") == "S1":
-            path = _AGENT_S1_MD_PATH
-        if not path.exists():
-            return None
-        content = path.read_text(encoding="utf-8").strip()
-        return content or None
+        return None
 
 
 def create_main_prompt_loader() -> TemplatePromptLoader:
     """创建主 Agent 的 PromptLoader"""
-    return MainPromptLoader(template_parts=_STATIC_PARTS)
+    # template_parts 传空列表，实际拼接在 _load_scene_system_prompt 中完成
+    return MainPromptLoader(template_parts=[])
