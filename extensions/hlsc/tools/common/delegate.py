@@ -186,9 +186,11 @@ async def _run_delegate_agent(
         session_id=parent_deps.session_id,
         emitter=emitter,
         temporal_client=parent_deps.temporal_client,
+        request_context=parent_deps.request_context,
         fs_tools_backend=parent_deps.fs_tools_backend,
         is_sub_agent=True,
         message_history=[],  # 独立上下文，不加载历史
         transcript_session_id=f"{parent_deps.session_id}/delegates/{agent_id}",
+        session_state=dict(parent_deps.session_state) if parent_deps.session_state else None,
     )
     return result or ""

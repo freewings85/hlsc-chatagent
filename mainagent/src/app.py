@@ -18,6 +18,7 @@ from hlsc.tools.common.collect_car_info import collect_car_info
 from hlsc.tools.common.collect_location import collect_location
 from hlsc.tools.common.geocode_location import geocode_location
 from hlsc.tools.common.delegate import delegate
+from hlsc.tools.common.update_session_state import update_session_state
 
 # 分类与匹配
 from hlsc.tools.s1.classify_project import classify_project
@@ -50,6 +51,8 @@ def create_agent_app() -> AgentApp:
         "search_coupon": search_coupon,
         # 下单
         "confirm_booking": confirm_booking,
+        # 会话状态
+        "update_session_state": update_session_state,
         # orchestrator 委派
         "delegate": delegate,
     }

@@ -179,6 +179,7 @@ class Agent:
         parent_request_id: str | None = None,
         parent_otel_context: Any = None,
         request_id: str | None = None,
+        session_state: dict[str, Any] | None = None,
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -195,6 +196,7 @@ class Agent:
             parent_request_id: 父级 request_id（subagent 场景，用于 trace 关联）
             parent_otel_context: 父级 OTel context（subagent 场景，实现跨服务 trace 关联）
             request_id: 请求端传入的 request_id，不传时自动生成
+            session_state: 会话级状态（父 agent 传递给子 agent，共享已确认信息）
 
         Returns:
             最终响应文本，或 None
@@ -241,6 +243,7 @@ class Agent:
             emitter=emitter,
             temporal_client=temporal_client,
             request_context=request_context,
+            session_state=dict(session_state) if session_state else {},
         )
 
         # Logfire span：将 session_id/request_id 注入 OpenTelemetry trace，
@@ -300,6 +303,12 @@ class Agent:
                     ))
             if request_context is not None:
                 deps.request_context = request_context
+
+            # 11.5 Session state 注入（工具可通过 deps._session_state_msg 引用更新内容）
+            from agent_sdk._agent.deps import create_session_state_message
+            session_state_msg: ModelRequest = create_session_state_message(deps.session_state)
+            deps._session_state_msg = session_state_msg
+            context_messages.append(session_state_msg)
 
             # 12. Attachment collector
             attachment_collector = AttachmentCollector(file_state_tracker)

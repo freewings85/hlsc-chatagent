@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Coroutine
 
+from pydantic_ai.messages import ModelRequest, UserPromptPart
+
 from agent_sdk._agent.file_state import FileStateTracker
 from agent_sdk._common.filesystem_backend import BackendProtocol
 
@@ -60,3 +62,31 @@ class AgentDeps:
     current_scene_agent_md: str | None = None
     # 当前场景标识（hook 设置，prompt_loader 按场景加载 prompt）
     current_scene: str = "guide"
+    # 会话级状态（project_id, shop_id 等已确认信息，跨轮次共享）
+    session_state: dict[str, Any] = field(default_factory=dict)
+    # session_state 对应的 context_message 占位引用（工具更新后刷新内容）
+    _session_state_msg: ModelRequest | None = None
+
+
+# ── session_state 辅助函数 ──
+
+
+def format_session_state(state: dict[str, Any]) -> str:
+    """将 session_state 格式化为注入 LLM 的文本。"""
+    if not state:
+        return "[session_state]: (空)"
+    pairs: list[str] = [f"{k}={v}" for k, v in state.items() if v is not None]
+    if not pairs:
+        return "[session_state]: (空)"
+    return "[session_state]: " + ", ".join(pairs)
+
+
+def create_session_state_message(state: dict[str, Any]) -> ModelRequest:
+    """创建 session_state 的 context_message（可被引用更新内容）。
+
+    source 标识为 "session_state"，供 context_injector 识别。
+    """
+    return ModelRequest(
+        parts=[UserPromptPart(content=format_session_state(state))],
+        metadata={"is_meta": True, "source": "session_state"},
+    )
