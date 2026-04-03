@@ -26,11 +26,6 @@ COPY sdk/agent_sdk sdk/agent_sdk
 COPY extensions/pyproject.toml extensions/
 COPY extensions/hlsc extensions/hlsc
 
-# 业务地图转换脚本和源数据（用于构建时生成 data/）
-COPY extensions/business-map/convert_tree.py extensions/business-map/
-COPY extensions/business-map/AllTree.yaml extensions/business-map/
-COPY extensions/business-map/intent_keywords.yaml extensions/business-map/
-
 # Subagent 依赖文件
 COPY subagents/business_map_agent/pyproject.toml subagents/business_map_agent/uv.lock subagents/business_map_agent/
 
@@ -38,10 +33,6 @@ COPY subagents/business_map_agent/pyproject.toml subagents/business_map_agent/uv
 RUN --mount=type=cache,target=/root/.cache/uv \
     cd subagents/business_map_agent && uv sync --no-dev --frozen \
     --index-url https://pypi.tuna.tsinghua.edu.cn/simple
-
-# ---------- 构建时生成业务地图数据 ----------
-RUN subagents/business_map_agent/.venv/bin/python extensions/business-map/convert_tree.py \
-    extensions/business-map/AllTree.yaml extensions/business-map/data
 
 # ---------- 应用层 ----------
 COPY subagents/business_map_agent/server.py subagents/business_map_agent/
