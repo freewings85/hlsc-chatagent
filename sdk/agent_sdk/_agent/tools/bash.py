@@ -10,6 +10,7 @@ PATH 注入：
 
 import os
 import sys
+from typing import Any
 
 from pydantic_ai import RunContext
 
@@ -79,8 +80,15 @@ async def bash(
         "CONVERSATION_ID": ctx.deps.session_id,
     }}
 
+    # 中断回调：脚本输出 __INTERRUPT__:{json} 时触发
+    async def _on_interrupt(data: dict[str, Any]) -> str:
+        from agent_sdk._agent.tools.call_interrupt import call_interrupt
+        return await call_interrupt(ctx, data)
+
     executor = get_executor()
-    result = await executor.execute(command, timeout=effective_timeout, cwd=cwd, env=env)
+    result = await executor.execute_interactive(
+        command, timeout=effective_timeout, cwd=cwd, env=env, on_interrupt=_on_interrupt,
+    )
 
     combined = result.output
 

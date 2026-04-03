@@ -74,7 +74,6 @@ scenes:
       - collect_location
       - geocode_location
       - list_user_cars
-      - confirm_booking
       - update_session_state
       - bash
     skills:

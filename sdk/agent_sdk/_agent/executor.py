@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import json
 import logging
 import os
 import shutil
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +75,25 @@ class CodeExecutor(abc.ABC):
         """
         ...
 
+    async def execute_interactive(
+        self,
+        command: str,
+        *,
+        timeout: int = 120,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        on_interrupt: Callable[[dict[str, Any]], Awaitable[str]] | None = None,
+    ) -> ExecuteResult:
+        """执行命令，支持脚本中断协议。
+
+        脚本通过 stdout 输出 ``__INTERRUPT__:{json}`` 触发中断，
+        bash 工具通过 on_interrupt 回调等待用户回复，
+        回复写入子进程 stdin，脚本 input() 继续执行。
+
+        没有 on_interrupt 回调时退化为普通 execute()。
+        """
+        return await self.execute(command, timeout=timeout, cwd=cwd, env=env)
+
 
 class LocalExecutor(CodeExecutor):
     """本地 subprocess 执行器"""
@@ -107,6 +129,102 @@ class LocalExecutor(CodeExecutor):
         except asyncio.TimeoutError:
             proc.kill()
             return ExecuteResult(stdout="", stderr=f"命令超时（{timeout}s）", exit_code=124)
+        except OSError as e:
+            return ExecuteResult(stdout="", stderr=f"命令启动失败：{e}", exit_code=1)
+
+
+    _INTERRUPT_PREFIX: str = "__INTERRUPT__:"
+
+    async def execute_interactive(
+        self,
+        command: str,
+        *,
+        timeout: int = 120,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        on_interrupt: Callable[[dict[str, Any]], Awaitable[str]] | None = None,
+    ) -> ExecuteResult:
+        """支持脚本中断协议的交互式执行。
+
+        逐行读取 stdout，检测 __INTERRUPT__: 前缀行：
+        1. 解析 JSON 数据，调 on_interrupt 回调等待用户回复
+        2. 将回复写入子进程 stdin（附换行符）
+        3. 脚本 input() 收到回复后继续执行
+
+        没有 on_interrupt 回调时退化为普通 execute()。
+        """
+        if on_interrupt is None:
+            return await self.execute(command, timeout=timeout, cwd=cwd, env=env)
+
+        effective_env: dict[str, str] | None = None
+        if env:
+            effective_env = {**os.environ, **env}
+
+        try:
+            proc: asyncio.subprocess.Process = await asyncio.create_subprocess_shell(
+                command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=effective_env,
+            )
+
+            stdout_lines: list[str] = []
+            stderr_data: bytes = b""
+
+            async def _read_stdout() -> None:
+                assert proc.stdout is not None
+                while True:
+                    line_bytes: bytes = await proc.stdout.readline()
+                    if not line_bytes:
+                        break
+                    line: str = line_bytes.decode("utf-8", errors="replace").rstrip("\n\r")
+
+                    if line.startswith(self._INTERRUPT_PREFIX):
+                        # 解析中断数据，调回调，写回复到 stdin
+                        json_str: str = line[len(self._INTERRUPT_PREFIX):]
+                        try:
+                            interrupt_data: dict[str, Any] = json.loads(json_str)
+                        except json.JSONDecodeError:
+                            stdout_lines.append(line)
+                            continue
+
+                        reply: str = await on_interrupt(interrupt_data)
+
+                        if proc.stdin is not None:
+                            proc.stdin.write((reply + "\n").encode("utf-8"))
+                            await proc.stdin.drain()
+                    else:
+                        stdout_lines.append(line)
+
+            async def _read_stderr() -> bytes:
+                assert proc.stderr is not None
+                return await proc.stderr.read()
+
+            # 并行读取 stdout（逐行）和 stderr（全量）
+            try:
+                results: tuple[None, bytes] = await asyncio.wait_for(
+                    asyncio.gather(_read_stdout(), _read_stderr()),
+                    timeout=timeout,
+                )
+                stderr_data = results[1]
+            except asyncio.TimeoutError:
+                proc.kill()
+                return ExecuteResult(
+                    stdout="\n".join(stdout_lines),
+                    stderr=f"命令超时（{timeout}s）",
+                    exit_code=124,
+                )
+
+            await proc.wait()
+
+            return ExecuteResult(
+                stdout="\n".join(stdout_lines).strip(),
+                stderr=stderr_data.decode("utf-8", errors="replace").strip(),
+                exit_code=proc.returncode or 0,
+            )
+
         except OSError as e:
             return ExecuteResult(stdout="", stderr=f"命令启动失败：{e}", exit_code=1)
 

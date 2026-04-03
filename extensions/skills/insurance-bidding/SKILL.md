@@ -19,25 +19,20 @@ when_to_use: 保险相关项目需要多商户竞价报价时使用。
   python {SCRIPTS_DIR}/search_insurance_company.py --project_id {project_id}
   ```
 
-
 ## 执行步骤
 
 1. 收集前置条件（project_id、shop_ids、car_model_id），缺失的通过对应工具获取
-2. **调用 `confirm_booking` 工具发送确认卡片**，等待用户回复
-3. **根据用户回复判断意图**：
-   - **确认** → 执行创建订单脚本（步骤 4）
-   - **取消** → 告知车主已取消，skill 完成
-   - **想加/改备注** → 更新 remark，重新调用 `confirm_booking`
-   - **其他** → 引导车主确认或说明想调整什么
-4. **用户确认后，执行创建订单脚本**（不要用文字回复代替，必须实际执行）：
+2. **条件齐备后，执行脚本完成确认和下单**（脚本内部会发送确认卡片给用户、等待回复、创建订单，不需要额外调用其他工具）：
 
 ```bash
-python {SCRIPTS_DIR}/create_order.py --project_id 1461 --shop_ids 87,88 --car_model_id 56
+python {SCRIPTS_DIR}/confirm_and_create.py --project_id 1461 --shop_ids 87,88 --car_model_id 56
 ```
 
 > `--remark` 可选，仅在用户主动提供备注时才加，不要自行编造。
 
-> 脚本会创建订单并启动竞价，返回 order card。不要用文字模拟脚本行为。
+> `--booking_time` 可选，用户指定了到店时间才传，否则默认"由商户排期"。
+
+> 脚本会自动发送确认卡片、等待用户回复、创建订单并启动竞价，返回 order card。不要用文字模拟脚本行为。
 
 ## 完成标准
 
