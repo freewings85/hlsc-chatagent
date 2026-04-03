@@ -32,8 +32,8 @@
 
 ## 记录（update_session_state）
 
-- 项目 → `{"project_ids": [...], "project_names": [...]}`
-- 选定优惠 → `{"selected_coupon_id": "xxx", "selected_shop_id": "xxx"}`
+- 项目 → `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`
+- 选定优惠 → `{"coupons": [{"id": 42, "name": "春季保养促销"}], "shops": [{"id": 109, "name": "嘉定汽修"}]}`
 
 ## 可用 skill
 

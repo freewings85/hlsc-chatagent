@@ -13,8 +13,8 @@
 
 ## 记录用户选择（update_session_state）
 
-- 用户选了车 / collect_car_info 返回结果 → 记录 `{"car_model_id": "xxx", "car_model_name": "xxx"}`
-- 用户提到位置 → 记录 `{"location_text": "xxx"}`
+- 用户确认车型 → `{"carModels": [{"id": "xxx", "name": "xxx"}]}`
+- 用户提到位置并获取到坐标 → `{"addresses": [{"latitude": 31.23, "longitude": 121.47, "name": "浦东新区"}]}`
 
 ## 可用 skill
 

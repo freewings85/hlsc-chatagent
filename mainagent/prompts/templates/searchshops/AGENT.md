@@ -23,9 +23,6 @@
 ## 信息记录
 
 用户确认选择后，调用 update_session_state 记录：
-- 确认位置 → {"latitude": xxx, "longitude": xxx, "address": "xxx"}
-- 确认商户 → {"shop_id": "xxx", "shop_name": "xxx"}
-- 确认项目（如有） → {"project_ids": [...], "project_names": [...]}
-- 用户意图 → {"intent": "booking"} 或 {"intent": "contact_only"}
-
-只在用户明确确认后记录。
+- 位置 → `{"addresses": [{"latitude": 31.23, "longitude": 121.47, "name": "朝阳区"}]}`
+- 商户 → `{"shops": [{"id": 109, "name": "嘉定汽修"}]}`
+- 项目（如有）→ `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`

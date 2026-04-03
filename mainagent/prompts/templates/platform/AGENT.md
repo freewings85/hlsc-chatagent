@@ -22,13 +22,10 @@
 
 ## 信息记录
 
-用户确认选择后，调用 update_session_state 记录（id 和 name 成对记录）：
-- 确认项目 → {"project_ids": [...], "project_names": [...]}
-- 确认车型 → {"car_model_id": "xxx", "car_model_name": "xxx"}
-- 确认商户 → {"shop_id": "xxx", "shop_name": "xxx"}
-- 确认时间 → {"booking_time": "xxx"}
-- 确认价格 → {"price": xxx}
-- 确认券型 → {"coupon_type": "nine_discount"}
-- 用户备注 → {"remark": "xxx"}
+用户确认选择后，调用 update_session_state 记录：
+- 项目 → `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`
+- 车型 → `{"carModels": [{"id": "xxx", "name": "2021款大众朗逸"}]}`
+- 商户 → `{"shops": [{"id": 109, "name": "嘉定汽修"}]}`
+- 位置 → `{"addresses": [{"latitude": 31.23, "longitude": 121.47, "name": "浦东新区"}]}`
 
 只在用户明确确认后记录，不要在工具返回候选列表时就记。

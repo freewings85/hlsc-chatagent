@@ -23,7 +23,7 @@ _DESCRIPTION: str = load_tool_prompt("update_session_state")
 async def update_session_state(
     ctx: RunContext[AgentDeps],
     updates: Annotated[dict[str, Any], Field(
-        description="要更新的键值对。常用字段：project_id, project_name, car_model_id, car_model_name, shop_id, shop_name, booking_time, coupon_id, insurance_type, location"
+        description="要更新的实体列表。字段：carModels([{id,name}]), addresses([{latitude,longitude,name}]), projects([{id,name}]), shops([{id,name}]), coupons([{id,name}])。value 为 null 表示清除"
     )],
 ) -> str:
     """更新会话状态。当通过工具调用获得关键信息（项目、商户、车型等）后，用此工具记录已确认的信息，后续轮次可直接使用，避免重复查询。"""
