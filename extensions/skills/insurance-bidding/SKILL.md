@@ -35,8 +35,9 @@ python {SCRIPTS_DIR}/confirm_booking.py --project_id 1461 --shop_ids 87,88 --car
 - **其他** → 引导车主确认或说明想调整什么
 
 ### 步骤 4：创建订单
+使用步骤 3 返回的「已确认参数」原样拼接执行，**不要自行重构参数**：
 ```bash
-python {SCRIPTS_DIR}/create_order.py --project_id 1461 --shop_ids 87,88 --car_model_id 56
+python {SCRIPTS_DIR}/create_order.py {步骤3返回的已确认参数}
 ```
 > 脚本会创建订单并启动竞价，返回 order card。不要用文字模拟。
 

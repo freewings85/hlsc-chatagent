@@ -38,6 +38,7 @@ def create_order(
     conversation_id: str,
     package_list: list[int],
     commercial_list: list[int],
+    car_model_id: str = "",
     remark: str = "",
 ) -> dict:
     """调用 POST /serviceorder/create 创建报价单。"""
@@ -48,6 +49,7 @@ def create_order(
         "orderType": 2,
         "packageList": package_list,
         "commercialList": commercial_list,
+        "carModelId": car_model_id,
         "demand": remark,
     }
     resp: httpx.Response = httpx.post(url, json=payload, timeout=15.0)
@@ -96,7 +98,13 @@ async def main(
     if not project_id or not shop_ids:
         return "缺少必要参数：project_id 和 shop_ids 不能为空"
 
+    if not SERVICE_OWNER_URL:
+        return "缺少 SERVICE_OWNER_URL 环境变量，无法创建订单"
+
     owner_id: str = os.getenv("OWNER_ID", "")
+    if not owner_id:
+        return "缺少 OWNER_ID 环境变量，无法创建订单"
+
     conversation_id: str = os.getenv("CONVERSATION_ID", "")
 
     try:
@@ -105,6 +113,7 @@ async def main(
             conversation_id=conversation_id,
             package_list=[project_id],
             commercial_list=shop_ids,
+            car_model_id=car_model_id,
             remark=remark,
         )
     except Exception as e:

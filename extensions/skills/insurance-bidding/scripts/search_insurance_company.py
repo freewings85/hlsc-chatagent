@@ -75,6 +75,11 @@ async def main(*, project_id: int) -> str:
     if not project_id:
         return "缺少必要参数：project_id 不能为空"
 
+    if not SERVICE_OWNER_URL:
+        return "缺少 SERVICE_OWNER_URL 环境变量"
+    if not DATA_MANAGER_URL:
+        return "缺少 DATA_MANAGER_URL 环境变量"
+
     owner_id: str = os.getenv("OWNER_ID", "")
     if not owner_id:
         return "缺少 OWNER_ID 环境变量"
