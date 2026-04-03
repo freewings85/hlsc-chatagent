@@ -13,7 +13,7 @@ import httpx
 
 from agent_sdk.logging import log_http_request, log_http_response
 
-AUCTIONEER_URL: str = os.getenv("AUCTIONEER_URL", "http://localhost:8106")
+AUCTIONEER_URL: str = os.getenv("AUCTIONEER_URL")
 
 
 class AuctioneerService:
