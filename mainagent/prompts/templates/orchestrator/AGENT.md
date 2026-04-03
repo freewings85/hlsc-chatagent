@@ -46,5 +46,4 @@
 ## 关键约束
 
 - delegate 时 context 必须包含已知信息（车型、位置、项目等）
-- 不能 delegate 给 guide 和 orchestrator 自身
 - 用户信息不足无法拆解时，先问清楚再编排
