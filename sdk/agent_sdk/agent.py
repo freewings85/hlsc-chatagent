@@ -253,6 +253,18 @@ class Agent:
             memory_service = self._build_memory_service()
             deps.memory_service = memory_service
 
+            # 4.5 加载持久化的 session_state（跨轮次复用）
+            from agent_sdk._agent.session_state_service import SessionStateService
+            from agent_sdk._config.settings import get_inner_storage_backend
+            inner_dir: str = os.environ.get("INNER_STORAGE_DIR", "data/inner")
+            session_state_service: SessionStateService = SessionStateService(inner_dir)
+            persisted_state: dict = session_state_service.load(user_id, session_id)
+            if persisted_state:
+                # 合并：持久化的作为底，本轮传入的覆盖
+                merged: dict = {**persisted_state, **deps.session_state}
+                deps.session_state = merged
+            deps._session_state_service = session_state_service
+
             # 5. Agent 运行前钩子（可用于 scene 判定等预处理）
             if self._before_agent_run_hook is not None:
                 await self._before_agent_run_hook(

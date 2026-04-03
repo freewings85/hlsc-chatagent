@@ -45,6 +45,12 @@ async def update_session_state(
             new_content: str = format_session_state(ctx.deps.session_state)
             ctx.deps._session_state_msg.parts = [UserPromptPart(content=new_content)]
 
+        # 2.5 持久化到文件（跨轮次保留）
+        session_state_service = getattr(ctx.deps, "_session_state_service", None)
+        if session_state_service is not None:
+            user_id: str = ctx.deps.user_id if hasattr(ctx.deps, "user_id") else ""
+            session_state_service.save(user_id, sid, ctx.deps.session_state)
+
         # 3. 构建确认信息
         updated_keys: list[str] = list(updates.keys())
         current_state: str = json.dumps(ctx.deps.session_state, ensure_ascii=False)

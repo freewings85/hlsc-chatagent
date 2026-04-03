@@ -27,11 +27,11 @@ _DESCRIPTION: str = load_tool_prompt("search_coupon")
 
 async def search_coupon(
     ctx: RunContext[AgentDeps],
+    latitude: Annotated[float, Field(description="用户纬度（必填）。来源优先级：request_context 已有 → 直接用；session_state 已有 → 直接用；都没有 → 先调 collect_location + geocode_location 获取")],
+    longitude: Annotated[float, Field(description="用户经度（必填）。来源同 latitude")],
     project_ids: Annotated[list[str] | None, Field(description="项目 ID 列表，来自 classify_project。无明确项目时传 null")] = None,
     shop_ids: Annotated[list[str], Field(description="商户 ID 列表；未指定商户时传空列表")] = [],
     city: Annotated[str, Field(description="城市名称（如'北京'），用于按地域筛选优惠")] = "",
-    latitude: Annotated[float, Field(description="用户纬度（必填）。来源优先级：request_context 已有 → 直接用；session_state 已有 → 直接用；都没有 → 先调 collect_location + geocode_location 获取")],
-    longitude: Annotated[float, Field(description="用户经度（必填）。来源同 latitude")],
     radius: Annotated[int, Field(description="搜索半径（米）。配合 latitude/longitude 使用。用户没有明确指定距离时不要传此参数")] = 0,
     date: Annotated[str, Field(description="查询日期（YYYY-MM-DD），用于过滤该日期有效的优惠。默认当天")] = "",
     semantic_query: Annotated[str, Field(description="用户对优惠的自然语言偏好描述（如'支付宝支付的满减活动、送洗车的'）。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数")] = "",
