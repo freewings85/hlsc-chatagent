@@ -164,6 +164,18 @@ async def _run_delegate_agent(
         max_iterations=20,
     )
 
+    # 3.5 设置 skills 过滤（子 agent 自动加载 skill_registry，这里限制可用范围）
+    scene_skills: list[str] = scene_config.get("skills", [])
+
+    async def _set_allowed_skills(
+        user_id: str, session_id: str, deps: Any = None, message: str | None = None
+    ) -> None:
+        """子 agent 的 before_run hook：设置 allowed_skills。"""
+        if deps is not None:
+            deps.allowed_skills = scene_skills
+
+    sub_agent._before_agent_run_hook = _set_allowed_skills
+
     # 4. 构建用户消息（context + task）
     user_message: str = task
     if context:
