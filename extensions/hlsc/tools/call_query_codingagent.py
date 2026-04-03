@@ -19,7 +19,19 @@ QUERY_CODINGAGENT_URL: str = os.getenv(
     os.getenv("CODE_AGENT_URL", "http://localhost:8102"),
 )
 
-_QUERY_PREFIX = """All available API docs are under the `/apis` directory, and the index is `/apis/index.md`.
+def _build_query_prefix(scene: str) -> str:
+    """根据场景构建 query prefix，指向对应的 API 文档目录。"""
+    if scene:
+        return f"""API docs for this task are under the `/apis/{scene}/` directory, and the index is `/apis/{scene}/index.md`.
+If `/apis/{scene}/` does not exist, fall back to `/apis/index.md`.
+Read the index first, then read only the docs actually needed for this task.
+Use the relevant APIs and Python code to try to solve the task below.
+You may use only Python standard library, `httpx`, and `numpy`.
+If you cannot complete the task, return only the clear reason.
+
+# Task
+"""
+    return """All available API docs are under the `/apis` directory, and the index is `/apis/index.md`.
 Read the index first, then read only the docs actually needed for this task.
 Use the relevant APIs and Python code to try to solve the task below.
 You may use only Python standard library, `httpx`, and `numpy`.
@@ -56,10 +68,13 @@ async def call_query_codingagent(
     ctx: RunContext[AgentDeps],
     query: str,
 ) -> str:
+    """通过 A2A 调用 QueryCodingAgent，执行复杂计算查询。自动根据当前场景加载对应的 API 文档。"""
+    scene: str = getattr(ctx.deps, "current_scene", "") or ""
     code_task_id = f"code-{ctx.deps.request_id[:8]}-{uuid4().hex[:8]}"
-    context: dict[str, str] = {"code_task_id": code_task_id}
+    context: dict[str, str] = {"code_task_id": code_task_id, "scene": scene}
     clean_query = query.strip()
-    wrapped_query = f"{_QUERY_PREFIX}{clean_query}"
+    query_prefix: str = _build_query_prefix(scene)
+    wrapped_query = f"{query_prefix}{clean_query}"
     result = await call_subagent(
         ctx,
         url=QUERY_CODINGAGENT_URL,

@@ -15,10 +15,24 @@ Supported `spec` types:
 你附近这两家可以看看。
 
 ```spec
-{"type":"ShopCard","props":{"shop_id":*,"name":"******"}}
+{"type":"ShopCard","props":{"shop_id":109,"name":"嘉定汽修","address":"上海市嘉定区XX路","phone":"021-12345678","distance":"2.3km","rating":4.8}}
 ```
 
-要我帮你继续看哪家？
+要我帮你联系哪家？
+</example>
+
+- `ContactOrderCard`
+  - 联系单生成成功后展示。商户会主动联系用户。
+  - `props`: `{ order_id: string, shop_name: string, visit_time: string }`
+
+<example>
+已帮你生成联系单，商户会主动联系你！
+
+```spec
+{"type":"ContactOrderCard","props":{"order_id":"ORD-20260403-001","shop_name":"嘉定汽修","visit_time":"明天下午3点"}}
+```
+
+商户收到通知后会尽快联系您确认服务细节。
 </example>
 
 ## `action`
@@ -27,10 +41,6 @@ Supported `spec` types:
   - Show an invite button when search_shops returns no results.
   - fields: `{ "action": "invite_shop" }`
 
-<example>
-这家店暂时没有入驻平台，您可以邀请他们加入。
-
-```action
-{"action":"invite_shop"}
-```
-</example>
+- `change_car`
+  - 触发条件：回复中提到了用户的具体车型 → 让用户纠正
+  - fields: `{ "action": "change_car", "current_car_model_id": string }`

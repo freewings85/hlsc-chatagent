@@ -44,9 +44,11 @@ scenes:
       - collect_car_info
       - collect_location
       - geocode_location
-      - match_project
+      - classify_project
       - list_user_cars
       - update_session_state
+      - call_query_codingagent
+      - create_contact_order
     skills:
       - saving-playbook
 
