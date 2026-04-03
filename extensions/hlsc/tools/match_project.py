@@ -79,7 +79,7 @@ async def match_project(
         result_json: str = json.dumps(data, ensure_ascii=False)
 
         log_tool_end("match_project", sid, rid, {
-            "matched": [p["name"] for p in projects],
+            "matched": [p["project_name"] for p in projects],
         })
 
         return result_json

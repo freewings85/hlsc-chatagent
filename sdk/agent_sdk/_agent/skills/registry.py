@@ -47,9 +47,6 @@ class SkillEntry:
     source_path: Path | None = None
     """来源文件路径（调试用）。"""
 
-    script_class: type | None = None
-    """Python 技能脚本类（SkillScript 子类），None 表示纯 prompt 型 skill。"""
-
     def trigger_description(self) -> str:
         """用于注入 skill_listing 的触发描述。
 
@@ -213,11 +210,6 @@ class SkillRegistry:
                     continue
                 entry = parse_skill_file(skill_file)
                 if entry is not None:
-                    # 检查是否有 Python 技能脚本
-                    from agent_sdk._agent.skills.script_registry import load_script_class
-                    script_cls = load_script_class(skill_dir)
-                    if script_cls is not None:
-                        entry.script_class = script_cls
                     registry._entries[entry.name] = entry
         return registry
 

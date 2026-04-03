@@ -1,16 +1,15 @@
 """invoke_skill：Pydantic AI tool，激活 skill 并持久化。
 
-设计：
-- 每个 skill 都可以同时拥有 SKILL.md（描述/指令）和 scripts/（可执行脚本）
-- invoke_skill("skill_name") → 返回 SKILL.md 指令给 LLM
-- invoke_skill("skill_name:script_name", args='{...}') → 执行 scripts/ 下的指定脚本
+设计依据（Decision 1）：
+- LLM 通过工具调用触发 skill（hard constraint，不可忽略）
+- 工具调用结构上先于文字生成，确保 skill 指令一定被加载
+- SKILL.md 内容存入 InvokedSkillStore（session 级持久化），compact 后仍可注入
 
-不区分 prompt 型和 script 型，所有 skill 统一处理。
+工具会注册到 deps.tool_map["Skill"]，通过 DynamicToolset 动态提供。
 """
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,45 +18,32 @@ from pydantic_ai import RunContext
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk._agent.skills.invoked_store import InvokedSkill
 
-logger: logging.Logger = logging.getLogger(__name__)
-
 
 async def invoke_skill(ctx: RunContext[AgentDeps], skill: str, args: str = "") -> str:
-    """Execute a skill or run a skill script.
+    """Execute a skill within the main session.
 
-    Two modes:
-    - invoke_skill("skill_name") → load SKILL.md instructions
-    - invoke_skill("skill_name:script_name", args='{"key":"value"}') → run a script
+    When users ask you to perform tasks, check if any of the available skills
+    match. Skills provide specialized capabilities and domain knowledge.
+
+    When users reference a slash command or "/<something>" (e.g., "/commit",
+    "/review-pr"), they are referring to a skill. Use this tool to invoke it.
+
+    IMPORTANT: When a skill matches the user's request, this is a BLOCKING
+    REQUIREMENT — invoke this tool BEFORE generating any other response.
 
     Available skills are listed in system-reminder messages in the session.
 
     Args:
-        skill: Skill name, or "skill_name:script_name" to run a specific script.
-        args:  Optional JSON arguments passed to the script (only used in script mode).
+        skill: The skill name to invoke (e.g., "commit", "review-pr").
+        args:  Optional arguments or hints passed to the skill.
     """
     registry = ctx.deps.skill_registry
     if registry is None:
         return "[skill system not available]"
 
-    # ── 解析 skill_name:script_name ──
-    if ":" in skill:
-        skill_name, script_name = skill.split(":", 1)
-        return await _execute_script(ctx, skill_name, script_name, args, registry)
-
-    # ── 载入 SKILL.md 指令 ──
-    return await _load_skill_prompt(ctx, skill, args, registry)
-
-
-async def _load_skill_prompt(
-    ctx: RunContext[AgentDeps],
-    skill: str,
-    args: str,
-    registry: object,
-) -> str:
-    """载入 SKILL.md 内容返回给 LLM，附带可用脚本列表。"""
-    entry = registry.get(skill)  # type: ignore[union-attr]
+    entry = registry.get(skill)
     if entry is None:
-        available = ", ".join(e.name for e in registry.list_invocable())  # type: ignore[union-attr]
+        available = ", ".join(e.name for e in registry.list_invocable())
         return f"[skill not found: '{skill}'. Available: {available or 'none'}]"
 
     # 持久化到 session 文件
@@ -65,17 +51,23 @@ async def _load_skill_prompt(
     if store is not None:
         await store.record(InvokedSkill(
             name=skill,
-            content=entry.content,  # type: ignore[union-attr]
+            content=entry.content,
             invoked_at=datetime.now(timezone.utc),
         ))
 
-    content: str = entry.content  # type: ignore[union-attr]
-    skill_dir_hint: str = ""
-    if entry.source_path is not None:  # type: ignore[union-attr]
-        skill_dir_path: Path = entry.source_path.parent.resolve()  # type: ignore[union-attr]
-        skill_dir: str = str(skill_dir_path)
+    content = entry.content
+    skill_dir_hint = ""
+    if entry.source_path is not None:
+        skill_dir_path = entry.source_path.parent.resolve()
+        skill_dir = skill_dir_path.as_posix()
+        scripts_dir = (skill_dir_path / "scripts").as_posix()
         skill_dir_hint = f"\n\n<skill-dir>{skill_dir}</skill-dir>"
 
+        # 变量替换：SKILL.md 中可使用 {SKILL_DIR} 和 {SCRIPTS_DIR}
+        content = content.replace("{SKILL_DIR}", skill_dir)
+        content = content.replace("{SCRIPTS_DIR}", scripts_dir)
+
+        # 计算 fs 工具（read/glob/grep）可用的虚拟路径
         backend = ctx.deps.fs_tools_backend
         if backend is not None and hasattr(backend, "cwd"):
             try:
@@ -84,75 +76,16 @@ async def _load_skill_prompt(
             except ValueError:
                 pass
 
-    # 列出可用脚本
-    scripts_hint: str = _build_scripts_hint(entry)
-
-    metadata_tag: str = (
+    # metadata tag（参照 Claude Code nI8()）
+    metadata_tag = (
         f"<command-name>{skill}</command-name>"
         f"<command-args>{args}</command-args>"
         f"<skill-format>true</skill-format>"
     )
-    execution_hint: str = (
+    execution_hint = (
         "\n\n<execution-hint>"
         "立即按上述步骤调用工具执行。不要输出文字向用户确认或解释。"
         "能从上下文推断的参数直接用。"
         "</execution-hint>"
     )
-    return f"{metadata_tag}{skill_dir_hint}\n\n{content}{scripts_hint}{execution_hint}"
-
-
-async def _execute_script(
-    ctx: RunContext[AgentDeps],
-    skill_name: str,
-    script_name: str,
-    args: str,
-    registry: object,
-) -> str:
-    """执行 skill 下指定名称的脚本。"""
-    from agent_sdk._agent.skills.script_registry import load_script_class_by_name
-
-    entry = registry.get(skill_name)  # type: ignore[union-attr]
-    if entry is None:
-        return f"[skill not found: '{skill_name}']"
-
-    if entry.source_path is None:  # type: ignore[union-attr]
-        return f"[skill '{skill_name}' has no source path]"
-
-    skill_dir: Path = entry.source_path.parent.resolve()  # type: ignore[union-attr]
-    script_class = load_script_class_by_name(skill_dir, script_name)
-
-    if script_class is None:
-        return f"[script '{script_name}' not found in skill '{skill_name}']"
-
-    from agent_sdk._agent.skills.script_executor import execute_skill_script
-
-    script = script_class()
-    logger.info("执行脚本: %s:%s (args=%s)", skill_name, script_name, args)
-    output: str = await execute_skill_script(script, ctx, args=args)
-    return output or "[skill script completed]"
-
-
-def _build_scripts_hint(entry: object) -> str:
-    """构建可用脚本列表提示，附加到 SKILL.md 内容后。"""
-    if entry.source_path is None:  # type: ignore[union-attr]
-        return ""
-
-    skill_dir: Path = entry.source_path.parent.resolve()  # type: ignore[union-attr]
-    scripts_dir: Path = skill_dir / "scripts"
-    if not scripts_dir.is_dir():
-        return ""
-
-    script_files: list[str] = [
-        f.stem for f in sorted(scripts_dir.glob("*.py"))
-        if not f.name.startswith("_")
-    ]
-    if not script_files:
-        return ""
-
-    skill_name: str = entry.name  # type: ignore[union-attr]
-    lines: list[str] = ["\n\n## 可用脚本\n"]
-    lines.append("通过 `invoke_skill(\"skill_name:script_name\", args='{...}')` 调用：\n")
-    for name in script_files:
-        lines.append(f"- `{skill_name}:{name}`")
-
-    return "\n".join(lines)
+    return f"{metadata_tag}{skill_dir_hint}\n\n{content}{execution_hint}"

@@ -71,8 +71,13 @@ async def bash(
     # bash 工作目录
     cwd: str | None = get_fs_config().bash_cwd
 
-    # 环境变量：PATH 注入 + 强制 Python UTF-8 输出（Windows 默认 GBK 会导致乱码）
-    env: dict[str, str] = {"PATH": _build_path_env(), "PYTHONUTF8": "1"}
+    # 环境变量：继承父进程环境 + PATH 注入 + 会话上下文 + UTF-8
+    env: dict[str, str] = {**os.environ, **{
+        "PATH": _build_path_env(),
+        "PYTHONUTF8": "1",
+        "OWNER_ID": ctx.deps.user_id,
+        "CONVERSATION_ID": ctx.deps.session_id,
+    }}
 
     executor = get_executor()
     result = await executor.execute(command, timeout=effective_timeout, cwd=cwd, env=env)

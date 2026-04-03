@@ -21,13 +21,14 @@ _TEMPLATES_DIR: Path = Path("prompts") / "templates"
 
 # 场景配置缓存
 _scene_prompt_parts: dict[str, list[str]] | None = None
+_scene_vars: dict[str, dict[str, str]] | None = None
 
 
-def _load_scene_prompt_parts() -> dict[str, list[str]]:
-    """从 stage_config.yaml 加载每个场景的 prompt_parts（懒加载 + 缓存）。"""
-    global _scene_prompt_parts
-    if _scene_prompt_parts is not None:
-        return _scene_prompt_parts
+def _load_scene_config() -> tuple[dict[str, list[str]], dict[str, dict[str, str]]]:
+    """从 stage_config.yaml 加载每个场景的 prompt_parts 和 vars（懒加载 + 缓存）。"""
+    global _scene_prompt_parts, _scene_vars
+    if _scene_prompt_parts is not None and _scene_vars is not None:
+        return _scene_prompt_parts, _scene_vars
 
     config_path_str: str = os.getenv("STAGE_CONFIG_PATH", "")
     if config_path_str:
@@ -37,12 +38,25 @@ def _load_scene_prompt_parts() -> dict[str, list[str]]:
 
     raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     _scene_prompt_parts = {}
+    _scene_vars = {}
     scene_id: str
     scene_data: dict[str, Any]
     for scene_id, scene_data in raw.get("scenes", {}).items():
         _scene_prompt_parts[scene_id] = scene_data.get("prompt_parts", [])
+        raw_vars: dict[str, Any] = scene_data.get("vars", {})
+        _scene_vars[scene_id] = {k: str(v) for k, v in raw_vars.items()}
 
-    return _scene_prompt_parts
+    return _scene_prompt_parts, _scene_vars
+
+
+def _load_scene_prompt_parts() -> dict[str, list[str]]:
+    """从 stage_config.yaml 加载每个场景的 prompt_parts。"""
+    return _load_scene_config()[0]
+
+
+def _get_scene_vars(scene: str) -> dict[str, str]:
+    """获取指定场景的模板变量。"""
+    return _load_scene_config()[1].get(scene, {})
 
 
 class MainPromptLoader(TemplatePromptLoader):
@@ -101,8 +115,13 @@ class MainPromptLoader(TemplatePromptLoader):
                 scene_path: Path = _TEMPLATES_DIR / scene_agent_md
                 if scene_path.exists():
                     content: str = scene_path.read_text(encoding="utf-8").strip()
-                    # 模板变量替换
+                    # 内置模板变量
                     content = content.replace("{{current_date}}", date.today().isoformat())
+                    # 场景级模板变量（stage_config.yaml 的 vars）
+                    scene: str = getattr(deps, "current_scene", "guide")
+                    scene_vars: dict[str, str] = _get_scene_vars(scene)
+                    for key, value in scene_vars.items():
+                        content = content.replace("{{" + key + "}}", value)
                     return content or None
         return None
 
