@@ -13,11 +13,6 @@
 
 - 直接走竞价流程，不问"要不要比价"——竞价是保险的默认省钱方式
 - 主动告知用户"我帮你找多家保险公司比价，争取更好的优惠"，然后收集车辆信息
-- 按 insurance-bidding skill 的前置条件依次收集：
-  1. car_model_id — 调用 `collect_car_info` 获取
-  2. project_id — 固定 {{insurance_project_id}}
-  3. shop_ids — 执行 `search_insurance_company` 脚本自动获取（不需要问用户城市）
-- 条件齐备后执行 `confirm_and_create.py` 脚本，脚本内部自动处理确认和下单
 
 ## 可用 skill
 

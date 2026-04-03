@@ -187,14 +187,18 @@ class LocalExecutor(CodeExecutor):
                         try:
                             interrupt_data: dict[str, Any] = json.loads(json_str)
                         except json.JSONDecodeError:
+                            logger.warning("[INTERACTIVE] __INTERRUPT__ JSON 解析失败: %s", json_str)
                             stdout_lines.append(line)
                             continue
 
+                        logger.info("[INTERACTIVE] 检测到中断标记, type=%s", interrupt_data.get("type"))
                         reply: str = await on_interrupt(interrupt_data)
+                        logger.info("[INTERACTIVE] 中断回复: %s", repr(reply))
 
                         if proc.stdin is not None:
                             proc.stdin.write((reply + "\n").encode("utf-8"))
                             await proc.stdin.drain()
+                            logger.info("[INTERACTIVE] 回复已写入 stdin")
                     else:
                         stdout_lines.append(line)
 
