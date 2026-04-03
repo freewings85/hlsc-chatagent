@@ -104,6 +104,7 @@ class RunLoopResult:
     final_response: str | None = None
     finish_reason: FinishReason = "completed"
     transcript_persisted: bool = False
+    usage: dict[str, int] | None = None
 
 
 # ── LoopContext ────────────────────────────────────────────────────────────
@@ -494,6 +495,14 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                     result.finish_reason = "max_iterations"
                     break
 
+        # Token usage 统计
+        usage = run.usage()
+        result.usage = {
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "total_tokens": usage.total_tokens,
+        }
+
         # 持久化：确保客户端收到 CHAT_REQUEST_END 时数据已落盘
         if run.result is not None:
             result.final_response = run.result.output
@@ -533,11 +542,14 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
     finally:
         if not is_sub_agent:
             clear_request_context()
+            end_data: dict[str, Any] = {"user_id": task.user_id}
+            if result.usage is not None:
+                end_data["usage"] = result.usage
             await emitter.emit(EventModel(
                 session_id=task.session_id,
                 request_id=task.request_id,
                 type=EventType.CHAT_REQUEST_END,
-                data={"user_id": task.user_id},
+                data=end_data,
                 finish_reason=result.finish_reason,
                 agent_name=agent_name,
             ))
