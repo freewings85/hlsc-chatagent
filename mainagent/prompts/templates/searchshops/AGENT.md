@@ -8,7 +8,7 @@
 
 ## 目标条件
 
-- **位置**（必须）：request_context 有 → 直接用；session_state 有 → 复用；都没有 → collect_location + geocode_location
+- **位置**（必须）：search_shops 的 address 参数不传即用用户当前位置；用户说了具体地址则传 address
 - **搜索条件**（按用户需求组合）：项目、商户类型、评分、营业时间、距离等
 - **选定商户**（生成联系单时必须）：用户从搜索结果中选一个 → shop_id
 - **到店时间**（生成联系单时必须）：用户确认什么时候去 → visit_time
@@ -31,7 +31,7 @@
 
 ## 记录（update_session_state）
 
-- 位置 → `{"addresses": [{"latitude": 31.23, "longitude": 121.47, "name": "朝阳区"}]}`
+- 位置 → `{"addresses": [{"name": "朝阳区"}]}`
 - 商户 → `{"shops": [{"id": 109, "name": "嘉定汽修"}]}`
 - 项目 → `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`
 

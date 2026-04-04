@@ -68,8 +68,6 @@ def main() -> None:
     from hlsc.tools.get_representative_car_model import get_representative_car_model
     from hlsc.tools.list_user_cars import list_user_cars
     from hlsc.tools.collect_car_info import collect_car_info
-    from hlsc.tools.geocode_location import geocode_location
-    from hlsc.tools.collect_location import collect_location
 
     # Context formatter
     from agent_sdk._common.request_context import ContextFormatter, RequestContext
@@ -96,7 +94,7 @@ def main() -> None:
                 parts.append("current_car: (未设置)")
             if context.current_location is not None:
                 loc = context.current_location
-                parts.append(f"current_location(address={loc.address}, lat={loc.lat}, lng={loc.lng})")
+                parts.append(f"current_location(address={loc.address})")
             else:
                 parts.append("current_location: (未设置)")
             return "[request_context]: " + ", ".join(parts)
@@ -140,8 +138,6 @@ def main() -> None:
         "get_representative_car_model": get_representative_car_model,
         "list_user_cars": list_user_cars,
         "collect_car_info": collect_car_info,
-        "geocode_location": geocode_location,
-        "collect_location": collect_location,
     }
     if diagnose_tool:
         tool_map["call_diagnose_agent"] = diagnose_tool

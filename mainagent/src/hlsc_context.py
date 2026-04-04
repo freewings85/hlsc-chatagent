@@ -47,10 +47,7 @@ class HlscContextFormatter(ContextFormatter):
 
         if context.current_location is not None:
             loc: LocationInfo = context.current_location
-            parts.append(
-                f"current_location(address={loc.address}, "
-                f"lat={loc.lat}, lng={loc.lng})"
-            )
+            parts.append(f"current_location(address={loc.address})")
         else:
             parts.append("current_location: (未设置)")
 

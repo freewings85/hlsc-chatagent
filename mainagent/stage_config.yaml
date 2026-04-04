@@ -28,8 +28,6 @@ scenes:
       - search_shops
       - search_coupon
       - collect_car_info
-      - collect_location
-      - geocode_location
       - list_user_cars
       - confirm_booking
       - update_session_state
@@ -42,8 +40,6 @@ scenes:
     tools:
       - search_shops
       - collect_car_info
-      - collect_location
-      - geocode_location
       - classify_project
       - list_user_cars
       - update_session_state
@@ -59,8 +55,6 @@ scenes:
       - search_coupon
       - book_coupon
       - classify_project
-      - collect_location
-      - geocode_location
       - update_session_state
     skills:
       - saving-methods
@@ -73,8 +67,6 @@ scenes:
     tools:
       - search_shops
       - collect_car_info
-      - collect_location
-      - geocode_location
       - list_user_cars
       - update_session_state
       - bash

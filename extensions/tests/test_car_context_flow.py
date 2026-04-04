@@ -171,9 +171,7 @@ class TestCarContextFlow:
 
         # 不应触发任何 confirm 工具
         assert "collect_car_info" not in tool_calls
-        assert "collect_location" not in tool_calls
         assert "get_representative_car_model" not in tool_calls
-        assert "geocode_location" not in tool_calls
 
         # 应有价格相关文本
         texts = "".join(

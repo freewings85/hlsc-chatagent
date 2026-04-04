@@ -14,7 +14,7 @@
 ## 记录用户选择（update_session_state）
 
 - 用户确认车型 → `{"carModels": [{"id": "xxx", "name": "xxx"}]}`
-- 用户提到位置并获取到坐标 → `{"addresses": [{"latitude": 31.23, "longitude": 121.47, "name": "浦东新区"}]}`
+- 用户提到位置 → `{"addresses": [{"name": "浦东新区"}]}`
 
 ## 可用 skill
 

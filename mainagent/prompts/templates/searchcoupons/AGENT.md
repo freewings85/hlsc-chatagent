@@ -10,7 +10,7 @@
 
 完成预约需要收集以下信息：
 - **项目**（必须）：用户想做什么 → classify_project 识别，或从 session_state 复用
-- **位置**（必须）：search_coupon 需要经纬度。来源优先级：request_context 已有 → 直接用；session_state 已有 → 直接用；都没有 → 调 collect_location + geocode_location
+- **位置**（必须）：search_coupon 的 address 参数不传即用用户当前位置；用户说了具体地址则传 address
 - **优惠偏好**（可选）：支付方式、赠品、时间限制等 → 组装到 semantic_query
 - **选定优惠**（预约时必须）：用户从搜索结果中选一个 → coupon_id + shop_id
 - **到店时间**（预约时必须）：用户确认什么时候去 → visit_time（支持"上午""下午""明天下午3点"等自然语言）
