@@ -501,6 +501,8 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
             "input_tokens": usage.input_tokens,
             "output_tokens": usage.output_tokens,
             "total_tokens": usage.total_tokens,
+            "cache_read_tokens": usage.cache_read_tokens,
+            "cache_write_tokens": usage.cache_write_tokens,
         }
 
         # 持久化：确保客户端收到 CHAT_REQUEST_END 时数据已落盘
