@@ -41,8 +41,10 @@ class AgentApp:
         self._config = config or AgentAppConfig()
         self._temporal_client: Any = None
         self._interrupt_worker: Any = None
-        # 运行中的任务注册表：task_id → asyncio.Task
+        # 运行中的任务注册表��task_id → asyncio.Task
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
+        # per-session 锁：防止同一 session 并发请求导致数据竞争
+        self._session_locks: dict[str, asyncio.Lock] = {}
         self.app = self._build_fastapi()
 
     def _resolve_chat_fs_tools_backend(
@@ -142,21 +144,41 @@ class AgentApp:
                 raw_rid if isinstance(raw_rid, str) and 1 <= len(raw_rid) <= 64 else None
             )
 
+            # per-session 锁：防止并发请求
+            if session_id not in self._session_locks:
+                self._session_locks[session_id] = asyncio.Lock()
+            session_lock: asyncio.Lock = self._session_locks[session_id]
+
+            if session_lock.locked():
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "该会话有请求正在处理中，请稍后重试", "session_id": session_id},
+                )
+
             queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
             emitter = EventEmitter(queue)
             fs_tools_backend = self._resolve_chat_fs_tools_backend(user_id, session_id)
 
+            async def _locked_run() -> None:
+                async with session_lock:
+                    try:
+                        await agent.run(
+                            message,
+                            user_id=user_id,
+                            session_id=session_id,
+                            emitter=emitter,
+                            temporal_client=self._temporal_client,
+                            request_context=context,
+                            fs_tools_backend=fs_tools_backend,
+                            request_id=request_id,
+                        )
+                    finally:
+                        # 锁释放后清理空闲锁，避免内存无限增长
+                        if session_id in self._session_locks and not session_lock.locked():
+                            self._session_locks.pop(session_id, None)
+
             loop_task = asyncio.create_task(
-                agent.run(
-                    message,
-                    user_id=user_id,
-                    session_id=session_id,
-                    emitter=emitter,
-                    temporal_client=self._temporal_client,
-                    request_context=context,
-                    fs_tools_backend=fs_tools_backend,
-                    request_id=request_id,
-                ),
+                _locked_run(),
                 name=f"agent-loop-{session_id}",
             )
 
@@ -281,20 +303,38 @@ class AgentApp:
             message: str = request.get("message", "")
             context: Any = request.get("context")
 
+            # per-session 锁
+            if session_id not in self._session_locks:
+                self._session_locks[session_id] = asyncio.Lock()
+            sync_lock: asyncio.Lock = self._session_locks[session_id]
+            if sync_lock.locked():
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "该会话有请求正在处理中，请稍后重试"},
+                )
+
             queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
             emitter: EventEmitter = EventEmitter(queue)
             fs_tools_backend: Any = self._resolve_chat_fs_tools_backend(user_id, session_id)
 
+            async def _locked_sync_run() -> None:
+                async with sync_lock:
+                    try:
+                        await agent.run(
+                            message,
+                            user_id=user_id,
+                            session_id=session_id,
+                            emitter=emitter,
+                            temporal_client=self._temporal_client,
+                            request_context=context,
+                            fs_tools_backend=fs_tools_backend,
+                        )
+                    finally:
+                        if session_id in self._session_locks and not sync_lock.locked():
+                            self._session_locks.pop(session_id, None)
+
             loop_task: asyncio.Task[None] = asyncio.create_task(
-                agent.run(
-                    message,
-                    user_id=user_id,
-                    session_id=session_id,
-                    emitter=emitter,
-                    temporal_client=self._temporal_client,
-                    request_context=context,
-                    fs_tools_backend=fs_tools_backend,
-                ),
+                _locked_sync_run(),
                 name=f"agent-loop-sync-{session_id}",
             )
 

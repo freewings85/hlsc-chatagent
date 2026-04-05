@@ -34,6 +34,11 @@ InterruptCallback = Callable[[dict[str, Any], str], Coroutine[Any, Any, None]]
 # 当前进程中活跃的 interrupt key 集合（内存态，重启后为空）
 _active_interrupt_keys: set[str] = set()
 
+# 内存模式 interrupt 等待超时（秒），超时后抛 asyncio.TimeoutError
+_MEMORY_INTERRUPT_TIMEOUT: float = float(
+    __import__("os").getenv("INTERRUPT_TIMEOUT_SECONDS", "300")  # 默认 5 分钟
+)
+
 # ── 内存模式状态 ──
 # key → asyncio.Event（resume 时 set）
 _memory_events: dict[str, asyncio.Event] = {}
@@ -63,7 +68,11 @@ async def _interrupt_memory(
         interrupt_id = f"mem-{uuid.uuid4().hex[:8]}"
         await callback(data, interrupt_id)
         # 挂起协程，等待 resume_memory() 调用 event.set()
-        await event.wait()
+        # 加超时保护，防止用户关浏览器后永久挂起
+        try:
+            await asyncio.wait_for(event.wait(), timeout=_MEMORY_INTERRUPT_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise TimeoutError("用户未在规定时间内响应，操作已取消")
         return _memory_responses.pop(key, {})
     finally:
         _active_interrupt_keys.discard(key)

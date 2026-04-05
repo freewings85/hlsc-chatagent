@@ -46,23 +46,34 @@ async def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dic
         turns: list[dict[str, str]] = []
         for msg in agent_messages:
             role: str = getattr(msg, "role", "")
-            content: str = ""
-            # 提取文本内容
-            parts = getattr(msg, "parts", [])
-            if parts:
-                content_parts: list[str] = []
-                for part in parts:
-                    if isinstance(part, dict) and part.get("content"):
-                        content_parts.append(str(part["content"]))
-                    elif isinstance(part, str):
-                        content_parts.append(part)
-                    elif hasattr(part, "content") and part.content:
-                        content_parts.append(str(part.content))
-                content = " ".join(content_parts).strip()
-            elif hasattr(msg, "content") and msg.content:
-                content = str(msg.content).strip()
+            if role not in ("user", "assistant"):
+                continue
 
-            if role in ("user", "assistant") and content:
+            # AgentMessage 直接有 content 属性（UserMessage/AssistantMessage）
+            content: str = str(getattr(msg, "content", "") or "").strip()
+
+            # UserMessage 可能 content 为空但有 tool_results，提取工具结果摘要
+            if not content and role == "user":
+                tool_results = getattr(msg, "tool_results", [])
+                if tool_results:
+                    summaries: list[str] = [
+                        f"[{tr.tool_name}: {tr.content[:80]}]"
+                        for tr in tool_results
+                        if hasattr(tr, "tool_name") and hasattr(tr, "content")
+                    ]
+                    content = " ".join(summaries)
+
+            # AssistantMessage 可能 content 为空但有 tool_calls
+            if not content and role == "assistant":
+                tool_calls = getattr(msg, "tool_calls", [])
+                if tool_calls:
+                    call_names: list[str] = [
+                        tc.tool_name for tc in tool_calls
+                        if hasattr(tc, "tool_name")
+                    ]
+                    content = f"[调用工具: {', '.join(call_names)}]"
+
+            if content:
                 turns.append({"role": role, "content": content})
 
         # 返回最近 max_turns 轮
@@ -204,14 +215,25 @@ class StageHook:
         # 调 BMA 分类
         scenes: list[str] = await _call_bma_classify(message, recent_turns=recent_turns)
 
-        # 路由决策
+        # 路由决策（含场景粘性：BMA 返回空时，如果上一轮有明确业务场景则保持）
         scene: str
         if len(scenes) == 1:
             scene = scenes[0]
         elif len(scenes) > 1:
             scene = "orchestrator"
         else:
-            scene = "guide"
+            # BMA 无法判断 → 检查场景粘性（从 session_state 读取上一轮场景）
+            prev_scene: str = deps.session_state.get("_current_scene", "guide")
+            has_business_state: bool = bool(
+                deps.session_state.get("projects")
+                or deps.session_state.get("shops")
+                or deps.session_state.get("coupons")
+            )
+            if prev_scene not in ("guide", "orchestrator") and has_business_state:
+                scene = prev_scene
+                logger.info("BMA 返回空但有业务状态，保持场景粘性: %s", scene)
+            else:
+                scene = "guide"
 
         # 加载场景配置
         config: SceneConfig = _config_loader.get_scene(scene)
@@ -221,6 +243,9 @@ class StageHook:
         deps.available_tools = config.tools
         deps.allowed_skills = config.skills
         deps.current_scene_agent_md = config.agent_md if config.agent_md else None
+
+        # 持久化当前场景到 session_state（供下一轮场景粘性判断）
+        deps.session_state["_current_scene"] = scene
 
         logger.info(
             "场景决策: user=%s, scene=%s, agent_md=%s, tools=%d, skills=%s",

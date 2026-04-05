@@ -176,16 +176,24 @@ def create_agent(
 def _make_summarize_fn(agent: Agent[AgentDeps, str]) -> SummarizeFn:
     """创建用于 full compact 的 LLM 摘要回调。
 
-    使用同一个 agent 的模型，以简单 prompt 生成对话摘要。
+    使用无工具的轻量 Agent 避免摘要时意外触发工具调用。
     """
+    from pydantic_ai import Agent as PydanticAgent
+
+    # 创建无工具的摘要专用 agent，复用模型配置
+    _summarize_agent: PydanticAgent[None, str] = PydanticAgent(
+        model=agent.model,
+        system_prompt="你是对话摘要助手。将对话历史压缩为简洁摘要，保留关键信息、决策和上下文。",
+    )
+
     async def summarize_fn(messages: list[ModelMessage]) -> str:
-        history_text = _format_messages_for_summary(messages)
-        prompt = (
+        history_text: str = _format_messages_for_summary(messages)
+        prompt: str = (
             "请将以下对话历史压缩为一段简洁的摘要，保留关键信息、决策和上下文，"
             "使后续对话能在此基础上继续。\n\n"
             f"对话历史：\n{history_text}"
         )
-        result = await agent.run(prompt)
+        result = await _summarize_agent.run(prompt)
         return result.output
 
     return summarize_fn
