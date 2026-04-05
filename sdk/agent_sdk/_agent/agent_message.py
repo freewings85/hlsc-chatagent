@@ -99,7 +99,10 @@ def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
 
     - SystemPromptPart 被跳过（由 Pydantic AI 自动注入，不属于对话内容）
     - 如果一个 ModelRequest 只包含 SystemPromptPart，则整个消息被跳过
+    - <dynamic-context> 标记的内容被剥离（不进审计日志）
     """
+    from agent_sdk._agent.message.context_injector import strip_dynamic_context
+
     result: list[AgentMessage] = []
 
     for msg in messages:
@@ -112,6 +115,7 @@ def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
                     continue
                 elif isinstance(part, UserPromptPart):
                     text = part.content if isinstance(part.content, str) else str(part.content)
+                    text = strip_dynamic_context(text)
                     if text:
                         content_parts.append(text)
                 elif isinstance(part, ToolReturnPart):
