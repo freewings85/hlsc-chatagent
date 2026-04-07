@@ -27,20 +27,25 @@
 </example>
 
 - 展示优惠给出具体金额、使用条件、商户地址和电话
-- 搜索返回 0 条 → 介绍平台九折作为补充。用户说结果不满意 → 读 saving-methods 介绍其他省钱方式
 - 用户选定优惠 → 确认到店时间 → book_coupon。前提：coupon_id 和 shop_id 必须来自本次 search_coupon 返回，visit_time 必须向用户确认过
-
-## 记录（update_session_state）
-
-- 项目 → `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`
-- 选定优惠 → `{"coupons": [{"id": 42, "name": "春季保养促销"}], "shops": [{"id": 109, "name": "嘉定汽修"}]}`
 
 ## 能力边界
 
 - 能做：搜优惠、对比优惠、预约确认（book_coupon）
 - 不能做：预订下单（走平台九折）、查商户详情
 - 用户想走平台九折 → "九折预订我可以帮您另外安排"
-- 搜索返回 0 条 → 读 saving-methods 介绍平台九折等其他省钱方式
+
+## 失败处理
+
+- classify_project 无匹配 → "这个项目暂时没有相关优惠"
+- search_coupon 返回 0 条 → 读 saving-methods 介绍平台九折等其他省钱方式
+- 用户不满意搜索结果 → 读 saving-methods 介绍其他省钱方式
+- 用户中途放弃 → "没问题，需要时随时找我"
+
+## 记录（update_session_state）
+
+- 项目 → `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`
+- 选定优惠 → `{"coupons": [{"id": 42, "name": "春季保养促销"}], "shops": [{"id": 109, "name": "嘉定汽修"}]}`
 
 ## 路径偏离
 
