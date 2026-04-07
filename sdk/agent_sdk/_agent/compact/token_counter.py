@@ -16,8 +16,8 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-# 粗略估算：1 token ≈ 4 字符（中英混合场景偏保守）
-_CHARS_PER_TOKEN = 4
+# 粗略估算：1 token ≈ 2 字符（中文约 1.5 字符/token，英文约 4，取偏安全值）
+_CHARS_PER_TOKEN = 2
 
 
 def estimate_tokens(text: str) -> int:
