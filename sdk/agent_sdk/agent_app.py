@@ -146,11 +146,12 @@ class AgentApp:
 
         # SSE Chat Stream
         @fastapi_app.post("/chat/stream")
-        async def chat_stream(request: dict[str, Any], raw_request: Request) -> StreamingResponse:
+        async def chat_stream(raw_request: Request) -> StreamingResponse:
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
             from agent_sdk._event.event_type import EventType
 
+            request: dict[str, Any] = await raw_request.json()
             session_id = request.get("session_id", "default")
             user_id = request.get("user_id", "anonymous")
             message = request.get("message", "")
@@ -237,7 +238,7 @@ class AgentApp:
 
         # Async Chat（Kafka）
         @fastapi_app.post("/chat/async")
-        async def chat_async(request: dict[str, Any], raw_request: Request) -> JSONResponse:
+        async def chat_async(raw_request: Request) -> JSONResponse:
             from agent_sdk._config.settings import get_kafka_config
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
@@ -250,6 +251,7 @@ class AgentApp:
                     content={"error": "Kafka 未启用，请设置 KAFKA_ENABLED=true"},
                 )
 
+            request: dict[str, Any] = await raw_request.json()
             session_id: str = request.get("session_id", "default")
             user_id: str = request.get("user_id", "anonymous")
             message: str = request.get("message", "")
@@ -309,12 +311,13 @@ class AgentApp:
 
         # Sync Chat（非 SSE，等待完成后返回 JSON）
         @fastapi_app.post("/chat/sync")
-        async def chat_sync(request: dict[str, Any], raw_request: Request) -> JSONResponse:
+        async def chat_sync(raw_request: Request) -> JSONResponse:
             """同步对话接口：等待 Agent 完成后返回 JSON 结果。"""
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
             from agent_sdk._event.event_type import EventType
 
+            request: dict[str, Any] = await raw_request.json()
             session_id: str = request.get("session_id", "default")
             user_id: str = request.get("user_id", "anonymous")
             message: str = request.get("message", "")
