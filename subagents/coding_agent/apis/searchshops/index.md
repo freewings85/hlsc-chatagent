@@ -16,6 +16,11 @@
 - 查指定商户的项目报价，用于比价
 - 文档：`/apis/searchshops/quotations.md`
 
+### 四、地址解析
+- 将地址文本转为经纬度，用于调其他 API 的位置参数
+- 文档：`/apis/searchshops/address.md`
+- 注意：query 中已提供用户 latitude/longitude 时无需调此接口
+
 ## 典型任务
 
 1. **"哪家换胎用完优惠后最便宜"**
@@ -36,3 +41,9 @@
 
 4. **"附近有没有4S店"**
    - 读 shops.md → 搜商户，结果中 shop_type 字段包含商户类型（如"4S店"），可在结果中过滤
+
+5. **"淮海中路上哪家保养便宜"**
+   - 读 address.md → 解析"淮海中路" → 拿到 lat/lng
+   - 读 shops.md → 用 lat/lng 搜附近商户
+   - 读 quotations.md → 查每家报价
+   - Python 比价排序
