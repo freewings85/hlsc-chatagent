@@ -12,7 +12,7 @@
 - **文件**: sdk/agent_sdk/_agent/interrupt.py:53-71
 - **描述**: 内存模式下 `await event.wait()` 没有超时。用户关浏览器后 agent loop 永久挂起，_running_tasks 不释放
 - **影响**: 内存泄漏 + session 假死
-- **状态**: 待修复
+- **状态**: ✅ 已修复（commit 1629429）
 
 ### P0-2: BMA 每轮重分类，多轮业务流程断裂
 - **发现者**: 挑战者
@@ -106,7 +106,7 @@
 - **发现者**: 架构师
 - **文件**: extensions/hlsc/tools/delegate.py:158-165
 - **描述**: 子 agent StaticPromptLoader 不支持 skill 文件系统
-- **状态**: 待修复
+- **状态**: ✅ 确认无问题 — 子 agent 共享父 fs_tools_backend，skill_registry 从同目录自动加载
 
 ### P1-8: prompt_loader _TEMPLATES_DIR 相对路径依赖 CWD
 - **发现者**: 架构师
@@ -142,7 +142,7 @@
 ### P1-14: guide 场景是死胡同
 - **发现者**: 挑战者
 - **描述**: guide 只有 list_user_cars + update_session_state，无法推进任何业务
-- **状态**: 与 P0-4 相关
+- **状态**: ✅ 确认无问题 — guide 负责引导分流，BMA 小模型负责意图识别路由到业务场景，不是死胡同
 
 ### P1-15: orchestrator delegate 并行时 SSE 事件混乱
 - **发现者**: 挑战者
