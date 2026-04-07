@@ -152,10 +152,13 @@ if _DIST_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_DIST_DIR / "assets")), name="static-assets")
 
 
-def _resolve_request_id(raw_request: Request) -> str:
-    """从请求 header 提取 OTel trace_id 作为 request_id，无 traceparent 时回退到 uuid。
+def _resolve_trace_context(raw_request: Request) -> tuple[str, object | None]:
+    """从请求 header 提取 OTel trace context。
 
-    使用 opentelemetry W3CTraceContextTextMapPropagator 解析 traceparent header。
+    Returns:
+        (request_id, parent_otel_context)
+        - request_id: trace_id 字符串，无 traceparent 时回退到 uuid
+        - parent_otel_context: OTel Context 对象，传给 agent.run() 实现 trace 串联
     """
     from opentelemetry.propagate import extract
     from opentelemetry.trace import INVALID_TRACE_ID, format_trace_id, get_current_span
@@ -163,8 +166,8 @@ def _resolve_request_id(raw_request: Request) -> str:
     ctx = extract(dict(raw_request.headers))
     trace_id: int = get_current_span(ctx).get_span_context().trace_id
     if trace_id != INVALID_TRACE_ID:
-        return format_trace_id(trace_id)
-    return uuid.uuid4().hex
+        return format_trace_id(trace_id), ctx
+    return uuid.uuid4().hex, None
 
 
 @app.post("/chat/stream")
@@ -188,7 +191,7 @@ async def chat_stream(request: ChatRequest, raw_request: Request) -> StreamingRe
     emitter: EventEmitter = EventEmitter(queue)
 
     agent = _get_agent()
-    request_id: str = _resolve_request_id(raw_request)
+    request_id, parent_otel_context = _resolve_trace_context(raw_request)
     task_id: str = f"{request.session_id}-{id(request)}"
 
     loop_task: asyncio.Task[None] = asyncio.create_task(
@@ -201,6 +204,7 @@ async def chat_stream(request: ChatRequest, raw_request: Request) -> StreamingRe
             request_context=request.context,
             fs_tools_backend=get_fs_tools_backend(),
             request_id=request_id,
+            parent_otel_context=parent_otel_context,
         ),
         name=f"agent-loop-{task_id}",
     )
@@ -280,7 +284,7 @@ async def chat_sync(request: ChatRequest, raw_request: Request) -> JSONResponse:
     emitter: EventEmitter = EventEmitter(queue)
 
     agent = _get_agent()
-    request_id: str = _resolve_request_id(raw_request)
+    request_id, parent_otel_context = _resolve_trace_context(raw_request)
     task_id: str = f"{request.session_id}-sync-{id(request)}"
 
     loop_task: asyncio.Task[None] = asyncio.create_task(
@@ -293,6 +297,7 @@ async def chat_sync(request: ChatRequest, raw_request: Request) -> JSONResponse:
             request_context=request.context,
             fs_tools_backend=get_fs_tools_backend(),
             request_id=request_id,
+            parent_otel_context=parent_otel_context,
         ),
         name=f"agent-loop-{task_id}",
     )
@@ -412,7 +417,7 @@ async def chat_async(request: AsyncChatRequest, raw_request: Request) -> JSONRes
     emitter = EventEmitter(queue)
 
     agent = _get_agent()
-    request_id: str = _resolve_request_id(raw_request)
+    request_id, parent_otel_context = _resolve_trace_context(raw_request)
     task_id: str = f"{request.session_id}-async-{id(request)}"
 
     loop_task = asyncio.create_task(
@@ -424,6 +429,7 @@ async def chat_async(request: AsyncChatRequest, raw_request: Request) -> JSONRes
             temporal_client=_get_temporal_client(),
             request_context=request.context,
             request_id=request_id,
+            parent_otel_context=parent_otel_context,
         ),
         name=f"agent-loop-async-{task_id}",
     )
