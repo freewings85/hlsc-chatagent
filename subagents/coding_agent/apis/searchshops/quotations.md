@@ -65,22 +65,54 @@
 - 对比多家商户的报价：传多个 `shopIds` + 同一个 `projectIds`
 - 查商户所有项目报价：只传 `shopIds`，不传 `projectIds`
 
-### 比价策略（混合价格类型）
+### 比价代码示例
 
-不同商户可能返��不同 priceType，比价时按以下规则提取"可比价格"：
+不同商户的 priceType 可能不同（固定/条件/区间），比价时用以下代码提取可比价格并排序：
 
-| priceType | 可比价格 | 标�� |
-|-----------|---------|------|
-| 1（准确价格） | 直接用 `price` | 无需标注 |
-| 3（区间价格） | 用 `minPrice` | 标注"XX元起" |
-| 2（条件价格） | 用 `conditionPrices` 中最低的 `price` | 标注"XX元起（具体条件：YYY）" |
+```python
+def get_comparable_price(project):
+    """从单个项目报价中提取可比价格和展示标签。
 
-按可比价格排序后，结果中必须标注价格类型：
-- 准确价格："329元"
-- 区间价格："1000元起（实际 1000-3000 元）"
-- 条件价格："3600元起（2.2t以下，更重的车更贵）"
+    返回 (comparable_price, display_label)
+    - comparable_price: float，用于排序
+    - display_label: str，展示给用户的价格描述
+    """
+    ps = project["priceStringObject"]
+    pt = project["priceType"]
+    if pt == 1:  # 准确价格
+        return ps["price"], f'{ps["price"]}元'
+    if pt == 3:  # 区间价格
+        return ps["minPrice"], f'{ps["minPrice"]}元起（{ps["minPrice"]}-{ps["maxPrice"]}元）'
+    if pt == 2:  # 条件价格
+        lowest = min(ps["conditionPrices"], key=lambda x: x["price"])
+        return lowest["price"], f'{lowest["price"]}元起（{lowest["condition"]}）'
+    return float("inf"), "暂无报价"
 
-如果多家商户都是非准确价格，比价结果���尾附一句��
+
+# 比价流程：从 getCommercialPackages 响应中提取并排序
+target_project_id = 1101  # 要比价的项目 ID
+results = []
+for shop in response_data["result"]:
+    for proj in shop["projects"]:
+        if proj["projectId"] == target_project_id:
+            price, label = get_comparable_price(proj)
+            results.append({
+                "shopId": shop["shopId"],
+                "shopName": shop["shopName"],
+                "price": price,
+                "label": label,
+                "priceType": proj["priceType"],
+            })
+
+results.sort(key=lambda x: x["price"])
+
+# 输出示例：
+# 1. 小拇指快修 329元
+# 2. 精典汽车 359元
+# 3. 拖车服务 3600元起（2.2t重量以下）
+```
+
+如果排序结果中有非准确价格（priceType != 1），结尾附一句：
 "部分价格与车型/车况相关，提供车型信息可获得更精确的报价对比"
 
 ### 注意
