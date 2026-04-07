@@ -23,5 +23,3 @@ session_state 采用统一的实体列表格式：
 - collect_car_info / list_user_cars 确认车型后 → 记录 carModels
 - 用户提到或确认地址后 → 记录 addresses（只需 name）
 - search_coupon 用户选定优惠后 → 记录 coupons
-
-参数 updates 是一个字典，key 是字段名（如 "projects"），value 是对应的列表。value 为 null 表示清除该字段。
