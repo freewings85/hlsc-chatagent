@@ -238,7 +238,7 @@ class AgentApp:
 
         # Async Chat（Kafka）
         @fastapi_app.post("/chat/async")
-        async def chat_async(raw_request: Request) -> JSONResponse:
+        async def chat_async(request: dict[str, Any]) -> JSONResponse:
             from agent_sdk._config.settings import get_kafka_config
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
@@ -251,12 +251,12 @@ class AgentApp:
                     content={"error": "Kafka 未启用，请设置 KAFKA_ENABLED=true"},
                 )
 
-            request: dict[str, Any] = await raw_request.json()
             session_id: str = request.get("session_id", "default")
             user_id: str = request.get("user_id", "anonymous")
             message: str = request.get("message", "")
             context: Any = request.get("context")
-            request_id, parent_otel_context = _resolve_trace_context(raw_request)
+            request_id: str = uuid.uuid4().hex
+            parent_otel_context: object | None = None
 
             producer = await get_kafka_producer()
             sinker = KafkaSinker(producer, kafka_config.topic)
