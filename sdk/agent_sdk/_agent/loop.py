@@ -291,7 +291,10 @@ async def _emit_model_stream(
                         session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TOOL_CALL_ARGS,
-                        data={"args_chunk": delta.args_delta},
+                        data={
+                            "tool_call_id": delta.tool_call_id or "",
+                            "args_chunk": delta.args_delta,
+                        },
                         agent_name=agent_name,
                         parent_tool_call_id=parent_tool_call_id,
                     ))
