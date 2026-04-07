@@ -146,17 +146,17 @@ class AgentApp:
 
         # SSE Chat Stream
         @fastapi_app.post("/chat/stream")
-        async def chat_stream(raw_request: Request) -> StreamingResponse:
+        async def chat_stream(request: dict[str, Any]) -> StreamingResponse:
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
             from agent_sdk._event.event_type import EventType
 
-            request: dict[str, Any] = await raw_request.json()
             session_id = request.get("session_id", "default")
             user_id = request.get("user_id", "anonymous")
             message = request.get("message", "")
             context = request.get("context")
-            request_id, parent_otel_context = _resolve_trace_context(raw_request)
+            request_id: str = uuid.uuid4().hex
+            parent_otel_context: object | None = None
 
             # per-session 锁：防止并发请求
             if session_id not in self._session_locks:
@@ -311,18 +311,18 @@ class AgentApp:
 
         # Sync Chat（非 SSE，等待完成后返回 JSON）
         @fastapi_app.post("/chat/sync")
-        async def chat_sync(raw_request: Request) -> JSONResponse:
+        async def chat_sync(request: dict[str, Any]) -> JSONResponse:
             """同步对话接口：等待 Agent 完成后返回 JSON 结果。"""
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
             from agent_sdk._event.event_type import EventType
 
-            request: dict[str, Any] = await raw_request.json()
             session_id: str = request.get("session_id", "default")
             user_id: str = request.get("user_id", "anonymous")
             message: str = request.get("message", "")
             context: Any = request.get("context")
-            request_id, parent_otel_context = _resolve_trace_context(raw_request)
+            request_id: str = uuid.uuid4().hex
+            parent_otel_context: object | None = None
 
             # per-session 锁
             if session_id not in self._session_locks:
