@@ -203,6 +203,6 @@ async def _run_delegate_agent(
         is_sub_agent=True,
         message_history=[],  # 独立上下文，不加载历史
         transcript_session_id=f"{parent_deps.session_id}/delegates/{agent_id}",
-        session_state=dict(parent_deps.session_state) if parent_deps.session_state else None,
+        session_state=parent_deps.session_state,  # 共享引用，子 agent 的 update_session_state 直接修改父状态
     )
     return result or ""
