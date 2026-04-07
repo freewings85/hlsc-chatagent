@@ -113,7 +113,12 @@ async def call_query_codingagent(
         logger.error("call_query_codingagent: current_scene 为空，无法确定 API 文档目录")
         return "Error: 当前场景未知，无法执行复杂查询"
     code_task_id: str = f"code-{ctx.deps.request_id[:8]}-{uuid4().hex[:8]}"
-    context: dict[str, str] = {"code_task_id": code_task_id, "scene": scene}
+    context: dict[str, str] = {
+        "code_task_id": code_task_id,
+        "scene": scene,
+        "parent_session_id": ctx.deps.session_id,
+        "parent_request_id": ctx.deps.request_id,
+    }
     clean_query: str = query.strip()
     query_prefix: str = _build_query_prefix(scene)
 
@@ -123,12 +128,16 @@ async def call_query_codingagent(
         clean_query = f"{user_context}\n\n{clean_query}"
 
     wrapped_query: str = f"{query_prefix}{clean_query}"
+    logger.info("[%s] [%s] call_query_codingagent: scene=%s, code_task_id=%s, query=%s",
+                ctx.deps.session_id, ctx.deps.request_id[:8], scene, code_task_id, query[:100])
     result = await call_subagent(
         ctx,
         url=QUERY_CODINGAGENT_URL,
         message=wrapped_query,
         context=context,
     )
+    logger.info("[%s] [%s] codingagent result (len=%d): %s",
+                ctx.deps.session_id, ctx.deps.request_id[:8], len(result), result[:200])
     if not _looks_like_pseudo_tool_output(result):
         return result
 

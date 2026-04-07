@@ -229,6 +229,8 @@ class ChatAgentExecutor(AgentExecutor):
         """从内部事件队列读取事件，转为 A2A 格式。"""
         context_id = context.context_id or "a2a-default"
         text_buffer: list[str] = []
+        # 收集 tool_call_args chunks，按 tool_call_id 拼接
+        tool_args_buffer: dict[str, str] = {}
 
         while True:
             event = await internal_queue.get()
@@ -270,7 +272,25 @@ class ChatAgentExecutor(AgentExecutor):
                     }))],
                 )
 
+            elif event.type == EventType.TOOL_CALL_ARGS:
+                # 收集 args chunks，等 TOOL_RESULT 时一起发出
+                tcid = event.data.get("tool_call_id", "")
+                chunk = event.data.get("args_chunk", "")
+                if tcid and chunk:
+                    tool_args_buffer[tcid] = tool_args_buffer.get(tcid, "") + chunk
+
             elif event.type == EventType.TOOL_RESULT:
+                # 先发送该 tool 的完整 args（如果有）
+                result_tcid = event.data.get("tool_call_id", "")
+                buffered_args = tool_args_buffer.pop(result_tcid, "")
+                if buffered_args:
+                    await updater.add_artifact(
+                        parts=[Part(root=DataPart(data={
+                            "event_type": "tool_call_args",
+                            "tool_call_id": result_tcid,
+                            "args": buffered_args,
+                        }))],
+                    )
                 # 工具结果 → DataPart
                 await updater.add_artifact(
                     parts=[Part(root=DataPart(data={

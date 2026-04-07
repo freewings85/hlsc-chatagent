@@ -218,6 +218,9 @@ async def _run_sub_agent(
     # session_id 用父级（事件路由用），transcript 路径隔离到 subagents/ 子目录
     agent_id = f"{subagent_type}-{_uuid.uuid4().hex[:8]}"
 
+    # 获取父工具调用 ID，子 agent 事件携带此字段，前端据此嵌套渲染
+    parent_tool_call_id: str = getattr(ctx, "tool_call_id", None) or ""
+
     result = await sub_agent.run(
         message=prompt,
         user_id=parent_deps.user_id,
@@ -228,5 +231,6 @@ async def _run_sub_agent(
         is_sub_agent=True,
         message_history=[],  # fresh context，不加载历史
         transcript_session_id=f"{parent_deps.session_id}/subagents/{agent_id}",
+        parent_tool_call_id=parent_tool_call_id,
     )
     return result or ""

@@ -105,15 +105,29 @@ def _build_app(
         return {"status": 0, "result": {"platformActivities": [], "shopActivities": []}}
 
     # ── 项目分类/匹配接口 ──
+
+    def _match_project_keyword(keyword: str, p: dict[str, Any]) -> bool:
+        """模糊匹配：keyword 的任意字符子串（>=2）出现在项目名或分类中。"""
+        p_name: str = p.get("packageName", p.get("name", ""))
+        p_cat: str = p.get("category", "")
+        target: str = f"{p_name}{p_cat}"
+        # 直接匹配
+        if keyword in target:
+            return True
+        # 子串匹配：keyword 中连续 2 字以上在 target 中
+        for i in range(len(keyword)):
+            for j in range(i + 2, len(keyword) + 1):
+                if keyword[i:j] in target:
+                    return True
+        return False
+
     # classify_project 实际调用路径
     @app.post("/service_ai_datamanager/package/searchPackageByKeyword")
     async def search_package_by_keyword(body: dict[str, Any]) -> dict[str, Any]:
         keyword: str = body.get("keyword", "")
         matched: list[dict[str, Any]] = []
         for p in projects:
-            p_name: str = p.get("packageName", p.get("name", ""))
-            p_cat: str = p.get("category", "")
-            if keyword in p_name or keyword in p_cat:
+            if _match_project_keyword(keyword, p):
                 matched.append(p)
         return {"status": 0, "result": matched}
 
@@ -123,9 +137,7 @@ def _build_app(
         search_key: str = body.get("searchKey", "")
         matched: list[dict[str, Any]] = []
         for p in projects:
-            p_name: str = p.get("packageName", p.get("name", ""))
-            p_cat: str = p.get("category", "")
-            if search_key in p_name or search_key in p_cat:
+            if _match_project_keyword(search_key, p):
                 matched.append(p)
         return {"status": 0, "result": matched}
 

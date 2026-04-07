@@ -79,21 +79,52 @@ def wait_for_consumer(
 ) -> bool:
     """等待 consumer 将数据入库到 Milvus，达到 expected_count 条。
 
+    使用 query 计数（比 num_entities 更准确，后者在 delete 后不会立即更新）。
     返回 True 表示在 timeout 内达成，False 表示超时。
     """
     connections.connect(host=host, port=port)
     coll: Collection = Collection(collection_name)
 
+    # 确保 collection 已 load
+    try:
+        coll.load()
+    except Exception:
+        pass
+
+    # 获取主键字段名
+    pk_field: str = "id"
+    for field in coll.schema.fields:
+        if field.is_primary:
+            pk_field = field.name
+            break
+
     deadline: float = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        coll.flush()
-        current: int = coll.num_entities
+        try:
+            coll.flush()
+            results: list[dict] = coll.query(
+                expr=f"{pk_field} >= 0",
+                output_fields=[pk_field],
+                limit=expected_count + 100,
+            )
+            current: int = len(results)
+        except Exception:
+            # collection 可能还没加载完成，重试
+            current = 0
         if current >= expected_count:
             print(f"[kafka] {collection_name} 已入库 {current} 条（期望 {expected_count}）")
             return True
         time.sleep(1)
 
     coll.flush()
-    final: int = coll.num_entities
+    try:
+        results = coll.query(
+            expr=f"{pk_field} >= 0",
+            output_fields=[pk_field],
+            limit=expected_count + 100,
+        )
+        final: int = len(results)
+    except Exception:
+        final = 0
     print(f"[kafka] 超时！{collection_name} 当前 {final} 条，期望 {expected_count}")
     return False

@@ -34,7 +34,6 @@ async def search_shops(
     opening_hour: Annotated[Optional[str], Field(description="营业时间筛选，格式 HH:MM")] = None,
     project_ids: Annotated[Optional[str], Field(description="服务项目ID，逗号分隔")] = None,
     min_rating: Annotated[Optional[float], Field(description="最低评分")] = None,
-    min_trading_count: Annotated[Optional[int], Field(description="最低成交量")] = None,
 ) -> str:
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
@@ -61,7 +60,6 @@ async def search_shops(
             opening_hour=opening_hour,
             project_ids=project_ids,
             min_rating=min_rating,
-            min_trading_count=min_trading_count,
             session_id=sid,
             request_id=rid,
         )

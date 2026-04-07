@@ -14,8 +14,8 @@ from src.prompt_loader import create_main_prompt_loader
 # common 工具
 from hlsc.tools.search_shops import search_shops
 from hlsc.tools.list_user_cars import list_user_cars
-from hlsc.tools.collect_car_info import collect_car_info
-from hlsc.tools.collect_location import collect_location
+from hlsc.tools.collect_user_car_info import collect_user_car_info
+from hlsc.tools.collect_user_location import collect_user_location
 from hlsc.tools.delegate import delegate
 from hlsc.tools.update_session_state import update_session_state
 
@@ -49,9 +49,9 @@ def create_agent_app() -> AgentApp:
         "match_project": match_project,
         # 车辆信息
         "list_user_cars": list_user_cars,
-        "collect_car_info": collect_car_info,
+        "collect_user_car_info": collect_user_car_info,
         # 位置
-        "collect_location": collect_location,
+        "collect_user_location": collect_user_location,
         # 商户
         "search_shops": search_shops,
         # 优惠查询与申领

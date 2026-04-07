@@ -17,8 +17,8 @@
 
 ## 策略
 
-- 你在优惠查询场景，用户进来就是找优惠。有项目关键词 → classify_project → 确保有位置 → search_coupon
-- classify_project 返回空（没有匹配的项目）→ 告诉用户"这个项目暂时没有相关优惠"，不要硬查
+- 搜索优惠需要明确项目和位置
+- 没有匹配的项目时告诉用户"这个项目暂时没有相关优惠"，不要硬查
 - 调 search_coupon 前回顾对话中用户提到的所有偏好，完整组装 semantic_query
 
 <example>

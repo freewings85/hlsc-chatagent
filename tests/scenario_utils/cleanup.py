@@ -1,12 +1,23 @@
-"""Milvus collection 清理工具 — 清空测试数据"""
+"""Milvus collection 清理工具 — 清空测试数据
+
+采用 drop + recreate 策略确保彻底清理（Milvus delete 后 num_entities 不会立即归零）。
+"""
 
 from __future__ import annotations
 
-from pymilvus import Collection, connections, utility
+import time
+
+from pymilvus import (
+    Collection,
+    CollectionSchema,
+    FieldSchema,
+    connections,
+    utility,
+)
 
 
 def clear_milvus_collection(collection_name: str, host: str = "localhost", port: str = "19530") -> int:
-    """清空指定 Milvus collection 的数据，返回清理前的 entity 数量。"""
+    """清空指定 Milvus collection：drop + recreate（确保彻底清理）。"""
     connections.connect(host=host, port=port)
 
     if not utility.has_collection(collection_name):
@@ -14,30 +25,31 @@ def clear_milvus_collection(collection_name: str, host: str = "localhost", port:
         return 0
 
     coll: Collection = Collection(collection_name)
-    coll.load()
     before: int = coll.num_entities
 
-    if before == 0:
-        print(f"[cleanup] {collection_name} 已为空")
-        return 0
+    # 保存 schema 和索引信息用于重建
+    schema: CollectionSchema = coll.schema
+    index_infos: list[dict] = []
+    for idx in coll.indexes:
+        index_infos.append({
+            "field_name": idx.field_name,
+            "index_params": idx.params,
+        })
 
-    # 获取主键字段名
-    pk_field: str = ""
-    for field in coll.schema.fields:
-        if field.is_primary:
-            pk_field = field.name
-            break
+    # drop + recreate
+    utility.drop_collection(collection_name)
+    new_coll: Collection = Collection(collection_name, schema)
 
-    if not pk_field:
-        print(f"[cleanup] {collection_name} 找不到主键字段")
-        return before
+    # 重建索引
+    for idx_info in index_infos:
+        new_coll.create_index(idx_info["field_name"], idx_info["index_params"])
 
-    # 删除所有数据（用 > 0 条件匹配所有正整数主键）
-    coll.delete(f"{pk_field} > 0")
-    coll.flush()
+    new_coll.load()
 
-    after: int = coll.num_entities
-    print(f"[cleanup] {collection_name}: {before} -> {after} entities")
+    # 等待 load 完成
+    time.sleep(0.5)
+
+    print(f"[cleanup] {collection_name}: drop+recreate 完成（清除 {before} 条）")
     return before
 
 

@@ -27,139 +27,88 @@ app: FastAPI = FastAPI(title="Mock DataManager")
 
 MOCK_SHOPS: list[dict[str, Any]] = [
     {
-        "commercialId": 101,
+        "commercialId": 201,
+        "commercialName": "途虎养车（张江店）",
+        "commercialType": 2,
+        "address": "上海市浦东新区张江路100号",
+        "provinceName": "上海市",
+        "cityName": "上海市",
+        "districtName": "浦东新区",
+        "latitude": 31.2050,
+        "longitude": 121.5900,
+        "rating": 4.8,
+        "tradingCount": 3250,
+        "phone": "021-50991001",
+        "serviceScope": "保养,轮胎,钣喷,洗车",
+        "openingHours": "08:00-22:00",
+        "imageObject": [],
+    },
+    {
+        "commercialId": 202,
+        "commercialName": "小拇指快修（金科路店）",
+        "commercialType": 3,
+        "address": "上海市浦东新区金科路888号",
+        "provinceName": "上海市",
+        "cityName": "上海市",
+        "districtName": "浦东新区",
+        "latitude": 31.2080,
+        "longitude": 121.5950,
+        "rating": 4.5,
+        "tradingCount": 1820,
+        "phone": "021-50991002",
+        "serviceScope": "快修,保养,洗车",
+        "openingHours": "09:00-21:00",
+        "imageObject": [],
+    },
+    {
+        "commercialId": 203,
+        "commercialName": "上汽大众4S店（浦东店）",
+        "commercialType": 1,
+        "address": "上海市浦东新区龙东大道3000号",
+        "provinceName": "上海市",
+        "cityName": "上海市",
+        "districtName": "浦东新区",
+        "latitude": 31.2000,
+        "longitude": 121.5500,
+        "rating": 4.9,
+        "tradingCount": 980,
+        "phone": "021-50991003",
+        "serviceScope": "新车销售,保养,维修,钣喷",
+        "openingHours": "08:30-18:30",
+        "imageObject": [],
+    },
+    {
+        "commercialId": 204,
         "commercialName": "途虎养车（南京西路店）",
         "commercialType": 2,
         "address": "上海市静安区南京西路1266号",
         "provinceName": "上海市",
         "cityName": "上海市",
         "districtName": "静安区",
-        "latitude": 31.232,
-        "longitude": 121.465,
-        "rating": 4.8,
-        "tradingCount": 3250,
+        "latitude": 31.2320,
+        "longitude": 121.4650,
+        "rating": 4.6,
+        "tradingCount": 2100,
         "phone": "021-62881234",
         "serviceScope": "保养,轮胎,钣喷",
-        "openingHours": "08:00-22:00",
+        "openingHours": "08:00-20:00",
         "imageObject": [],
     },
     {
-        "commercialId": 102,
-        "commercialName": "小拇指快修（曹家渡店）",
-        "commercialType": 3,
-        "address": "上海市静安区万航渡路888号",
-        "provinceName": "上海市",
-        "cityName": "上海市",
-        "districtName": "静安区",
-        "latitude": 31.235,
-        "longitude": 121.443,
-        "rating": 4.5,
-        "tradingCount": 1820,
-        "phone": "021-62135678",
-        "serviceScope": "快修,保养,洗车",
-        "openingHours": "09:00-21:00",
-        "imageObject": [],
-    },
-    {
-        "commercialId": 103,
-        "commercialName": "华胜宝马奔驰专修（徐汇店）",
-        "commercialType": 4,
-        "address": "上海市徐汇区宜山路900号",
-        "provinceName": "上海市",
-        "cityName": "上海市",
-        "districtName": "徐汇区",
-        "latitude": 31.185,
-        "longitude": 121.430,
-        "rating": 4.9,
-        "tradingCount": 980,
-        "phone": "021-54321678",
-        "serviceScope": "保养,维修,BBA专修",
-        "openingHours": "08:30-18:30",
-        "imageObject": [],
-    },
-    {
-        "commercialId": 104,
+        "commercialId": 205,
         "commercialName": "驰加汽车服务（望京店）",
         "commercialType": 2,
         "address": "北京市朝阳区望京SOHO",
         "provinceName": "北京市",
         "cityName": "北京市",
         "districtName": "朝阳区",
-        "latitude": 39.996,
-        "longitude": 116.481,
-        "rating": 4.6,
-        "tradingCount": 2100,
+        "latitude": 39.9960,
+        "longitude": 116.4810,
+        "rating": 4.7,
+        "tradingCount": 2780,
         "phone": "010-84567890",
         "serviceScope": "轮胎,保养,四轮定位",
         "openingHours": "08:00-20:00",
-        "imageObject": [],
-    },
-    {
-        "commercialId": 105,
-        "commercialName": "精典汽车（浦东店）",
-        "commercialType": 3,
-        "address": "上海市浦东新区张江高科技园区",
-        "provinceName": "上海市",
-        "cityName": "上海市",
-        "districtName": "浦东新区",
-        "latitude": 31.205,
-        "longitude": 121.590,
-        "rating": 4.7,
-        "tradingCount": 1560,
-        "phone": "021-50991234",
-        "serviceScope": "保养,维修,钣喷,洗车",
-        "openingHours": "08:00-21:00",
-        "imageObject": [],
-    },
-    {
-        "commercialId": 106,
-        "commercialName": "途虎养车（朝阳大悦城店）",
-        "commercialType": 2,
-        "address": "北京市朝阳区朝阳北路101号",
-        "provinceName": "北京市",
-        "cityName": "北京市",
-        "districtName": "朝阳区",
-        "latitude": 39.922,
-        "longitude": 116.445,
-        "rating": 4.7,
-        "tradingCount": 2780,
-        "phone": "010-65432100",
-        "serviceScope": "保养,轮胎,洗车,钣喷",
-        "openingHours": "08:00-21:00",
-        "imageObject": [],
-    },
-    {
-        "commercialId": 107,
-        "commercialName": "京东养车（CBD店）",
-        "commercialType": 3,
-        "address": "北京市朝阳区建国路93号",
-        "provinceName": "北京市",
-        "cityName": "北京市",
-        "districtName": "朝阳区",
-        "latitude": 39.920,
-        "longitude": 116.460,
-        "rating": 4.5,
-        "tradingCount": 1450,
-        "phone": "010-65987654",
-        "serviceScope": "保养,维修,轮胎",
-        "openingHours": "09:00-20:00",
-        "imageObject": [],
-    },
-    {
-        "commercialId": 108,
-        "commercialName": "精典汽车（浦东金桥店）",
-        "commercialType": 3,
-        "address": "上海市浦东新区金桥路1100号",
-        "provinceName": "上海市",
-        "cityName": "上海市",
-        "districtName": "浦东新区",
-        "latitude": 31.210,
-        "longitude": 121.595,
-        "rating": 4.6,
-        "tradingCount": 1230,
-        "phone": "021-50887766",
-        "serviceScope": "保养,维修,洗车",
-        "openingHours": "08:30-20:30",
         "imageObject": [],
     },
 ]
@@ -174,6 +123,42 @@ MOCK_PROJECTS: list[dict[str, Any]] = [
     {"id": 1202, "name": "前刹车片更换", "category": "制动", "chooseCar": True},
     {"id": 1301, "name": "钣金喷漆", "category": "钣喷", "chooseCar": False},
     {"id": 1461, "name": "车险", "category": "保险", "chooseCar": False},
+]
+
+# Mock 报价数据：shopId → 项目报价列表（与 MOCK_SHOPS ID 201-205 一致）
+MOCK_QUOTATIONS: list[dict[str, Any]] = [
+    {
+        "shopId": 201, "shopName": "途虎养车（张江店）", "shopType": [2],
+        "projects": [
+            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 35, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"projectId": 1101, "projectName": "机油/机滤更换", "priceType": 1, "priceStringObject": {"price": 380, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+        ],
+    },
+    {
+        "shopId": 202, "shopName": "小拇指快修（金科路店）", "shopType": [3],
+        "projects": [
+            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 28, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"projectId": 1101, "projectName": "机油/机滤更换", "priceType": 1, "priceStringObject": {"price": 299, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+        ],
+    },
+    {
+        "shopId": 203, "shopName": "上汽大众4S店（浦东店）", "shopType": [1],
+        "projects": [
+            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 60, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+        ],
+    },
+    {
+        "shopId": 204, "shopName": "途虎养车（南京西路店）", "shopType": [2],
+        "projects": [
+            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 35, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+        ],
+    },
+    {
+        "shopId": 205, "shopName": "驰加汽车服务（望京店）", "shopType": [2],
+        "projects": [
+            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 40, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+        ],
+    },
 ]
 
 
@@ -269,6 +254,30 @@ async def get_shops_by_id(body: dict[str, Any]) -> dict[str, Any]:
 
 
 # ============================================================
+# 商户报价接口
+# ============================================================
+
+@app.post("/service_ai_datamanager/shop/getCommercialPackages")
+async def get_commercial_packages(body: dict[str, Any]) -> dict[str, Any]:
+    """查询商户项目报价"""
+    shop_ids: list[int] = body.get("shopIds", [])
+    project_ids: list[int] = body.get("projectIds", [])
+    results: list[dict[str, Any]] = []
+    for q in MOCK_QUOTATIONS:
+        if q["shopId"] in shop_ids:
+            if project_ids:
+                filtered_projects: list[dict[str, Any]] = [
+                    p for p in q["projects"] if p["projectId"] in project_ids
+                ]
+                if filtered_projects:
+                    results.append({**q, "projects": filtered_projects})
+            else:
+                results.append(q)
+    print(f"[MockDM] getCommercialPackages shopIds={shop_ids}, projectIds={project_ids} → {len(results)} shops")
+    return {"status": 0, "result": results}
+
+
+# ============================================================
 # 项目分类接口（classify_project 调用）
 # ============================================================
 
@@ -310,11 +319,11 @@ async def discount_recommend(body: dict[str, Any]) -> dict[str, Any]:
                 {
                     "coupon_id": "P001",
                     "coupon_name": "平台九折保养券",
-                    "shop_id": 101,
-                    "shop_name": "途虎养车（南京西路店）",
+                    "shop_id": 201,
+                    "shop_name": "途虎养车（张江店）",
                     "coupon_description": "保养项目全场九折",
-                    "address": "上海市静安区南京西路1266号",
-                    "phone": "021-62881234",
+                    "address": "上海市浦东新区张江路100号",
+                    "phone": "021-50991001",
                     "rating": 4.8,
                 }
             ],
@@ -463,7 +472,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print()
     print("模拟数据:")
-    print(f"  商户: {len(MOCK_SHOPS)} 家（上海静安/徐汇/浦东 + 北京朝阳）")
+    print(f"  商户: {len(MOCK_SHOPS)} 家（上海浦东/静安 + 北京朝阳，ID 201-205）")
     print(f"  项目: {len(MOCK_PROJECTS)} 个（洗车/保养/轮胎/钣喷/车险）")
     print()
     uvicorn.run(app, host="0.0.0.0", port=50400, log_level="warning")

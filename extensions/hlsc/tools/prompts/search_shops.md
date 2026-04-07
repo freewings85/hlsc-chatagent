@@ -1,14 +1,10 @@
 按位置搜索附近的商户/门店，返回门店列表。
 
-使用场景：
-- "附近有什么店" → 不传 location（使用用户位置）
-- "人民广场附近10公里" → location={"address": "人民广场", "radius": 10000}
-- "淮海中路上的店" → location={"street": "淮海中路"}
-- "静安区的4S店" → location={"district": "静安区"}, commercial_type=[对应 typeId]
-- "评分4.0以上的" → min_rating=4.0
-- "途虎养车" → shop_name="途虎"
-
-IMPORTANT: shop_name、min_rating、min_trading_count 必须用户明确给出具体值时才传入，禁止根据模糊描述自行猜测填充。
+注意事项：
+- location 中 address 和 city/district/street 可组合使用：address 确定搜索中心点，city/district/street 做区域过滤
+- 用户指定了具体地址时传 location.address，系统自动解析经纬度，不需要调 collect_user_location
+- 用户没指定地址且没有用户位置时，才需要先调 collect_user_location 获取位置
+- shop_name、min_rating 等条件参数必须用户明确给出具体值时才传入，禁止根据模糊描述自行猜测填充
 
 ## 换渠道省钱提示
 

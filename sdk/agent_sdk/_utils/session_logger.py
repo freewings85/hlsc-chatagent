@@ -162,9 +162,14 @@ def log_debug(
 # 工具调用日志
 # --------------------------------------------------------------------------- #
 
-def log_tool_start(tool_name: str, input_data: dict[str, Any] | None = None) -> None:
+def log_tool_start(
+    tool_name: str,
+    input_data: dict[str, Any] | None = None,
+    session_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+) -> None:
     """记录工具调用开始"""
-    sid, rid = _resolve_context()
+    sid, rid = _resolve_context(session_id, request_id)
     if not sid:
         return
     logger = get_session_logger(sid)
@@ -179,9 +184,11 @@ def log_tool_end(
     output_data: Any = None,
     error: str | None = None,
     exc: Exception | None = None,
+    session_id: Optional[str] = None,
+    request_id: Optional[str] = None,
 ) -> None:
     """记录工具调用结束"""
-    sid, rid = _resolve_context()
+    sid, rid = _resolve_context(session_id, request_id)
     if not sid:
         return
     logger = get_session_logger(sid)

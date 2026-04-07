@@ -291,10 +291,7 @@ async def _emit_model_stream(
                         session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TOOL_CALL_ARGS,
-                        data={
-                            "tool_call_id": delta.tool_call_id or "",
-                            "args_chunk": delta.args_delta,
-                        },
+                        data={"tool_call_id": delta.tool_call_id, "args_chunk": delta.args_delta},
                         agent_name=agent_name,
                         parent_tool_call_id=parent_tool_call_id,
                     ))
@@ -324,12 +321,18 @@ async def _emit_tool_events(
                 # TOOL_CALL_START 已由 _emit_model_stream 中的 PartStartEvent(ToolCallPart) 发出
                 # 此处不重复发送，避免前端创建两个相同 tool_call_id 的工具块
                 tool_name = event.part.tool_name if event.part else "unknown"
-                log_tool_start(tool_name)
+                tool_args: dict[str, Any] | None = None
+                if event.part and event.part.args:
+                    try:
+                        tool_args = event.part.args if isinstance(event.part.args, dict) else __import__("json").loads(event.part.args)
+                    except Exception:
+                        tool_args = {"raw": str(event.part.args)[:500]}
+                log_tool_start(tool_name, input_data=tool_args, session_id=task.session_id, request_id=task.request_id)
             elif isinstance(event, FunctionToolResultEvent):
                 content = event.result.content if hasattr(event.result, "content") else str(event.result)
                 result_tool_name = event.result.tool_name
                 tool_call_id = getattr(event.result, "tool_call_id", "")
-                log_tool_end(result_tool_name, output_data=content)
+                log_tool_end(result_tool_name, output_data=content, session_id=task.session_id, request_id=task.request_id)
 
                 # 卡片解析：从 tool result 中提取 <!--card:type--> 块
                 # MCP tool 返回的 content 可能是 dict {"result": "..."}, 需提取字符串

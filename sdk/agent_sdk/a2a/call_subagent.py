@@ -229,12 +229,20 @@ class SubagentSession:
         session_id = self._ctx.deps.session_id
         type_map: dict[str, EventType] = {
             "tool_call_start": EventType.TOOL_CALL_START,
+            "tool_call_args": EventType.TOOL_CALL_ARGS,
             "tool_result": EventType.TOOL_RESULT,
             "tool_result_detail": EventType.TOOL_RESULT_DETAIL,
         }
         etype = type_map.get(event_type)
         if etype is None:
             return
+
+        # tool_call_args 从 A2A 过来是完整 args，转为单次 args_chunk 发给前端
+        if etype == EventType.TOOL_CALL_ARGS and "args" in data and "args_chunk" not in data:
+            data = {
+                "tool_call_id": data.get("tool_call_id", ""),
+                "args_chunk": data["args"],
+            }
 
         await emitter.emit(EventModel(
             session_id=session_id,

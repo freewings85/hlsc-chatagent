@@ -28,12 +28,7 @@ async def run_python(
     executor = get_executor()
     command = f"{shlex.quote(sys.executable)} -c {shlex.quote(code)}"
 
-    # 传递必要环境变量到执行环境（k8s Pod 不继承 host 环境）
-    import os
     exec_env: dict[str, str] = {"PYTHONIOENCODING": "utf-8"}
-    api_base = os.getenv("API_BASE_URL")
-    if api_base:
-        exec_env["API_BASE_URL"] = api_base
 
     result = await executor.execute(
         command,

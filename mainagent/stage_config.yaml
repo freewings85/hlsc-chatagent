@@ -27,8 +27,8 @@ scenes:
       - match_project
       - search_shops
       - search_coupon
-      - collect_car_info
-      - collect_location
+      - collect_user_car_info
+      - collect_user_location
       - list_user_cars
       - confirm_booking
       - update_session_state
@@ -40,9 +40,8 @@ scenes:
     agent_md: searchshops/AGENT.md
     tools:
       - search_shops
-      - collect_location
+      - collect_user_location
       - classify_project
-      - list_user_cars
       - update_session_state
       - call_query_codingagent
       - create_contact_order
@@ -55,7 +54,7 @@ scenes:
     tools:
       - search_coupon
       - book_coupon
-      - collect_location
+      - collect_user_location
       - classify_project
       - update_session_state
     skills:
@@ -68,8 +67,8 @@ scenes:
       insurance_project_id: 1461
     tools:
       - search_shops
-      - collect_car_info
-      - collect_location
+      - collect_user_car_info
+      - collect_user_location
       - list_user_cars
       - update_session_state
       - bash  # SDK 内置工具（create_default_tool_map 提供）
