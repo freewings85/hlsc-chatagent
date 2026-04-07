@@ -67,10 +67,10 @@
 
 用户明确确认后才记录，不在工具返回候选列表时就记。
 
-- 项目 → `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`
-- 车型 → `{"carModels": [{"id": "xxx", "name": "2021款大众朗逸"}]}`
-- 商户 → `{"shops": [{"id": 109, "name": "嘉定汽修"}]}`
-- 位置 → `{"addresses": [{"name": "浦东新区"}]}`
+- 项目 → `{"projects": [{"id": 1234, "name": "xxxxx"}]}`
+- 车型 → `{"carModels": [{"id": "xxxxx", "name": "xxxxx"}]}`
+- 商户 → `{"shops": [{"id": 123, "name": "xxxxx"}]}`
+- 位置 → `{"addresses": [{"name": "xxxxx"}]}`
 
 ## 路径偏离
 

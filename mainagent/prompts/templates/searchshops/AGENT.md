@@ -30,15 +30,15 @@
 
 ## 失败处理
 
-- search_shops 无结果 → 扩大范围 → 降低条件 → 都失败展示 invite_shop 入口
+- search_shops 无结果 → 告知用户当前条件下未找到匹配商户，建议扩大搜索范围或通过 invite_shop 邀请商户入驻
 - classify_project 无匹配 → 引导用户换个说法描述
 - 用户中途放弃 → "没问题，需要时随时找我"
 
 ## 记录（update_session_state）
 
-- 位置 → `{"addresses": [{"name": "朝阳区"}]}`
-- 商户 → `{"shops": [{"id": 109, "name": "嘉定汽修"}]}`
-- 项目 → `{"projects": [{"id": 1242, "name": "机油/机滤更换"}]}`
+- 位置 → `{"addresses": [{"name": "xxxxx"}]}`
+- 商户 → `{"shops": [{"id": 123, "name": "xxxxx"}]}`
+- 项目 → `{"projects": [{"id": 1234, "name": "xxxxx"}]}`
 
 ## 路径偏离
 

@@ -7,10 +7,10 @@ session_state 采用统一的实体列表格式：
 ```json
 {
   "carModels": [{"id": "car_model_id_string", "name": "2021款大众朗逸 1.5L"}],
-  "addresses": [{"name": "浦东新区"}],
-  "projects": [{"id": 1242, "name": "机油/机滤更换"}],
-  "shops": [{"id": 109, "name": "嘉定汽修"}],
-  "coupons": [{"id": 42, "name": "春季保养促销"}]
+  "addresses": [{"name": "xxxxx"}],
+  "projects": [{"id": 1234, "name": "xxxxx"}],
+  "shops": [{"id": 123, "name": "xxxxx"}],
+  "coupons": [{"id": 42, "name": "xxxxx"}]
 }
 ```
 
