@@ -2,10 +2,12 @@
 
 参数说明：
 - shop_id: 商户 ID（必填），必须来自 search_shops 返回的真实 shop_id
+- shop_name: 商户名称（必填），必须来自 search_shops 返回的真实名称
 - visit_time: 预计到店时间（必填），支持自然语言（"上午""下午""明天下午3点"），后端解析
 
 返回：
 - order_id — 联系单编号
+- shop_name — 商户名称
 - visit_time — 预约时间
 
 使用场景：
