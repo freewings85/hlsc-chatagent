@@ -59,36 +59,47 @@ def _looks_like_pseudo_tool_output(text: str) -> bool:
     return any(marker in normalized for marker in _PSEUDO_TOOL_MARKERS)
 
 
-def _extract_location_info(ctx: RunContext[AgentDeps]) -> str:
-    """从 request_context 提取用户位置信息，供 coding agent 调 API 时使用。"""
+def _extract_user_context(ctx: RunContext[AgentDeps]) -> str:
+    """从 request_context 和 session_state 提取用户信息，供 coding agent 使用。"""
+    parts: list[str] = []
+
+    # 位置信息
     req_ctx = ctx.deps.request_context
-    if req_ctx is None:
-        return ""
+    if req_ctx is not None:
+        loc = req_ctx.get("current_location") if isinstance(req_ctx, dict) else getattr(req_ctx, "current_location", None)
+        if loc is not None:
+            if isinstance(loc, dict):
+                lat, lng, addr = loc.get("lat"), loc.get("lng"), loc.get("address", "")
+            else:
+                lat, lng, addr = getattr(loc, "lat", None), getattr(loc, "lng", None), getattr(loc, "address", "")
+            if lat is not None and lng is not None:
+                parts.append(f"用户位置：latitude={lat}, longitude={lng}")
+                if addr:
+                    parts.append(f"地址：{addr}")
 
-    loc = None
-    if isinstance(req_ctx, dict):
-        loc = req_ctx.get("current_location")
-    else:
-        loc = getattr(req_ctx, "current_location", None)
+        # 车型信息
+        car = req_ctx.get("current_car") if isinstance(req_ctx, dict) else getattr(req_ctx, "current_car", None)
+        if car is not None:
+            if isinstance(car, dict):
+                car_id, car_name = car.get("car_model_id", ""), car.get("car_model_name", "")
+            else:
+                car_id, car_name = getattr(car, "car_model_id", ""), getattr(car, "car_model_name", "")
+            if car_id or car_name:
+                parts.append(f"用户车型：car_model_id={car_id}, car_model_name={car_name}")
 
-    if loc is None:
-        return ""
+    # session_state 补充（request_context 没有时）
+    state: dict = ctx.deps.session_state or {}
+    if not any("车型" in p for p in parts):
+        car_models: list = state.get("carModels", [])
+        if car_models:
+            car: dict = car_models[0]
+            parts.append(f"用户车型：car_model_id={car.get('id', '')}, car_model_name={car.get('name', '')}")
 
-    if isinstance(loc, dict):
-        lat = loc.get("lat")
-        lng = loc.get("lng")
-        addr: str = loc.get("address", "")
-    else:
-        lat = getattr(loc, "lat", None)
-        lng = getattr(loc, "lng", None)
-        addr = getattr(loc, "address", "")
+    if not any("位置" in p for p in parts):
+        addresses: list = state.get("addresses", [])
+        if addresses:
+            parts.append(f"用户地址：{addresses[0].get('name', '')}")
 
-    if lat is None or lng is None:
-        return ""
-
-    parts: list[str] = [f"用户当前位置：latitude={lat}, longitude={lng}"]
-    if addr:
-        parts.append(f"地址：{addr}")
     return "\n".join(parts)
 
 
@@ -106,10 +117,10 @@ async def call_query_codingagent(
     clean_query: str = query.strip()
     query_prefix: str = _build_query_prefix(scene)
 
-    # 注入用户位置信息（coding agent 调 API 时需要）
-    location_info: str = _extract_location_info(ctx)
-    if location_info:
-        clean_query = f"{location_info}\n\n{clean_query}"
+    # 注入用户上下文（位置 + 车型，coding agent 调 API 时需要）
+    user_context: str = _extract_user_context(ctx)
+    if user_context:
+        clean_query = f"{user_context}\n\n{clean_query}"
 
     wrapped_query: str = f"{query_prefix}{clean_query}"
     result = await call_subagent(
