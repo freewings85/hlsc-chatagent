@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Final
 from uuid import uuid4
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 from pydantic_ai import RunContext
 
@@ -21,17 +24,9 @@ QUERY_CODINGAGENT_URL: str = os.getenv(
 
 def _build_query_prefix(scene: str) -> str:
     """根据场景构建 query prefix，指向对应的 API 文档目录。"""
-    if scene:
-        return f"""API docs for this task are under the `/apis/{scene}/` directory, and the index is `/apis/{scene}/index.md`.
-If `/apis/{scene}/` does not exist, fall back to `/apis/index.md`.
-Read the index first, then read only the docs actually needed for this task.
-Use the relevant APIs and Python code to try to solve the task below.
-You may use only Python standard library, `httpx`, and `numpy`.
-If you cannot complete the task, return only the clear reason.
-
-# Task
-"""
-    return """All available API docs are under the `/apis` directory, and the index is `/apis/index.md`.
+    if not scene:
+        raise ValueError("call_query_codingagent: scene 为空，无法确定 API 文档目录")
+    return f"""API docs for this task are under the `/apis/{scene}/` directory, and the index is `/apis/{scene}/index.md`.
 Read the index first, then read only the docs actually needed for this task.
 Use the relevant APIs and Python code to try to solve the task below.
 You may use only Python standard library, `httpx`, and `numpy`.
@@ -70,9 +65,12 @@ async def call_query_codingagent(
 ) -> str:
     """通过 A2A 调用 QueryCodingAgent，执行复杂计算查询。自动根据当前场景加载对应的 API 文档。"""
     scene: str = getattr(ctx.deps, "current_scene", "") or ""
-    code_task_id = f"code-{ctx.deps.request_id[:8]}-{uuid4().hex[:8]}"
+    if not scene:
+        logger.error("call_query_codingagent: current_scene 为空，无法确定 API 文档目录")
+        return "Error: 当前场景未知，无法执行复杂查询"
+    code_task_id: str = f"code-{ctx.deps.request_id[:8]}-{uuid4().hex[:8]}"
     context: dict[str, str] = {"code_task_id": code_task_id, "scene": scene}
-    clean_query = query.strip()
+    clean_query: str = query.strip()
     query_prefix: str = _build_query_prefix(scene)
     wrapped_query = f"{query_prefix}{clean_query}"
     result = await call_subagent(
