@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -18,7 +17,6 @@ import httpx
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
-from agent_sdk._agent.tools.call_interrupt import call_interrupt
 from agent_sdk.logging import log_tool_start, log_tool_end
 
 ADDRESS_SERVICE_URL: str = os.getenv("ADDRESS_SERVICE_URL", "http://localhost:8092")
@@ -68,11 +66,13 @@ async def _resolve_from_context(
     ctx: RunContext[AgentDeps],
     tool_name: str,
 ) -> ResolvedLocation:
-    """从 request_context 获取用户位置，没有则 interrupt。"""
+    """从 request_context 获取用户位置，没有则抛错。
+
+    位置收集由 collect_location 工具负责，这里只读取已有位置。
+    """
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
 
-    # 尝试从 request_context 取
     req_ctx = ctx.deps.request_context
     if req_ctx is not None:
         loc = None
@@ -99,28 +99,7 @@ async def _resolve_from_context(
                              {"source": "request_context", "address": addr})
                 return ResolvedLocation(lat=lat, lng=lng, address=addr)
 
-    # request_context 没有位置 → interrupt 让前端弹地图选点
-    log_tool_start(f"address_resolver({tool_name})", sid, rid,
-                   {"action": "interrupt_select_location"})
-
-    reply: str = await call_interrupt(ctx, {
-        "type": "select_location",
-        "question": "需要您的位置信息，请选择或确认您的位置",
-    })
-
-    try:
-        data: dict = json.loads(reply)
-        lat_val: Optional[float] = data.get("lat")
-        lng_val: Optional[float] = data.get("lng")
-        addr_val: str = data.get("address", "")
-        if lat_val is not None and lng_val is not None:
-            log_tool_end(f"address_resolver({tool_name})", sid, rid,
-                         {"source": "interrupt", "address": addr_val})
-            return ResolvedLocation(lat=lat_val, lng=lng_val, address=addr_val)
-    except (json.JSONDecodeError, AttributeError):
-        pass
-
-    raise ValueError("无法获取用户位置信息")
+    raise ValueError("用户位置信息不可用，请先通过 collect_location 获取")
 
 
 async def _resolve_from_service(

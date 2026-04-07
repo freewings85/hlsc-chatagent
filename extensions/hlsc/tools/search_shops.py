@@ -23,7 +23,7 @@ _DESCRIPTION = load_tool_prompt("search_shops")
 
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    location: Annotated[LocationFilter, Field(description="位置条件（必填）。至少指定一个字段：address（范围搜索）、city/district/street（区域过滤），或留空对象{}使用用户当前位置")],
+    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索，city/district/street=区域过滤。不传则使用 request_context 中的用户位置")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
     top: Annotated[int, Field(description="返回数量")] = 5,
     order_by: Annotated[str, Field(description="排序方式：distance/rating/tradingCount，可组合")] = "distance",
