@@ -14,6 +14,12 @@ SKILLS_DIR="$SCRIPT_DIR/skills"
 
 find_skill() {
     local SKILL_NAME="$1"
+    # 直接在 skills/ 下查找
+    if [ -d "$SKILLS_DIR/$SKILL_NAME" ]; then
+        echo "$SKILLS_DIR/$SKILL_NAME"
+        return 0
+    fi
+    # 兼容 skills/s1/xxx 两级结构
     for SUB_DIR in "$SKILLS_DIR"/*/; do
         if [ -d "$SUB_DIR$SKILL_NAME" ]; then
             echo "$SUB_DIR$SKILL_NAME"
@@ -59,22 +65,20 @@ if [ -z "$1" ]; then
     echo "      $0 -all            打包所有 skills"
     echo ""
     echo "可用的 skills:"
-    for SUB_DIR in "$SKILLS_DIR"/*/; do
-        for SKILL_DIR in "$SUB_DIR"*/; do
-            [ -f "$SKILL_DIR/SKILL.md" ] && echo "  $(basename "$SKILL_DIR")  ($(basename "$SUB_DIR"))"
-        done
-    done
+    while IFS= read -r SKILL_MD; do
+        echo "  $(basename "$(dirname "$SKILL_MD")")"
+    done < <(find "$SKILLS_DIR" -name "SKILL.md" -type f | sort)
     exit 1
 fi
 
 if [ "$1" = "-all" ]; then
     echo "打包所有 skills..."
-    for SUB_DIR in "$SKILLS_DIR"/*/; do
-        for SKILL_DIR in "$SUB_DIR"*/; do
-            SKILL_NAME="$(basename "$SKILL_DIR")"
-            [ -f "$SKILL_DIR/SKILL.md" ] && pack_one "$SKILL_NAME" || true
-        done
-    done
+    # 直接在 skills/ 下搜索（支持一级和两级结构）
+    while IFS= read -r SKILL_MD; do
+        SKILL_DIR="$(dirname "$SKILL_MD")"
+        SKILL_NAME="$(basename "$SKILL_DIR")"
+        pack_one "$SKILL_NAME" || true
+    done < <(find "$SKILLS_DIR" -name "SKILL.md" -type f)
     echo "全部完成!"
 else
     pack_one "$1"
