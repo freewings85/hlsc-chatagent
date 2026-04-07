@@ -140,6 +140,9 @@ class LoopContext:
     # 子 agent 模式：不管理 request_context，不发 CHAT_REQUEST_END，不关闭 emitter
     is_sub_agent: bool = False
 
+    # 父工具调用 ID：子 agent 的事件携带此字段，前端据此分区渲染
+    parent_tool_call_id: str | None = None
+
     # transcript 存储路径的 session_id（子 agent 隔离用）。None → 用 task.session_id
     transcript_session_id: str | None = None
 
@@ -228,6 +231,7 @@ async def _emit_model_stream(
     messages: list[ModelMessage] | None = None,
     user_prompt: str | None = None,
     agent_name: str = "main",
+    parent_tool_call_id: str | None = None,
 ) -> None:
     """流式消费 ModelRequestNode，逐 token 发出 TEXT / TOOL_CALL 事件。
 
@@ -255,6 +259,7 @@ async def _emit_model_stream(
                         type=EventType.TEXT,
                         data={"content": part.content},
                         agent_name=agent_name,
+                        parent_tool_call_id=parent_tool_call_id,
                     ))
                 elif isinstance(part, ToolCallPart):
                     _tool_call_names.append(part.tool_name)
@@ -267,6 +272,7 @@ async def _emit_model_stream(
                             "tool_call_id": part.tool_call_id or "",
                         },
                         agent_name=agent_name,
+                        parent_tool_call_id=parent_tool_call_id,
                     ))
             elif isinstance(event, PartDeltaEvent):
                 delta = event.delta
@@ -278,6 +284,7 @@ async def _emit_model_stream(
                         type=EventType.TEXT,
                         data={"content": delta.content_delta},
                         agent_name=agent_name,
+                        parent_tool_call_id=parent_tool_call_id,
                     ))
                 elif isinstance(delta, ToolCallPartDelta):  # pragma: no cover — 真实 LLM 流式 tool call 才触发
                     await emitter.emit(EventModel(
@@ -286,6 +293,7 @@ async def _emit_model_stream(
                         type=EventType.TOOL_CALL_ARGS,
                         data={"args_chunk": delta.args_delta},
                         agent_name=agent_name,
+                        parent_tool_call_id=parent_tool_call_id,
                     ))
 
     # LLM 响应完成后记录日志
@@ -301,6 +309,7 @@ async def _emit_tool_events(
     emitter: EventEmitter,
     task: SessionRequestTask,
     agent_name: str = "main",
+    parent_tool_call_id: str | None = None,
 ) -> None:
     """流式消费 CallToolsNode，发出 TOOL_CALL_START / TOOL_RESULT 事件。
 
@@ -338,6 +347,7 @@ async def _emit_tool_events(
                             "data": {"success": True, "data": card.data},
                         },
                         agent_name=agent_name,
+                        parent_tool_call_id=parent_tool_call_id,
                     ))
                     # 追加 system-reminder 提示 LLM 可以引用卡片
                     reminder = make_card_reminder(tool_call_id)
@@ -361,6 +371,7 @@ async def _emit_tool_events(
                         "result": content,
                     },
                     agent_name=agent_name,
+                    parent_tool_call_id=parent_tool_call_id,
                 ))
 
 
@@ -487,12 +498,13 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                         messages=pre_result.model_messages,
                         user_prompt=task.message if _first_llm_call else None,
                         agent_name=agent_name,
+                        parent_tool_call_id=ctx.parent_tool_call_id,
                     )
                     _first_llm_call = False
                     node = await run.next(node)
 
                 elif isinstance(node, CallToolsNode):
-                    await _emit_tool_events(node, run.ctx, emitter, task, agent_name=agent_name)
+                    await _emit_tool_events(node, run.ctx, emitter, task, agent_name=agent_name, parent_tool_call_id=ctx.parent_tool_call_id)
                     node = await run.next(node)
 
                 else:

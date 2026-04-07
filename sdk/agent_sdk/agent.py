@@ -180,6 +180,7 @@ class Agent:
         parent_otel_context: Any = None,
         request_id: str | None = None,
         session_state: dict[str, Any] | None = None,
+        parent_tool_call_id: str | None = None,
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -392,6 +393,7 @@ class Agent:
                 agent_name=self._agent_name or "main",
                 is_sub_agent=is_sub_agent,
                 transcript_session_id=transcript_session_id,
+                parent_tool_call_id=parent_tool_call_id,
             )
 
             from agent_sdk._agent.loop import RunLoopResult

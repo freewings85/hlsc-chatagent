@@ -170,6 +170,9 @@ async def _run_delegate_agent(
     # 6. 运行子 agent（静默模式，不流式、不 interrupt）
     agent_id: str = f"delegate-{agent_name}-{_uuid.uuid4().hex[:8]}"
 
+    # 获取当前 delegate tool call 的 ID，子 agent 的事件将携带此 ID 供前端分区渲染
+    delegate_tool_call_id: str = getattr(ctx, "tool_call_id", None) or ""
+
     result: str | None = await sub_agent.run(
         message=user_message,
         user_id=parent_deps.user_id,
@@ -179,8 +182,9 @@ async def _run_delegate_agent(
         request_context=parent_deps.request_context,
         fs_tools_backend=parent_deps.fs_tools_backend,
         is_sub_agent=True,
-        message_history=[],  # 独立上下文，不加载历史
+        message_history=[],
         transcript_session_id=f"{parent_deps.session_id}/delegates/{agent_id}",
-        session_state=parent_deps.session_state,  # 共享引用，子 agent 的 update_session_state 直接修改父状态
+        session_state=parent_deps.session_state,
+        parent_tool_call_id=delegate_tool_call_id,
     )
     return result or ""
