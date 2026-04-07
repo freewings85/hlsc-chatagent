@@ -39,7 +39,6 @@ scenes:
     agent_md: searchshops/AGENT.md
     tools:
       - search_shops
-      - collect_car_info
       - classify_project
       - list_user_cars
       - update_session_state
