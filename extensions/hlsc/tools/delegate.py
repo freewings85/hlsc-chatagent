@@ -12,7 +12,6 @@ import uuid as _uuid
 from pathlib import Path
 from typing import Annotated, Any
 
-import yaml
 from pydantic import Field
 from pydantic_ai import RunContext, Tool
 from pydantic_ai.toolsets.function import FunctionToolset
@@ -21,33 +20,12 @@ from agent_sdk._agent.deps import AgentDeps
 from agent_sdk._agent.model import create_model
 from agent_sdk._agent.toolset import wrap_tool_safe
 from hlsc.tools.prompt_loader import load_tool_prompt
+from src.scene_config import registry
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 # 可委派的场景白名单（不能 delegate 给 guide / orchestrator）
 _DELEGATABLE_SCENES: set[str] = {"platform", "searchshops", "searchcoupons", "insurance"}
-
-# 场景配置缓存
-_scene_configs: dict[str, dict[str, Any]] | None = None
-
-
-def _load_scene_configs() -> dict[str, dict[str, Any]]:
-    """从 stage_config.yaml 加载场景配置（懒加载 + 缓存）。"""
-    global _scene_configs
-    if _scene_configs is not None:
-        return _scene_configs
-
-    import os
-    config_path_str: str = os.getenv("STAGE_CONFIG_PATH", "")
-    if config_path_str:
-        config_path: Path = Path(config_path_str)
-    else:
-        # 默认在 mainagent/stage_config.yaml
-        config_path = Path(__file__).resolve().parents[3] / "mainagent" / "stage_config.yaml"
-
-    raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    _scene_configs = raw.get("scenes", {})
-    return _scene_configs
 
 
 def _build_scene_system_prompt(scene_config: dict[str, Any]) -> str:
@@ -118,8 +96,8 @@ async def delegate(
         return f"错误：不能委派给 '{agent_name}'，可委派的 agent：{sorted(_DELEGATABLE_SCENES)}"
 
     # 加载场景配置
-    scene_configs: dict[str, dict[str, Any]] = _load_scene_configs()
-    scene_config: dict[str, Any] | None = scene_configs.get(agent_name)
+    all_raw: dict[str, dict[str, Any]] = registry.get_all_raw()
+    scene_config: dict[str, Any] | None = all_raw.get(agent_name)
     if scene_config is None:
         return f"错误：场景 '{agent_name}' 的配置不存在"
 

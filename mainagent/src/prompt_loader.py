@@ -6,57 +6,16 @@
 
 from __future__ import annotations
 
-import os
 from datetime import date
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from agent_sdk.prompt_loader import PromptResult, TemplatePromptLoader
+from src.scene_config import registry
 
 
 # 提示词根目录（基于本文件位置，不依赖 CWD）
 _TEMPLATES_DIR: Path = Path(__file__).resolve().parent.parent / "prompts" / "templates"
-
-# 场景配置缓存
-_scene_prompt_parts: dict[str, list[str]] | None = None
-_scene_vars: dict[str, dict[str, str]] | None = None
-
-
-def _load_scene_config() -> tuple[dict[str, list[str]], dict[str, dict[str, str]]]:
-    """从 stage_config.yaml 加载每个场景的 prompt_parts 和 vars（懒加载 + 缓存）。"""
-    global _scene_prompt_parts, _scene_vars
-    if _scene_prompt_parts is not None and _scene_vars is not None:
-        return _scene_prompt_parts, _scene_vars
-
-    config_path_str: str = os.getenv("STAGE_CONFIG_PATH", "")
-    if config_path_str:
-        config_path: Path = Path(config_path_str)
-    else:
-        config_path = Path(__file__).resolve().parent.parent / "stage_config.yaml"
-
-    raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    _scene_prompt_parts = {}
-    _scene_vars = {}
-    scene_id: str
-    scene_data: dict[str, Any]
-    for scene_id, scene_data in raw.get("scenes", {}).items():
-        _scene_prompt_parts[scene_id] = scene_data.get("prompt_parts", [])
-        raw_vars: dict[str, Any] = scene_data.get("vars", {})
-        _scene_vars[scene_id] = {k: str(v) for k, v in raw_vars.items()}
-
-    return _scene_prompt_parts, _scene_vars
-
-
-def _load_scene_prompt_parts() -> dict[str, list[str]]:
-    """从 stage_config.yaml 加载每个场景的 prompt_parts。"""
-    return _load_scene_config()[0]
-
-
-def _get_scene_vars(scene: str) -> dict[str, str]:
-    """获取指定场景的模板变量。"""
-    return _load_scene_config()[1].get(scene, {})
 
 
 class MainPromptLoader(TemplatePromptLoader):
@@ -88,7 +47,7 @@ class MainPromptLoader(TemplatePromptLoader):
 
     def _load_scene_system_prompt(self, scene: str) -> str:
         """按场景配置的 prompt_parts 列表拼接 system prompt。"""
-        scene_parts_map: dict[str, list[str]] = _load_scene_prompt_parts()
+        scene_parts_map: dict[str, list[str]] = registry.get_all_prompt_parts_map()
         prompt_part_files: list[str] = scene_parts_map.get(scene, scene_parts_map.get("guide", []))
 
         parts: list[str] = []
@@ -119,7 +78,7 @@ class MainPromptLoader(TemplatePromptLoader):
                     content = content.replace("{{current_date}}", date.today().isoformat())
                     # 场景级模板变量（stage_config.yaml 的 vars）
                     scene: str = getattr(deps, "current_scene", "guide")
-                    scene_vars: dict[str, str] = _get_scene_vars(scene)
+                    scene_vars: dict[str, str] = registry.get_scene_vars(scene)
                     for key, value in scene_vars.items():
                         content = content.replace("{{" + key + "}}", value)
                     return content or None

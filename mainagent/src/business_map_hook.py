@@ -11,13 +11,12 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from typing import Any
 
 import httpx
-import yaml
 
 from agent_sdk._agent.deps import AgentDeps
+from src.scene_config import SceneConfig, SceneConfigRegistry, registry
 
 
 # ============================================================
@@ -86,73 +85,15 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 场景配置（从 stage_config.yaml 加载）
+# 场景配置（统一由 SceneConfigRegistry 管理）
 # ============================================================
 
+# 向后兼容：SceneConfig 和 SceneConfigRegistry 均从 scene_config 导入
+# SceneConfigLoader 作为 SceneConfigRegistry 的别名保留，供已有测试使用
+SceneConfigLoader = SceneConfigRegistry
 
-class SceneConfig:
-    """场景配置：prompt_parts + agent_md + tools + skills。"""
-
-    def __init__(
-        self,
-        name: str,
-        prompt_parts: list[str],
-        agent_md: str,
-        tools: list[str],
-        skills: list[str],
-    ) -> None:
-        self.name: str = name
-        self.prompt_parts: list[str] = prompt_parts
-        self.agent_md: str = agent_md
-        self.tools: list[str] = tools
-        self.skills: list[str] = skills
-
-
-class SceneConfigLoader:
-    """加载 stage_config.yaml 中的扁平 scenes 结构。"""
-
-    def __init__(self) -> None:
-        self._scenes: dict[str, SceneConfig] = {}
-        self._loaded: bool = False
-
-    def ensure_loaded(self) -> None:
-        """确保配置已加载。"""
-        if self._loaded:
-            return
-
-        config_path_str: str = os.getenv("STAGE_CONFIG_PATH", "")
-        if config_path_str:
-            config_path: Path = Path(config_path_str)
-        else:
-            config_path = Path(__file__).resolve().parent.parent / "stage_config.yaml"
-
-        raw: dict[str, Any] = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-
-        scene_id: str
-        scene_data: dict[str, Any]
-        for scene_id, scene_data in raw.get("scenes", {}).items():
-            self._scenes[scene_id] = SceneConfig(
-                name=scene_id,
-                prompt_parts=scene_data.get("prompt_parts", []),
-                agent_md=scene_data.get("agent_md", ""),
-                tools=scene_data.get("tools", []),
-                skills=scene_data.get("skills", []),
-            )
-
-        self._loaded = True
-        logger.info("场景配置加载完成: %d 个场景", len(self._scenes))
-
-    def get_scene(self, scene_id: str) -> SceneConfig:
-        """获取场景配置。未匹配时回退到 guide。"""
-        self.ensure_loaded()
-        if scene_id in self._scenes:
-            return self._scenes[scene_id]
-        logger.warning("场景 '%s' 不存在，回退到 guide", scene_id)
-        return self._scenes["guide"]
-
-
-# 模块级单例
-_config_loader: SceneConfigLoader = SceneConfigLoader()
+# 模块级单例（复用 registry）
+_config_loader: SceneConfigRegistry = registry
 
 
 # ============================================================
