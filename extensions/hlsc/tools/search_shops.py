@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Annotated, Optional
 
 from pydantic import Field
@@ -18,12 +19,14 @@ from hlsc.services.address_resolver import resolve_location_filter
 from hlsc.services.restful.shop_service import shop_service
 from hlsc.tools.prompt_loader import load_tool_prompt
 
+_DEFAULT_RADIUS: int = int(os.getenv("SEARCH_SHOPS_DEFAULT_RADIUS", "20000"))
+
 _DESCRIPTION = load_tool_prompt("search_shops")
 
 
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索，city/district/street=区域过滤。不传则使用 request_context 中的用户位置")] = None,
+    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，不传默认20公里），city/district/street=区域过滤")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
     top: Annotated[int, Field(description="返回数量")] = 5,
     order_by: Annotated[str, Field(description="排序方式：distance/rating/tradingCount，可组合")] = "distance",
@@ -44,8 +47,8 @@ async def search_shops(
         # 解析位置条件
         resolved = await resolve_location_filter(ctx, location, tool_name="search_shops")
 
-        # 搜索半径：LocationFilter.radius 或默认 10km
-        actual_radius: int = resolved.radius if resolved.radius else 10000
+        # 搜索半径：LocationFilter.radius 或环境变量默认值
+        actual_radius: int = resolved.radius if resolved.radius else _DEFAULT_RADIUS
 
         result = await shop_service.get_nearby_shops(
             lat=resolved.lat or 0.0,

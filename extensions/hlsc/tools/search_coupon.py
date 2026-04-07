@@ -28,7 +28,7 @@ _DESCRIPTION: str = load_tool_prompt("search_coupon")
 
 async def search_coupon(
     ctx: RunContext[AgentDeps],
-    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索，city/district/street=区域过滤。不传则使用 request_context 中的用户位置")] = None,
+    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，不传默认使用系统配置），city/district/street=区域过滤")] = None,
     project_ids: Annotated[Optional[list[str]], Field(description="项目 ID 列表，来自 classify_project。无明确项目时传 null")] = None,
     shop_ids: Annotated[list[str], Field(description="商户 ID 列表；未指定商户时传空列表")] = [],
     date: Annotated[str, Field(description="查询日期（YYYY-MM-DD），用于过滤该日期有效的优惠。默认当天")] = "",
