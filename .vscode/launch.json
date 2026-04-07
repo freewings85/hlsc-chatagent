@@ -47,12 +47,12 @@
       }
     },
     {
-      "name": "CodeAgent",
+      "name": "CodingAgent",
       "type": "debugpy",
       "request": "launch",
       "program": "server.py",
-      "python": "${workspaceFolder}/subagents/code_agent/.venv/bin/python",
-      "cwd": "${workspaceFolder}/subagents/code_agent",
+      "python": "${workspaceFolder}/subagents/coding_agent/.venv/bin/python",
+      "cwd": "${workspaceFolder}/subagents/coding_agent",
       "console": "integratedTerminal",
       "env": {
         "HTTP_PROXY": "",

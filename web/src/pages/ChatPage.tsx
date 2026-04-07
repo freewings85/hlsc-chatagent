@@ -222,6 +222,16 @@ export default function ChatPage() {
             copy[copy.length - 1] = { ...last, tools }
             break
           }
+          case 'tool_call_args': {
+            const id = (d.tool_call_id as string) ?? ''
+            const chunk = (d.args_chunk as string) ?? ''
+            const tools = updateToolSub(last.tools, parentToolCallId, t => ({
+              ...t,
+              subTools: t.subTools.map(st => st.id === id ? { ...st, args: st.args + chunk } : st),
+            }))
+            copy[copy.length - 1] = { ...last, tools }
+            break
+          }
           case 'interrupt': {
             const cardType = (d.type as string) ?? 'unknown'
             const card: InterruptCard = {

@@ -15,7 +15,7 @@ Supported `spec` types:
 帮你找到这些优惠。
 
 ```spec
-{"type":"CouponCard","props":{"shop_id":1001,"shop_name":"途虎养车朝阳店","coupon_id":"2001","coupon_name":"换机油满500减80","discount_amount":80,"validity_end":"2026-06-30","usage_condition":"满500元可用"}}
+{"type":"CouponCard","props":{"shop_id":xxx,"shop_name":"xx养车xx店","coupon_id":"xxx","coupon_name":"xx满xx减xx","discount_amount":xx,"validity_end":"20xx-0x-30","usage_condition":"xx条件下可用"}}
 ```
 
 要我帮你申请哪个？
@@ -29,7 +29,7 @@ Supported `spec` types:
 已帮你申领成功！
 
 ```spec
-{"type":"CouponOrderCard","props":{"order_id":"ORD-20260402-001","shop_name":"途虎养车朝阳店","coupon_name":"换机油满500减80","visit_time":"明天下午3点"}}
+{"type":"CouponOrderCard","props":{"order_id":"xxxx","shop_name":"xxx店","coupon_name":"stringname","visit_time":"timevalue"}}
 ```
 
 商家会收到你的预约信息，到店时报订单号即可。
