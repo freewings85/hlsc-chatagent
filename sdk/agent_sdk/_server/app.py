@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -151,8 +152,23 @@ if _DIST_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_DIST_DIR / "assets")), name="static-assets")
 
 
+def _resolve_request_id(raw_request: Request) -> str:
+    """从请求 header 提取 OTel trace_id 作为 request_id，无 traceparent 时回退到 uuid。
+
+    使用 opentelemetry W3CTraceContextTextMapPropagator 解析 traceparent header。
+    """
+    from opentelemetry.propagate import extract
+    from opentelemetry.trace import INVALID_TRACE_ID, format_trace_id, get_current_span
+
+    ctx = extract(dict(raw_request.headers))
+    trace_id: int = get_current_span(ctx).get_span_context().trace_id
+    if trace_id != INVALID_TRACE_ID:
+        return format_trace_id(trace_id)
+    return uuid.uuid4().hex
+
+
 @app.post("/chat/stream")
-async def chat_stream(request: ChatRequest) -> StreamingResponse:
+async def chat_stream(request: ChatRequest, raw_request: Request) -> StreamingResponse:
     """SSE 流式对话接口。
 
     事件格式：
@@ -172,7 +188,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     emitter: EventEmitter = EventEmitter(queue)
 
     agent = _get_agent()
-    task_id = f"{request.session_id}-{id(request)}"
+    request_id: str = _resolve_request_id(raw_request)
+    task_id: str = f"{request.session_id}-{id(request)}"
 
     loop_task: asyncio.Task[None] = asyncio.create_task(
         agent.run(
@@ -183,6 +200,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             temporal_client=_get_temporal_client(),
             request_context=request.context,
             fs_tools_backend=get_fs_tools_backend(),
+            request_id=request_id,
         ),
         name=f"agent-loop-{task_id}",
     )
@@ -200,7 +218,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         try:
             start_event = EventModel(
                 session_id=request.session_id,
-                request_id=task_id,
+                request_id=request_id,
                 type=EventType.CHAT_REQUEST_START,
                 data={"task_id": task_id},
             )
@@ -238,7 +256,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
 
 @app.post("/chat/sync")
-async def chat_sync(request: ChatRequest) -> JSONResponse:
+async def chat_sync(request: ChatRequest, raw_request: Request) -> JSONResponse:
     """同步对话接口（非 SSE）。
 
     等待 Agent 执行完成后返回 JSON 结果，适合测试和外部集成。
@@ -262,6 +280,7 @@ async def chat_sync(request: ChatRequest) -> JSONResponse:
     emitter: EventEmitter = EventEmitter(queue)
 
     agent = _get_agent()
+    request_id: str = _resolve_request_id(raw_request)
     task_id: str = f"{request.session_id}-sync-{id(request)}"
 
     loop_task: asyncio.Task[None] = asyncio.create_task(
@@ -273,6 +292,7 @@ async def chat_sync(request: ChatRequest) -> JSONResponse:
             temporal_client=_get_temporal_client(),
             request_context=request.context,
             fs_tools_backend=get_fs_tools_backend(),
+            request_id=request_id,
         ),
         name=f"agent-loop-{task_id}",
     )
@@ -368,7 +388,7 @@ async def interrupt_reply(request: InterruptReplyRequest) -> JSONResponse:
 
 
 @app.post("/chat/async")
-async def chat_async(request: AsyncChatRequest) -> JSONResponse:
+async def chat_async(request: AsyncChatRequest, raw_request: Request) -> JSONResponse:
     """异步对话接口：立即返回 task_id，事件通过 Kafka 推送。
 
     需要 KAFKA_ENABLED=true 才可用。
@@ -392,7 +412,8 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
     emitter = EventEmitter(queue)
 
     agent = _get_agent()
-    task_id = f"{request.session_id}-async-{id(request)}"
+    request_id: str = _resolve_request_id(raw_request)
+    task_id: str = f"{request.session_id}-async-{id(request)}"
 
     loop_task = asyncio.create_task(
         agent.run(
@@ -402,6 +423,7 @@ async def chat_async(request: AsyncChatRequest) -> JSONResponse:
             emitter=emitter,
             temporal_client=_get_temporal_client(),
             request_context=request.context,
+            request_id=request_id,
         ),
         name=f"agent-loop-async-{task_id}",
     )

@@ -10,6 +10,7 @@ PATH 注入：
 
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -18,6 +19,8 @@ from agent_sdk._agent.deps import AgentDeps
 
 MAX_OUTPUT_BYTES = 30_000
 MAX_TIMEOUT_SECONDS = 600
+
+_OTEL_BOOT: str = str(Path(__file__).parent / "_otel_boot.py")
 
 
 def _build_path_env() -> str:
@@ -72,13 +75,22 @@ async def bash(
     # bash 工作目录
     cwd: str | None = get_fs_config().bash_cwd
 
-    # 环境变量：继承父进程环境 + PATH 注入 + 会话上下文 + UTF-8
+    # 环境变量：继承父进程环境 + PATH 注入 + 会话上下文 + UTF-8 + OTel trace
     env: dict[str, str] = {**os.environ, **{
         "PATH": _build_path_env(),
         "PYTHONUTF8": "1",
         "OWNER_ID": ctx.deps.user_id,
         "CONVERSATION_ID": ctx.deps.session_id,
     }}
+
+    # 注入 OTel trace context → 子进程继承当前 span 作为 parent
+    from opentelemetry.propagate import inject
+    from opentelemetry.context import get_current
+    inject(env, context=get_current())
+
+    # python 命令自动注入 OTel bootstrap（instrument httpx + 恢复 trace context）
+    if env.get("LOGFIRE_ENDPOINT") and command.lstrip().startswith("python "):
+        command = command.replace("python ", f"python {_OTEL_BOOT} ", 1)
 
     # 中断回调：脚本输出 __INTERRUPT__:{json} 时触发
     async def _on_interrupt(data: dict[str, Any]) -> str:
