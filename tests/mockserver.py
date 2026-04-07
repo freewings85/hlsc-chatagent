@@ -130,33 +130,33 @@ MOCK_QUOTATIONS: list[dict[str, Any]] = [
     {
         "shopId": 201, "shopName": "途虎养车（张江店）", "shopType": [2],
         "projects": [
-            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 35, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
-            {"projectId": 1101, "projectName": "机油/机滤更换", "priceType": 1, "priceStringObject": {"price": 380, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"sourceId": 1001, "projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 35, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"sourceId": 1101, "projectId": 1101, "projectName": "机油/机滤更换", "priceType": 1, "priceStringObject": {"price": 380, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
         ],
     },
     {
         "shopId": 202, "shopName": "小拇指快修（金科路店）", "shopType": [3],
         "projects": [
-            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 28, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
-            {"projectId": 1101, "projectName": "机油/机滤更换", "priceType": 1, "priceStringObject": {"price": 299, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"sourceId": 1001, "projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 28, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"sourceId": 1101, "projectId": 1101, "projectName": "机油/机滤更换", "priceType": 1, "priceStringObject": {"price": 299, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
         ],
     },
     {
         "shopId": 203, "shopName": "上汽大众4S店（浦东店）", "shopType": [1],
         "projects": [
-            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 60, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"sourceId": 1001, "projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 60, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
         ],
     },
     {
         "shopId": 204, "shopName": "途虎养车（南京西路店）", "shopType": [2],
         "projects": [
-            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 35, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"sourceId": 1001, "projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 35, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
         ],
     },
     {
         "shopId": 205, "shopName": "驰加汽车服务（望京店）", "shopType": [2],
         "projects": [
-            {"projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 40, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
+            {"sourceId": 1001, "projectId": 1001, "projectName": "基础洗车", "priceType": 1, "priceStringObject": {"price": 40, "conditionPrices": None, "minPrice": None, "maxPrice": None}},
         ],
     },
 ]
@@ -256,6 +256,14 @@ async def get_shops_by_id(body: dict[str, Any]) -> dict[str, Any]:
 # ============================================================
 # 商户报价接口
 # ============================================================
+
+@app.post("/service_ai_datamanager/shop/searchFitableShops")
+async def search_fitable_shops(body: dict[str, Any]) -> dict[str, Any]:
+    """mock：原样返回所有传入的 shopIds"""
+    shop_ids: list[int] = body.get("shopIds", [])
+    print(f"[MockDM] searchFitableShops shopIds={shop_ids} → 全部返回")
+    return {"status": 0, "result": {"shopIds": shop_ids}}
+
 
 @app.post("/service_ai_datamanager/shop/getCommercialPackages")
 async def get_commercial_packages(body: dict[str, Any]) -> dict[str, Any]:

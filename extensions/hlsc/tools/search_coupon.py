@@ -21,14 +21,13 @@ from hlsc.tools.prompt_loader import load_tool_prompt
 
 DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 _COUPON_SEARCH_URL: str = os.getenv("COUPON_SEARCH_URL", "")
-_DEFAULT_RADIUS: int = int(os.getenv("SEARCH_COUPON_DEFAULT_RADIUS", "100000"))
 
 _DESCRIPTION: str = load_tool_prompt("search_coupon")
 
 
 async def search_coupon(
     ctx: RunContext[AgentDeps],
-    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，不传默认使用系统配置），city/district/street=区域过滤")] = None,
+    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，用户没指定距离时不要传），city/district/street=区域过滤")] = None,
     project_ids: Annotated[Optional[list[str]], Field(description="项目 ID 列表，来自 classify_project。无明确项目时传 null")] = None,
     shop_ids: Annotated[list[str], Field(description="商户 ID 列表；未指定商户时传空列表")] = [],
     date: Annotated[str, Field(description="查询日期（YYYY-MM-DD），用于过滤该日期有效的优惠。默认当天")] = "",
@@ -72,9 +71,9 @@ async def search_coupon(
         if resolved.has_range:
             payload["latitude"] = resolved.lat
             payload["longitude"] = resolved.lng
-        # 搜索半径：LocationFilter.radius 或默认值
-        actual_radius: int = resolved.radius or _DEFAULT_RADIUS
-        payload["radius"] = actual_radius
+        # 搜索半径：仅用户指定时传入，否则由 coupon consumer 使用服务端默认值
+        if resolved.radius:
+            payload["radius"] = resolved.radius
         if date:
             payload["date"] = date
         if semantic_query:

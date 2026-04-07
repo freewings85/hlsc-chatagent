@@ -40,7 +40,3 @@ Supported `spec` types:
 - `invite_shop`
   - Show an invite button when search_shops returns no results.
   - fields: `{ "action": "invite_shop" }`
-
-- `change_car`
-  - 触发条件：回复中提到了用户的具体车型 → 让用户纠正
-  - fields: `{ "action": "change_car", "current_car_model_id": string }`

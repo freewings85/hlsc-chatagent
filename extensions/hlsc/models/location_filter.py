@@ -21,7 +21,7 @@ class LocationFilter(BaseModel):
     )
     radius: Optional[int] = Field(
         None,
-        description="搜索半径（米），不传默认 20 公里。需要有中心点：指定 address 或用户已有位置",
+        description="搜索半径（米）。用户没有明确指定距离时不要传此参数。需要有中心点：指定 address 或用户已有位置",
     )
 
     # 区域过滤

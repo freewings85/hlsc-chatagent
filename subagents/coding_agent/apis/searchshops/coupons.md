@@ -13,7 +13,7 @@
   "city": "上海",                     // 城市（可选）
   "latitude": 31.23,                 // 纬度（可选）
   "longitude": 121.47,               // 经度（可选）
-  "radius": 100000,                  // 搜索半径米（可选）
+  // "radius": 搜索半径（米）。除非用户明确指定了距离，否则坚决不要传此参数
   "semanticQuery": "满减的活动",      // 语义查询（可选）
   "sortBy": "default",               // 排序方式（见下方说明）
   "topK": 20                         // 返回数量
@@ -66,7 +66,7 @@
 
 - 查指定商户的优惠：传 `shopIds`
 - 查指定项目的优惠：传 `projectIds`
-- 查附近的优惠：传 `latitude` + `longitude` + `radius`
+- 查附近的优惠：传 `latitude` + `longitude`（radius 仅用户指定距离时传）
 - 语义搜索：传 `semanticQuery`（如"送洗车的活动""支付宝支付的"）
 - 按优惠金额排序：`sortBy: "promo_value"`
 

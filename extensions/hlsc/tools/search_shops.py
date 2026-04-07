@@ -21,14 +21,13 @@ from hlsc.services.address_resolver import resolve_location_filter
 from hlsc.tools.prompt_loader import load_tool_prompt
 
 SHOP_SEARCH_URL: str = os.getenv("SHOP_SEARCH_URL", "http://localhost:8093")
-_DEFAULT_RADIUS: int = int(os.getenv("SEARCH_SHOPS_DEFAULT_RADIUS", "20000"))
 
 _DESCRIPTION: str = load_tool_prompt("search_shops")
 
 
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，不传默认20公里），city/district/street=区域过滤")] = None,
+    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，用户没指定距离时不要传），city/district/street=区域过滤")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
     semantic_query: Annotated[str, Field(description="语义搜索描述，如用户对商户的偏好。调用前回顾对话中用户提到的所有商户偏好，完整组装到此参数")] = "",
     project_ids: Annotated[Optional[list[str]], Field(description="项目 ID 列表，来自 classify_project。筛选能提供这些项目的商户")] = None,
@@ -58,8 +57,8 @@ async def search_shops(
         if resolved.has_range:
             payload["latitude"] = resolved.lat
             payload["longitude"] = resolved.lng
-            actual_radius: int = resolved.radius if resolved.radius else _DEFAULT_RADIUS
-            payload["radius"] = actual_radius
+            if resolved.radius:
+                payload["radius"] = resolved.radius
 
         # 城市过滤
         if resolved.city:

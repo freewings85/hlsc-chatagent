@@ -25,7 +25,8 @@
       "shopType": [4, 3, 2],
       "projects": [
         {
-          "projectId": 1455,
+          "sourceId": 1455,
+          "projectId": 1456,
           "projectName": "xxxxx",
           "priceType": 1,
           "priceStringObject": {
@@ -59,6 +60,13 @@
 ]
 ```
 
+### 响应字段说明
+
+- `sourceId` — 查询时传入的项目 ID（如"洗车"的 ID）
+- `projectId` — 实际匹配到的子项目 ID（如"普洗""精洗"的 ID）
+- 一个 sourceId 可能对应多个 projectId（父项目展开为子项目）
+- 比价时按 sourceId 分组，每个子项目独立比价
+
 ### 使用场景
 
 - 查指定商户的某个项目报价：传 `shopIds` + `projectIds`
@@ -90,11 +98,12 @@ def get_comparable_price(project):
 
 
 # 比价流程：从 getCommercialPackages 响应中提取并排序
-target_project_id = 1101  # 要比价的项目 ID
+# 注意：用 sourceId 匹配查询的项目，projectId 是实际子项目
+target_source_id = 1101  # 查询时传入的项目 ID
 results = []
 for shop in response_data["result"]:
     for proj in shop["projects"]:
-        if proj["projectId"] == target_project_id:
+        if proj["sourceId"] == target_source_id:
             price, label = get_comparable_price(proj)
             results.append({
                 "shopId": shop["shopId"],
