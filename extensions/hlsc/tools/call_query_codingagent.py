@@ -59,6 +59,39 @@ def _looks_like_pseudo_tool_output(text: str) -> bool:
     return any(marker in normalized for marker in _PSEUDO_TOOL_MARKERS)
 
 
+def _extract_location_info(ctx: RunContext[AgentDeps]) -> str:
+    """从 request_context 提取用户位置信息，供 coding agent 调 API 时使用。"""
+    req_ctx = ctx.deps.request_context
+    if req_ctx is None:
+        return ""
+
+    loc = None
+    if isinstance(req_ctx, dict):
+        loc = req_ctx.get("current_location")
+    else:
+        loc = getattr(req_ctx, "current_location", None)
+
+    if loc is None:
+        return ""
+
+    if isinstance(loc, dict):
+        lat = loc.get("lat")
+        lng = loc.get("lng")
+        addr: str = loc.get("address", "")
+    else:
+        lat = getattr(loc, "lat", None)
+        lng = getattr(loc, "lng", None)
+        addr = getattr(loc, "address", "")
+
+    if lat is None or lng is None:
+        return ""
+
+    parts: list[str] = [f"用户当前位置：latitude={lat}, longitude={lng}"]
+    if addr:
+        parts.append(f"地址：{addr}")
+    return "\n".join(parts)
+
+
 async def call_query_codingagent(
     ctx: RunContext[AgentDeps],
     query: str,
@@ -72,7 +105,13 @@ async def call_query_codingagent(
     context: dict[str, str] = {"code_task_id": code_task_id, "scene": scene}
     clean_query: str = query.strip()
     query_prefix: str = _build_query_prefix(scene)
-    wrapped_query = f"{query_prefix}{clean_query}"
+
+    # 注入用户位置信息（coding agent 调 API 时需要）
+    location_info: str = _extract_location_info(ctx)
+    if location_info:
+        clean_query = f"{location_info}\n\n{clean_query}"
+
+    wrapped_query: str = f"{query_prefix}{clean_query}"
     result = await call_subagent(
         ctx,
         url=QUERY_CODINGAGENT_URL,
