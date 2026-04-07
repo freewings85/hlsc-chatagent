@@ -64,8 +64,7 @@ async def search_coupon(
         # 构建请求体
         payload: dict[str, object] = {}
         if project_ids:
-            key: str = "projectIds" if use_search_service else "packageIds"
-            payload[key] = [int(pid) for pid in project_ids]
+            payload["projectIds"] = [int(pid) for pid in project_ids]
         if shop_ids:
             payload["shopIds"] = [int(sid_val) for sid_val in shop_ids]
         if effective_city:

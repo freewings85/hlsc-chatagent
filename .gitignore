@@ -19,6 +19,7 @@ iterations/
 
 # 运行时配置
 **/.chatagent/
+**/.env.local
 nacos-data/
 
 # 方案文档（不入库）
