@@ -21,12 +21,28 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any
 
 from agent_sdk.agent import Agent
 from agent_sdk.config import AgentAppConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_trace_context(raw_request: Any) -> tuple[str, object | None]:
+    """从请求 header 提取 OTel trace context，实现跨服务 trace 串联。"""
+    try:
+        from opentelemetry.propagate import extract
+        from opentelemetry.trace import INVALID_TRACE_ID, format_trace_id, get_current_span
+
+        ctx = extract(dict(raw_request.headers))
+        trace_id: int = get_current_span(ctx).get_span_context().trace_id
+        if trace_id != INVALID_TRACE_ID:
+            return format_trace_id(trace_id), ctx
+    except Exception:
+        pass
+    return uuid.uuid4().hex, None
 
 
 class AgentApp:
@@ -71,7 +87,7 @@ class AgentApp:
         """构建 FastAPI 应用"""
         from contextlib import asynccontextmanager
 
-        from fastapi import FastAPI
+        from fastapi import FastAPI, Request
         from fastapi.middleware.cors import CORSMiddleware
         from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -130,7 +146,7 @@ class AgentApp:
 
         # SSE Chat Stream
         @fastapi_app.post("/chat/stream")
-        async def chat_stream(request: dict[str, Any]) -> StreamingResponse:
+        async def chat_stream(request: dict[str, Any], raw_request: Request) -> StreamingResponse:
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
             from agent_sdk._event.event_type import EventType
@@ -139,10 +155,7 @@ class AgentApp:
             user_id = request.get("user_id", "anonymous")
             message = request.get("message", "")
             context = request.get("context")
-            raw_rid: Any = request.get("request_id")
-            request_id: str | None = (
-                raw_rid if isinstance(raw_rid, str) and 1 <= len(raw_rid) <= 64 else None
-            )
+            request_id, parent_otel_context = _resolve_trace_context(raw_request)
 
             # per-session 锁：防止并发请求
             if session_id not in self._session_locks:
@@ -171,6 +184,7 @@ class AgentApp:
                             request_context=context,
                             fs_tools_backend=fs_tools_backend,
                             request_id=request_id,
+                            parent_otel_context=parent_otel_context,
                         )
                     finally:
                         # 锁释放后清理空闲锁，避免内存无限增长
@@ -223,7 +237,7 @@ class AgentApp:
 
         # Async Chat（Kafka）
         @fastapi_app.post("/chat/async")
-        async def chat_async(request: dict[str, Any]) -> JSONResponse:
+        async def chat_async(request: dict[str, Any], raw_request: Request) -> JSONResponse:
             from agent_sdk._config.settings import get_kafka_config
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
@@ -240,6 +254,7 @@ class AgentApp:
             user_id: str = request.get("user_id", "anonymous")
             message: str = request.get("message", "")
             context: Any = request.get("context")
+            request_id, parent_otel_context = _resolve_trace_context(raw_request)
 
             producer = await get_kafka_producer()
             sinker = KafkaSinker(producer, kafka_config.topic)
@@ -257,6 +272,8 @@ class AgentApp:
                     temporal_client=self._temporal_client,
                     request_context=context,
                     fs_tools_backend=fs_tools_backend,
+                    request_id=request_id,
+                    parent_otel_context=parent_otel_context,
                 ),
                 name=f"agent-loop-async-{session_id}",
             )
@@ -292,7 +309,7 @@ class AgentApp:
 
         # Sync Chat（非 SSE，等待完成后返回 JSON）
         @fastapi_app.post("/chat/sync")
-        async def chat_sync(request: dict[str, Any]) -> JSONResponse:
+        async def chat_sync(request: dict[str, Any], raw_request: Request) -> JSONResponse:
             """同步对话接口：等待 Agent 完成后返回 JSON 结果。"""
             from agent_sdk._event.event_emitter import EventEmitter
             from agent_sdk._event.event_model import EventModel
@@ -302,6 +319,7 @@ class AgentApp:
             user_id: str = request.get("user_id", "anonymous")
             message: str = request.get("message", "")
             context: Any = request.get("context")
+            request_id, parent_otel_context = _resolve_trace_context(raw_request)
 
             # per-session 锁
             if session_id not in self._session_locks:
@@ -328,6 +346,8 @@ class AgentApp:
                             temporal_client=self._temporal_client,
                             request_context=context,
                             fs_tools_backend=fs_tools_backend,
+                            request_id=request_id,
+                            parent_otel_context=parent_otel_context,
                         )
                     finally:
                         if session_id in self._session_locks and not sync_lock.locked():
