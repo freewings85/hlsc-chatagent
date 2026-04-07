@@ -19,7 +19,6 @@
 ### 四、地址解析
 - 将地址文本转为经纬度，用于调其他 API 的位置参数
 - 文档：`/apis/searchshops/address.md`
-- 注意：query 中已提供用户 latitude/longitude 时无需调此接口
 
 ## 典型任务
 

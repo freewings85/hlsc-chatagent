@@ -2,9 +2,7 @@
 
 ## POST ${ADDRESS_SERVICE_URL}/api/address/geocode
 
-将地址文本转为经纬度坐标 + 行政区划信息。当任务中涉及用户指定的地址（非用户当前位置）时，先用此接口解析，再用返回的经纬度调其他 API。
-
-如果 query 中已提供了用户位置的 latitude/longitude，无需再调此接口。
+将地址文本转为经纬度坐标 + 行政区划信息。
 
 ### 请求体
 
@@ -37,7 +35,6 @@
 
 - 用户说"南京西路附近" → address="南京西路" → 拿到 lat/lng → 传给 shop/coupon search API
 - 用户说"北京朝阳区" → address="北京朝阳区" → 拿到 lat/lng + district="朝阳区"
-- 用户说"我附近" → 不需要调此接口，直接用 query 中已有的用户位置
 
 ### 注意
 
