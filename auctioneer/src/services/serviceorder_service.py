@@ -4,7 +4,7 @@
 - detail: 获取订单详情（状态 + 报价列表）
 - discuss/command: 询价途中发出指令（广播 / 要求重新报价）
 - commit: 确认选择某商户报价
-- renewPrice: 提高报价重新竞标
+- cancel: 取消订单（竞价到期无人报价时）
 """
 
 from __future__ import annotations
@@ -111,36 +111,32 @@ class ServiceOrderService:
                 f"提交订单失败: {data.get('message', '未知错误')}"
             )
 
-    async def renew_price(
+    async def cancel_order(
         self,
         order_id: str,
-        new_price: float,
         operator_name: str = "AI",
-        session_id: str = "",
-        request_id: str = "",
     ) -> dict:
-        """提高报价，创建新订单重新竞标。"""
-        url: str = f"{SERVICEORDER_URL}/serviceorder/renewPrice"
+        """取消订单（竞价到期无人报价时调用）。"""
+        url: str = f"{SERVICEORDER_URL}/serviceorder/cancel"
         if not SERVICEORDER_URL:
             raise RuntimeError("SERVICEORDER_URL 未配置")
 
-        payload: dict[str, object] = {
+        payload: dict[str, str] = {
             "orderId": order_id,
-            "newPrice": new_price,
             "operatorName": operator_name,
         }
-        log_http_request(url, "POST", session_id, request_id, payload)
+        log_http_request(url, "POST", "", "", payload)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response: httpx.Response = await client.post(url, json=payload)
             response.raise_for_status()
             data: dict = response.json()
-            log_http_response(response.status_code, session_id, request_id, data)
+            log_http_response(response.status_code, "", "", data)
 
             if data.get("status") == 0:
                 return data.get("result", {})
             raise RuntimeError(
-                f"提高报价失败: {data.get('message', '未知错误')}"
+                f"取消订单失败: {data.get('message', '未知错误')}"
             )
 
 

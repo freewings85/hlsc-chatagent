@@ -79,7 +79,13 @@ async def _run(agent_app: object) -> None:
     import uvicorn
     from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
-    from src.temporal.activities import broadcast_quotes_activity, poll_quotes_activity, summarize_quotes_activity
+    from src.temporal.activities import (
+        broadcast_offers_activity,
+        cancel_order_activity,
+        commit_order_activity,
+        poll_offers_activity,
+        select_best_offer_activity,
+    )
     from src.temporal.client import TASK_QUEUE, get_client
     from src.temporal.workflows import AuctionWorkflow
 
@@ -92,7 +98,13 @@ async def _run(agent_app: object) -> None:
         client,
         task_queue=TASK_QUEUE,
         workflows=[AuctionWorkflow],
-        activities=[poll_quotes_activity, broadcast_quotes_activity, summarize_quotes_activity],
+        activities=[
+            poll_offers_activity,
+            broadcast_offers_activity,
+            select_best_offer_activity,
+            commit_order_activity,
+            cancel_order_activity,
+        ],
         workflow_runner=UnsandboxedWorkflowRunner(),
     )
     worker_task: asyncio.Task = asyncio.create_task(worker.run())

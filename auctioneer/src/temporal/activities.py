@@ -1,15 +1,17 @@
-"""拍卖 Activities：轮询报价 + 广播报价 + LLM 汇总。"""
+"""拍卖 Activities：轮询报价 + 广播报价 + LLM 选择 + 提交订单 + 取消订单。"""
 
 from __future__ import annotations
+
+import json
 
 from temporalio import activity
 
 from src.services.serviceorder_service import serviceorder_service
-from src.models import PollResult, Quote
+from src.models import AuctionDecision, PollResult, Offer
 
 
-@activity.defn(name="poll_quotes")
-async def poll_quotes_activity(order_id: str) -> PollResult:
+@activity.defn(name="poll_offers")
+async def poll_offers_activity(order_id: str) -> PollResult:
     """调用 /serviceorder/detail 获取订单状态和商户报价。"""
     activity.logger.info("  [poll] 查询订单 %s", order_id)
 
@@ -17,23 +19,24 @@ async def poll_quotes_activity(order_id: str) -> PollResult:
 
     order_status: int = data.get("orderStatus", 0)
     order_status_desc: str = data.get("orderStatusDesc", "")
-    offers: list[dict] = data.get("offers", [])
+    raw_offers: list[dict] = data.get("offers", [])
 
-    quotes: list[Quote] = [
-        Quote(
+    offers: list[Offer] = [
+        Offer(
             offer_id=offer.get("offerId", ""),
             commercial_id=offer.get("commercialId", 0),
             commercial_name=offer.get("commercialName", ""),
             offer_status=offer.get("offerStatus", 0),
             offer_price=float(offer.get("offerPrice", 0.0)),
             offer_remark=offer.get("offerRemark", ""),
+            offer_voice=offer.get("offerVoice", []),
             offer_time=offer.get("offerTime"),
         )
-        for offer in offers
+        for offer in raw_offers
     ]
 
-    responded: list[Quote] = [q for q in quotes if q.offer_status > 0]
-    pending: list[Quote] = [q for q in quotes if q.offer_status == 0]
+    responded: list[Offer] = [q for q in offers if q.offer_status > 0]
+    pending: list[Offer] = [q for q in offers if q.offer_status == 0]
 
     activity.logger.info(
         "  [poll] orderStatus=%d(%s) | 已报价=%d | 未报价=%d",
@@ -47,27 +50,30 @@ async def poll_quotes_activity(order_id: str) -> PollResult:
     return PollResult(
         order_status=order_status,
         order_status_desc=order_status_desc,
-        quotes=quotes,
+        offers=offers,
     )
 
 
-@activity.defn(name="broadcast_quotes")
-async def broadcast_quotes_activity(args: list) -> None:
-    """广播当前报价信息给所有商户。"""
+@activity.defn(name="broadcast_offers")
+async def broadcast_offers_activity(args: list) -> None:
+    """广播报价信息给所有商户。支持自定义催单消息。
+
+    args: [order_id, offers, reminder?]
+      - reminder 可选，有则追加到广播末尾（如"还剩 1 分钟"催单）
+    """
     order_id: str = args[0]
-    quotes: list[Quote] = [Quote(**q) if isinstance(q, dict) else q for q in args[1]]
+    offers: list[Offer] = [Offer(**q) if isinstance(q, dict) else q for q in args[1]]
+    reminder: str = args[2] if len(args) > 2 else ""
 
-    responded: list[Quote] = [q for q in quotes if q.offer_status > 0]
-    pending: list[Quote] = [q for q in quotes if q.offer_status == 0]
+    responded: list[Offer] = [q for q in offers if q.offer_status > 0]
 
-    # 组装广播内容
     lines: list[str] = []
     if responded:
         lines.append(f"当前已有 {len(responded)} 家商户报价：")
         for q in sorted(responded, key=lambda q: q.offer_price):
             lines.append(f"  • {q.commercial_name}：¥{q.offer_price:.2f}")
-    if pending:
-        lines.append(f"还有 {len(pending)} 家商户尚未报价，请尽快提交。")
+    if reminder:
+        lines.append(reminder)
 
     content: str = "\n".join(lines) if lines else "暂无报价信息，请各商户尽快报价。"
 
@@ -82,32 +88,60 @@ async def broadcast_quotes_activity(args: list) -> None:
     activity.logger.info("  [broadcast] 广播完成")
 
 
-@activity.defn(name="summarize_quotes")
-async def summarize_quotes_activity(quotes: list[Quote]) -> str:
-    """按价格排序已报价商户，生成推荐文字。"""
-    responded: list[Quote] = [q for q in quotes if q.offer_status > 0]
-    activity.logger.info("[summarize] 开始汇总，共 %d 条有效报价", len(responded))
+@activity.defn(name="select_best_offer")
+async def select_best_offer_activity(offers: list[Offer]) -> AuctionDecision:
+    """调 LLM 分析 offer_voice，按决策原则选出最优商户。"""
+    from pathlib import Path
 
-    if not responded:
-        activity.logger.info("[summarize] 无报价数据")
-        return "未收到任何商户报价，建议重新发起竞标或提高价格。"
+    from pydantic_ai import Agent
+    from agent_sdk._agent.model import create_model
 
-    sorted_quotes: list[Quote] = sorted(responded, key=lambda q: q.offer_price)
-    best: Quote = sorted_quotes[0]
+    activity.logger.info("[select] LLM 分析 %d 条报价", len(offers))
 
-    for i, q in enumerate(sorted_quotes, start=1):
-        tag: str = " ← 推荐" if q.commercial_id == best.commercial_id else ""
-        activity.logger.info(
-            "  [summarize] #%d %s ¥%.2f%s", i, q.commercial_name, q.offer_price, tag,
-        )
+    system_path: Path = Path(__file__).resolve().parent.parent.parent / "prompts" / "templates" / "select_best_offer.md"
+    system_prompt: str = system_path.read_text(encoding="utf-8").strip()
 
-    lines: list[str] = [f"共收到 {len(responded)} 家商户报价："]
-    for q in sorted_quotes:
-        tag = "  ← 推荐" if q.commercial_id == best.commercial_id else ""
-        lines.append(f"  • {q.commercial_name}：¥{q.offer_price:.2f}{tag}")
-    lines.append(
-        f"\n推荐选择【{best.commercial_name}】（商户ID: {best.commercial_id}），"
-        f"报价 ¥{best.offer_price:.2f}，为最低报价。"
+    offers_data: list[dict] = [o.model_dump() for o in offers]
+    user_message: str = (
+        f"以下是 {len(offers)} 家商户的报价数据，请根据决策原则选出最优商户。\n\n"
+        f"{json.dumps(offers_data, ensure_ascii=False, indent=2)}"
     )
 
-    return "\n".join(lines)
+    agent: Agent[None, AuctionDecision] = Agent(
+        create_model(),
+        system_prompt=system_prompt,
+        output_type=AuctionDecision,
+    )
+    result = await agent.run(user_message)
+    decision: AuctionDecision = result.output
+
+    activity.logger.info(
+        "[select] 选中 %s (ID:%d) — %s",
+        decision.commercial_name, decision.commercial_id, decision.reason,
+    )
+    return decision
+
+
+@activity.defn(name="commit_order")
+async def commit_order_activity(args: list) -> dict:
+    """提交订单：确认选中商户。args: [order_id, commercial_id]"""
+    order_id: str = args[0]
+    commercial_id: int = args[1]
+    activity.logger.info("  [commit] order_id=%s, commercial_id=%d", order_id, commercial_id)
+    result: dict = await serviceorder_service.commit_order(
+        order_id=order_id,
+        commercial_id=commercial_id,
+        operator_name="AI",
+    )
+    activity.logger.info("  [commit] 订单已提交")
+    return result
+
+
+@activity.defn(name="cancel_order")
+async def cancel_order_activity(order_id: str) -> None:
+    """竞价到期无人报价时取消订单。"""
+    activity.logger.info("  [cancel] 取消订单 %s", order_id)
+    await serviceorder_service.cancel_order(order_id)
+    activity.logger.info("  [cancel] 订单已取消")
+
+
