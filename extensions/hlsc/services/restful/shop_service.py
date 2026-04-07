@@ -53,7 +53,7 @@ class ShopService:
         owner_id: str,
         top: int = 5,
         commercial_type: list[int] | None = None,
-        package_ids: list[int] | None = None,
+        project_ids: list[int] | None = None,
         session_id: str = "",
         request_id: str = "",
     ) -> dict:
@@ -65,8 +65,8 @@ class ShopService:
         payload = {"ownerId": int(owner_id), "top": top}
         if commercial_type is not None:
             payload["commercialType"] = commercial_type
-        if package_ids is not None:
-            payload["packageIds"] = package_ids
+        if project_ids is not None:
+            payload["packageIds"] = project_ids
         log_http_request(url, "POST", session_id, request_id, payload)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -96,7 +96,7 @@ class ShopService:
         city_id: int | None = None,
         district_id: int | None = None,
         address_name: str | None = None,
-        package_ids: str | None = None,
+        project_ids: str | None = None,
         min_rating: float | None = None,
         min_trading_count: int | None = None,
         session_id: str = "",
@@ -129,8 +129,8 @@ class ShopService:
             payload["districtId"] = district_id
         if address_name:
             payload["addressName"] = address_name
-        if package_ids:
-            payload["packageIds"] = [int(x.strip()) for x in package_ids.split(",")]
+        if project_ids:
+            payload["packageIds"] = [int(x.strip()) for x in project_ids.split(",")]
         if min_rating is not None:
             payload["rating"] = min_rating
         if min_trading_count is not None:

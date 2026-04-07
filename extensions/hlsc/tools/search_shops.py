@@ -55,7 +55,7 @@ async def search_shops(
             order_by=order_by,
             commercial_type=commercial_type,
             opening_hour=opening_hour,
-            package_ids=project_ids,
+            project_ids=project_ids,
             min_rating=min_rating,
             min_trading_count=min_trading_count,
             session_id=sid,
