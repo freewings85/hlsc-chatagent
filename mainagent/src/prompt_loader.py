@@ -16,8 +16,8 @@ import yaml
 from agent_sdk.prompt_loader import PromptResult, TemplatePromptLoader
 
 
-# 提示词根目录（相对于 mainagent/ 目录）
-_TEMPLATES_DIR: Path = Path("prompts") / "templates"
+# 提示词根目录（基于本文件位置，不依赖 CWD）
+_TEMPLATES_DIR: Path = Path(__file__).resolve().parent.parent / "prompts" / "templates"
 
 # 场景配置缓存
 _scene_prompt_parts: dict[str, list[str]] | None = None
