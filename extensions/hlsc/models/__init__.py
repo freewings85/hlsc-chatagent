@@ -2,5 +2,6 @@
 
 from hlsc.models.car import CarInfo
 from hlsc.models.location import LocationInfo
+from hlsc.models.location_filter import LocationFilter
 
-__all__ = ["CarInfo", "LocationInfo"]
+__all__ = ["CarInfo", "LocationFilter", "LocationInfo"]

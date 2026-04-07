@@ -2,10 +2,9 @@
 
 所有需要经纬度的 tool 通过此模块获取坐标，LLM 层面无需感知经纬度。
 
-解析策略：
-- address=None → 从 request_context 取用户当前位置（含经纬度）
-  - 如果 request_context 也没有 → interrupt 让前端弹地图选点
-- address="南京西路" → 调 address service 转经纬度
+两种使用方式：
+1. resolve_location(ctx, address) — 简单模式，address=None 用 context，有值调 address service
+2. resolve_location_filter(ctx, location_filter) — LocationFilter 模式，支持范围搜索 + 区域过滤
 """
 
 from __future__ import annotations
@@ -168,3 +167,104 @@ async def _resolve_from_service(
 
     except httpx.HTTPError as e:
         raise ValueError(f"地址服务请求异常: {e}")
+
+
+# ============================================================
+# LocationFilter 模式
+# ============================================================
+
+
+@dataclass
+class ResolvedLocationFilter:
+    """LocationFilter 解析结果：范围参数 + 过滤参数，工具按需使用。"""
+
+    # 范围搜索参数（可能为 None，表示无范围条件）
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    radius: Optional[int] = None
+
+    # 区域过滤参数
+    city: str = ""
+    district: str = ""
+    street: str = ""
+
+    # address service 返回的格式化地址
+    address: str = ""
+
+    @property
+    def has_range(self) -> bool:
+        """是否有范围搜索条件（有中心点经纬度）"""
+        return self.lat is not None and self.lng is not None
+
+    @property
+    def has_filter(self) -> bool:
+        """是否有区域过滤条件"""
+        return bool(self.city or self.district or self.street)
+
+
+async def resolve_location_filter(
+    ctx: RunContext[AgentDeps],
+    location: Optional[object],
+    tool_name: str = "",
+) -> ResolvedLocationFilter:
+    """解析 LocationFilter 对象，返回范围参数 + 过滤参数。
+
+    LocationFilter 字段：address, radius, city, district, street
+    - 有 address → 调 address service 转经纬度（范围搜索）
+    - 有 city/district/street → 作为过滤条件
+    - 都没有 → 从 request_context 取用户位置（范围搜索）
+    - 都没有 + context 也没有 → interrupt
+    """
+    sid: str = ctx.deps.session_id
+    rid: str = ctx.deps.request_id
+
+    # 提取 LocationFilter 字段
+    if location is None:
+        address: Optional[str] = None
+        radius: Optional[int] = None
+        city: str = ""
+        district: str = ""
+        street: str = ""
+    elif isinstance(location, dict):
+        address = location.get("address")
+        radius = location.get("radius")
+        city = location.get("city") or ""
+        district = location.get("district") or ""
+        street = location.get("street") or ""
+    else:
+        address = getattr(location, "address", None)
+        radius = getattr(location, "radius", None)
+        city = getattr(location, "city", "") or ""
+        district = getattr(location, "district", "") or ""
+        street = getattr(location, "street", "") or ""
+
+    result: ResolvedLocationFilter = ResolvedLocationFilter(
+        radius=radius, city=city, district=district, street=street,
+    )
+
+    # 范围搜索：有 address → 调 address service
+    if address:
+        resolved: ResolvedLocation = await _resolve_from_service(address, sid, rid, tool_name)
+        result.lat = resolved.lat
+        result.lng = resolved.lng
+        result.address = resolved.address
+        # address service 返回的行政区信息补充到 filter（如果 filter 没指定）
+        if not result.city and resolved.city:
+            result.city = resolved.city
+        if not result.district and resolved.district:
+            result.district = resolved.district
+    elif not result.has_filter:
+        # 没有 address 也没有 filter → 从 context 取用户位置
+        resolved_ctx: ResolvedLocation = await _resolve_from_context(ctx, tool_name)
+        result.lat = resolved_ctx.lat
+        result.lng = resolved_ctx.lng
+        result.address = resolved_ctx.address
+
+    log_tool_end(f"address_resolver({tool_name})", sid, rid, {
+        "has_range": result.has_range,
+        "has_filter": result.has_filter,
+        "lat": result.lat, "lng": result.lng,
+        "city": result.city, "district": result.district, "street": result.street,
+    })
+
+    return result

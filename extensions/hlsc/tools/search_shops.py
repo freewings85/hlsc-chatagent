@@ -1,8 +1,6 @@
 """search_shops 工具：按标准条件搜索商户并返回商户详情列表。
 
-地址参数说明：
-- address=None（不传）→ 使用用户当前位置（从 request_context 取，没有则 interrupt 让用户选点）
-- address="南京西路" → 调 address service 转经纬度后搜索
+位置参数通过 LocationFilter 对象传入，支持范围搜索和区域过滤。
 """
 
 from __future__ import annotations
@@ -15,7 +13,8 @@ from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end
-from hlsc.services.address_resolver import resolve_location
+from hlsc.models.location_filter import LocationFilter
+from hlsc.services.address_resolver import resolve_location_filter
 from hlsc.services.restful.shop_service import shop_service
 from hlsc.tools.prompt_loader import load_tool_prompt
 
@@ -24,10 +23,9 @@ _DESCRIPTION = load_tool_prompt("search_shops")
 
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    address: Annotated[Optional[str], Field(description="目标地址，如'静安区南京西路'。不传则使用用户当前位置")] = None,
-    shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入，描述性词语（如'技术好'、'口碑好'）不能传入")] = "",
+    location: Annotated[LocationFilter, Field(description="位置条件（必填）。至少指定一个字段：address（范围搜索）、city/district/street（区域过滤），或留空对象{}使用用户当前位置")],
+    shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
     top: Annotated[int, Field(description="返回数量")] = 5,
-    radius: Annotated[int, Field(description="搜索半径（米）")] = 10000,
     order_by: Annotated[str, Field(description="排序方式：distance/rating/tradingCount，可组合")] = "distance",
     commercial_type: Annotated[Optional[list[int]], Field(description="商户类型列表，用户未指定时不传")] = None,
     opening_hour: Annotated[Optional[str], Field(description="营业时间筛选，格式 HH:MM")] = None,
@@ -38,20 +36,23 @@ async def search_shops(
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
     log_tool_start("search_shops", sid, rid, {
-        "address": address, "shop_name": shop_name,
-        "top": top, "radius": radius, "order_by": order_by,
+        "location": location.model_dump() if location else None,
+        "shop_name": shop_name, "top": top, "order_by": order_by,
     })
 
     try:
-        # 解析地址 → 经纬度
-        location = await resolve_location(ctx, address, tool_name="search_shops")
+        # 解析位置条件
+        resolved = await resolve_location_filter(ctx, location, tool_name="search_shops")
+
+        # 搜索半径：LocationFilter.radius 或默认 10km
+        actual_radius: int = resolved.radius if resolved.radius else 10000
 
         result = await shop_service.get_nearby_shops(
-            lat=location.lat,
-            lng=location.lng,
+            lat=resolved.lat or 0.0,
+            lng=resolved.lng or 0.0,
             keyword=shop_name,
             top=top,
-            radius=radius,
+            radius=actual_radius,
             order_by=order_by,
             commercial_type=commercial_type,
             opening_hour=opening_hour,
@@ -63,9 +64,15 @@ async def search_shops(
         )
 
         commercials: list[dict] = result.get("commercials", []) if isinstance(result, dict) else []
+
+        # 区域过滤（后端 API 未支持的字段在这里补过滤）
+        if resolved.has_filter:
+            commercials = _apply_filter(commercials, resolved)
+
         if not commercials:
             log_tool_end("search_shops", sid, rid, {"shop_count": 0})
-            return f"{radius // 1000}km 范围内未找到符合条件的门店，建议扩大搜索范围"
+            desc: str = resolved.address or resolved.district or resolved.city or f"{actual_radius // 1000}km 范围"
+            return f"{desc}内未找到符合条件的门店"
 
         shops: list[dict] = []
         for item in commercials:
@@ -102,6 +109,25 @@ async def search_shops(
     except Exception as e:
         log_tool_end("search_shops", sid, rid, exc=e)
         return f"Error: search_shops failed - {e}"
+
+
+def _apply_filter(commercials: list[dict], resolved: object) -> list[dict]:
+    """按区域过滤条件筛选商户列表。"""
+    filtered: list[dict] = []
+    city: str = getattr(resolved, "city", "")
+    district: str = getattr(resolved, "district", "")
+    street: str = getattr(resolved, "street", "")
+
+    for item in commercials:
+        if city and city not in (item.get("cityName", "") or ""):
+            continue
+        if district and district not in (item.get("districtName", "") or ""):
+            continue
+        if street and street not in (item.get("address", "") or ""):
+            continue
+        filtered.append(item)
+
+    return filtered
 
 
 search_shops.__doc__ = _DESCRIPTION
