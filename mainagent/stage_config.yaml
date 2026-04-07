@@ -69,7 +69,7 @@ scenes:
       - collect_car_info
       - list_user_cars
       - update_session_state
-      - bash
+      - bash  # SDK 内置工具（create_default_tool_map 提供）
     skills:
       - insurance-bidding
 
