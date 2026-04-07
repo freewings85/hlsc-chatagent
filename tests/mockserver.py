@@ -269,6 +269,33 @@ async def get_shops_by_id(body: dict[str, Any]) -> dict[str, Any]:
 
 
 # ============================================================
+# 项目分类接口（classify_project 调用）
+# ============================================================
+
+_CLASSIFY_SYNONYMS: dict[str, list[str]] = {
+    "换机油": ["机油"], "机油": ["机油"], "保养": ["保养", "机油"],
+    "洗车": ["洗车"], "刹车片": ["刹车片"], "刹车": ["刹车片"],
+    "车险续保": ["车险"], "续保": ["车险"], "车险": ["车险"],
+    "轮胎": ["轮胎"], "钣金": ["钣金"], "喷漆": ["钣金"],
+}
+
+
+@app.post("/service_ai_datamanager/package/searchPackageByKeyword")
+async def search_package_by_keyword(body: dict[str, Any]) -> dict[str, Any]:
+    """模拟项目分类（classify_project 用）"""
+    keyword: str = body.get("keyword", "")
+    search_terms: list[str] = _CLASSIFY_SYNONYMS.get(keyword, [keyword])
+    matched: list[dict[str, Any]] = []
+    for p in MOCK_PROJECTS:
+        for term in search_terms:
+            if term in p["name"] or term in p["category"]:
+                matched.append({"packageId": p["id"], "packageName": p["name"]})
+                break
+    print(f"[MockDM] searchPackageByKeyword keyword='{keyword}' → {len(matched)} matches")
+    return {"status": 0, "result": matched}
+
+
+# ============================================================
 # 优惠接口（DataManager 回退路径）
 # ============================================================
 
