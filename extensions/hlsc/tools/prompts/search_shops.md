@@ -1,10 +1,11 @@
-按位置搜索附近的商户/门店，返回门店列表。
+Description:
+搜索商户/门店，支持按位置、项目、商户名、评分等条件筛选，返回门店列表。
 
-注意事项：
-- location 中 address 和 city/district/street 可组合使用：address 确定搜索中心点，city/district/street 做区域过滤
-- 用户指定了具体地址时传 location.address，系统自动解析经纬度，不需要调 collect_user_location
-- 用户没指定地址且没有用户位置时，才需要先调 collect_user_location 获取位置
-- shop_name、min_rating 等条件参数必须用户明确给出具体值时才传入，禁止根据模糊描述自行猜测填充
+Usage notes:
+- location_text 原样传入用户提到的位置描述，包括城市、区、地标、路名等任何粒度，不做拆解加工。
+- use_current_location 仅在使用 context 中用户已有定位时设为 true。
+- radius 仅在用户明确给出距离数字时传入，"附近"不算明确距离。
+- shop_name、min_rating 等条件参数须用户明确给出具体值时才传入，禁止猜测填充。
 
 ## 换渠道省钱提示
 

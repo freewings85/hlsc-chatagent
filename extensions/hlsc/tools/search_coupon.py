@@ -1,6 +1,6 @@
 """search_coupon 工具：根据项目、位置、语义条件查询可用的优惠活动。
 
-位置参数通过 LocationFilter 对象传入，支持范围搜索和区域过滤。
+位置参数通过 location_text + use_current_location + radius 传入，Java 端统一处理。
 """
 
 from __future__ import annotations
@@ -15,8 +15,6 @@ from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end, log_http_request, log_http_response
-from hlsc.models.location_filter import LocationFilter
-from hlsc.services.address_resolver import resolve_location_filter
 from hlsc.tools.prompt_loader import load_tool_prompt
 
 DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
@@ -25,9 +23,32 @@ _COUPON_SEARCH_URL: str = os.getenv("COUPON_SEARCH_URL", "")
 _DESCRIPTION: str = load_tool_prompt("search_coupon")
 
 
+def _extract_context_location(ctx: RunContext[AgentDeps]) -> dict[str, object] | None:
+    """从 request_context 提取用户当前位置信息。"""
+    req_ctx = ctx.deps.request_context
+    if req_ctx is None:
+        return None
+    loc = req_ctx.get("current_location") if isinstance(req_ctx, dict) else getattr(req_ctx, "current_location", None)
+    if loc is None:
+        return None
+    if isinstance(loc, dict):
+        lat = loc.get("lat")
+        lng = loc.get("lng")
+        addr = loc.get("address", "")
+    else:
+        lat = getattr(loc, "lat", None)
+        lng = getattr(loc, "lng", None)
+        addr = getattr(loc, "address", "")
+    if lat is not None and lng is not None:
+        return {"latitude": lat, "longitude": lng, "locationText": addr}
+    return None
+
+
 async def search_coupon(
     ctx: RunContext[AgentDeps],
-    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，用户没指定距离时不要传），city/district/street=区域过滤")] = None,
+    location_text: Annotated[str, Field(description="用户提到的位置，原样传入，如'上海''嘉定区''张江高科附近'。若用户未提及位置但 context 中有当前位置，使用 context 中的位置并设 use_current_location=true。若均无则先调 collect_user_location")] = "",
+    use_current_location: Annotated[bool, Field(description="是否使用用户当前位置。当 location_text 来自 context 中的用户定位时设为 true")] = False,
+    radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     project_ids: Annotated[Optional[list[str]], Field(description="项目 ID 列表，来自 classify_project。无明确项目时传 null")] = None,
     shop_ids: Annotated[list[str], Field(description="商户 ID 列表；未指定商户时传空列表")] = [],
     date: Annotated[str, Field(description="查询日期（YYYY-MM-DD），用于过滤该日期有效的优惠。默认当天")] = "",
@@ -39,19 +60,13 @@ async def search_coupon(
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
     log_tool_start("search_coupon", sid, rid, {
-        "location": location.model_dump() if location else None,
-        "project_ids": project_ids, "shop_ids": shop_ids,
+        "location_text": location_text, "use_current_location": use_current_location,
+        "radius": radius, "project_ids": project_ids, "shop_ids": shop_ids,
         "semantic_query": semantic_query, "sort_by": sort_by, "top_k": top_k,
     })
 
     try:
-        # 解析位置条件
-        resolved = await resolve_location_filter(ctx, location, tool_name="search_coupon")
-
-        # 城市：LocationFilter 的 city（含 address service 自动填充）
-        effective_city: str = resolved.city
-
-        # 优先使用独立搜索服务，否则走 DataManager
+        # 选择搜索服务
         use_search_service: bool = bool(_COUPON_SEARCH_URL)
         if use_search_service:
             url: str = f"{_COUPON_SEARCH_URL.rstrip('/')}/api/coupon/search"
@@ -61,26 +76,33 @@ async def search_coupon(
             return "Error: COUPON_SEARCH_URL 和 DATA_MANAGER_URL 均未配置"
 
         # 构建请求体
-        payload: dict[str, object] = {}
+        payload: dict[str, object] = {"topK": top_k}
+
+        # 位置参数：透传给 Java consumer 处理
+        if location_text:
+            payload["locationText"] = location_text
+        if radius is not None:
+            payload["radius"] = radius
+
+        # use_current_location=true 时，附带 context 的 lat/lng
+        if use_current_location:
+            ctx_loc: dict[str, object] | None = _extract_context_location(ctx)
+            if ctx_loc:
+                payload["latitude"] = ctx_loc["latitude"]
+                payload["longitude"] = ctx_loc["longitude"]
+                if not location_text:
+                    payload["locationText"] = ctx_loc.get("locationText", "")
+
         if project_ids:
             payload["projectIds"] = [int(pid) for pid in project_ids]
         if shop_ids:
             payload["shopIds"] = [int(sid_val) for sid_val in shop_ids]
-        if effective_city:
-            payload["city"] = effective_city
-        if resolved.has_range:
-            payload["latitude"] = resolved.lat
-            payload["longitude"] = resolved.lng
-        # 搜索半径：仅用户指定时传入，否则由 coupon consumer 使用服务端默认值
-        if resolved.radius:
-            payload["radius"] = resolved.radius
         if date:
             payload["date"] = date
         if semantic_query:
             payload["semanticQuery"] = semantic_query
         if sort_by != "default":
             payload["sortBy"] = sort_by
-        payload["topK"] = top_k
 
         log_http_request(url, "POST", sid, rid, payload)
 

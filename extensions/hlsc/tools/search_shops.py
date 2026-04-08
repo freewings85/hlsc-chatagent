@@ -1,7 +1,7 @@
 """search_shops 工具：通过 shop consumer 搜索商户。
 
 调用 shop consumer 的 /api/shop/search 接口，支持语义搜索 + 结构化过滤 + 位置过滤。
-位置参数通过 LocationFilter 对象传入。
+位置参数通过 location_text + use_current_location + radius 传入，Java 端统一处理。
 """
 
 from __future__ import annotations
@@ -16,8 +16,6 @@ from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end, log_http_request, log_http_response
-from hlsc.models.location_filter import LocationFilter
-from hlsc.services.address_resolver import resolve_location_filter
 from hlsc.tools.prompt_loader import load_tool_prompt
 
 SHOP_SEARCH_URL: str = os.getenv("SHOP_SEARCH_URL", "http://localhost:8093")
@@ -25,44 +23,66 @@ SHOP_SEARCH_URL: str = os.getenv("SHOP_SEARCH_URL", "http://localhost:8093")
 _DESCRIPTION: str = load_tool_prompt("search_shops")
 
 
+def _extract_context_location(ctx: RunContext[AgentDeps]) -> dict[str, object] | None:
+    """从 request_context 提取用户当前位置信息。"""
+    req_ctx = ctx.deps.request_context
+    if req_ctx is None:
+        return None
+    loc = req_ctx.get("current_location") if isinstance(req_ctx, dict) else getattr(req_ctx, "current_location", None)
+    if loc is None:
+        return None
+    if isinstance(loc, dict):
+        lat = loc.get("lat")
+        lng = loc.get("lng")
+        addr = loc.get("address", "")
+    else:
+        lat = getattr(loc, "lat", None)
+        lng = getattr(loc, "lng", None)
+        addr = getattr(loc, "address", "")
+    if lat is not None and lng is not None:
+        return {"latitude": lat, "longitude": lng, "locationText": addr}
+    return None
+
+
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    location: Annotated[Optional[LocationFilter], Field(description="位置条件。address=范围搜索中心点，radius=搜索半径（米，用户没指定距离时不要传），city/district/street=区域过滤")] = None,
+    location_text: Annotated[str, Field(description="用户提到的位置，原样传入，如'上海''嘉定区''张江高科附近''南京西路'。若用户未提及位置但 context 中有当前位置，使用 context 中的位置并设 use_current_location=true。若均无则先调 collect_user_location")] = "",
+    use_current_location: Annotated[bool, Field(description="是否使用用户当前位置。当 location_text 来自 context 中的用户定位时设为 true")] = False,
+    radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
     semantic_query: Annotated[str, Field(description="语义搜索描述，如用户对商户的偏好。调用前回顾对话中用户提到的所有商户偏好，完整组装到此参数")] = "",
     project_ids: Annotated[Optional[list[str]], Field(description="项目 ID 列表，来自 classify_project。筛选能提供这些项目的商户")] = None,
     top: Annotated[int, Field(description="返回数量上限，默认 10")] = 10,
     min_rating: Annotated[Optional[float], Field(description="最低评分，仅用户明确给出时传入")] = None,
-    shop_type: Annotated[Optional[str], Field(description="商户类型筛选，如'4S店'、'综合修理厂'")] = None,
-    opening_time: Annotated[Optional[str], Field(description="营业时间筛选，格式 HH:MM，筛选该时间点还在营业的商户")] = None,
     sort_by: Annotated[str, Field(description="排序方式：default（默认相关度）/ distance（距离近优先）/ rating（评分高优先）/ trading_count（成交量高优先）")] = "default",
 ) -> str:
     """搜索商户，支持语义搜索 + 结构化过滤 + 位置过滤。"""
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
     log_tool_start("search_shops", sid, rid, {
-        "location": location.model_dump() if location else None,
-        "shop_name": shop_name, "semantic_query": semantic_query, "top": top,
+        "location_text": location_text, "use_current_location": use_current_location,
+        "radius": radius, "shop_name": shop_name, "semantic_query": semantic_query, "top": top,
     })
 
     try:
-        # 解析位置条件
-        resolved = await resolve_location_filter(ctx, location, tool_name="search_shops")
-
         # 构建 shop consumer 请求
         url: str = f"{SHOP_SEARCH_URL.rstrip('/')}/api/shop/search"
         payload: dict[str, object] = {"topK": top}
 
-        # 位置范围
-        if resolved.has_range:
-            payload["latitude"] = resolved.lat
-            payload["longitude"] = resolved.lng
-            if resolved.radius:
-                payload["radius"] = resolved.radius
+        # 位置参数：透传给 Java consumer 处理
+        if location_text:
+            payload["locationText"] = location_text
+        if radius is not None:
+            payload["radius"] = radius
 
-        # 城市过滤
-        if resolved.city:
-            payload["city"] = resolved.city
+        # use_current_location=true 时，附带 context 的 lat/lng
+        if use_current_location:
+            ctx_loc: dict[str, object] | None = _extract_context_location(ctx)
+            if ctx_loc:
+                payload["latitude"] = ctx_loc["latitude"]
+                payload["longitude"] = ctx_loc["longitude"]
+                if not location_text:
+                    payload["locationText"] = ctx_loc.get("locationText", "")
 
         # 商户名搜索
         if shop_name:
@@ -89,18 +109,9 @@ async def search_shops(
 
         shops_raw: list[dict] = data.get("result", {}).get("shops", [])
 
-        # 应用层过滤（shop consumer 不直接支持的条件）
-        if resolved.district:
-            shops_raw = [s for s in shops_raw if resolved.district in (s.get("district", "") or "")]
-        if resolved.street:
-            shops_raw = [s for s in shops_raw if resolved.street in (s.get("address", "") or "")]
+        # 应用层过滤
         if min_rating is not None:
             shops_raw = [s for s in shops_raw if (s.get("rating") or 0) >= min_rating]
-        if shop_type:
-            shops_raw = [s for s in shops_raw if shop_type in (s.get("shop_type", "") or "")]
-        if opening_time:
-            shops_raw = [s for s in shops_raw
-                         if (s.get("opening_start", "") or "") <= opening_time <= (s.get("opening_end", "") or "23:59")]
 
         # 应用层排序
         if sort_by == "distance":
@@ -112,8 +123,7 @@ async def search_shops(
 
         if not shops_raw:
             log_tool_end("search_shops", sid, rid, {"shop_count": 0})
-            desc: str = resolved.address or resolved.district or resolved.city or "指定范围"
-            return f"{desc}内未找到符合条件的门店"
+            return f"{location_text or '指定范围'}内未找到符合条件的门店"
 
         # 格式化结果
         shops: list[dict] = []
