@@ -15,6 +15,7 @@ import sys
 
 import httpx
 
+logging.basicConfig(level=logging.INFO)
 _logger: logging.Logger = logging.getLogger(__name__)
 
 DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")

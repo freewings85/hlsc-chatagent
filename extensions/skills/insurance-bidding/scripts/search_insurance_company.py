@@ -19,6 +19,7 @@ import sys
 
 import httpx
 
+logging.basicConfig(level=logging.INFO)
 _logger: logging.Logger = logging.getLogger(__name__)
 
 SERVICE_OWNER_URL: str = os.getenv("SERVICE_OWNER_URL", "")
