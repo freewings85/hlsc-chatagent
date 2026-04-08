@@ -66,23 +66,47 @@ async def classify_project(
         if resp_data.get("status") != 0:
             return f"Error: {resp_data.get('message', '未知错误')}"
 
-        raw_list: list[dict] = resp_data.get("result") or []
-        projects: list[dict[str, str]] = [
-            {
-                "project_id": str(item.get("packageId", "")),
-                "project_name": item.get("packageName", ""),
-            }
-            for item in raw_list
-        ]
+        result_obj: dict = resp_data.get("result") or {}
+
+        def _parse_items(items: list[dict]) -> list[dict[str, str | bool]]:
+            """将 API 返回的 package 列表转为精简格式。"""
+            parsed: list[dict[str, str | bool]] = []
+            for item in items:
+                parsed.append({
+                    "id": str(item.get("packageId", "")),
+                    "name": item.get("packageName", ""),
+                    "path": item.get("path") or "",
+                    "leaf": bool(item.get("last", False)),
+                })
+            return parsed
+
+        exact: list[dict[str, str | bool]] = _parse_items(
+            result_obj.get("exactMatched") or [],
+        )
+        fuzzy: list[dict[str, str | bool]] = _parse_items(
+            result_obj.get("fuzzyMatched") or [],
+        )
+
+        # ragMatched 结构: [{originalName, candidates: [...]}]
+        rag_raw: list[dict] = result_obj.get("ragMatched") or []
+        rag: list[dict[str, str | bool]] = []
+        for group in rag_raw:
+            rag.extend(_parse_items(group.get("candidates") or []))
 
         data: dict = {
-            "project_name_keyword": keyword,
-            "projects": projects,
+            "keyword": keyword,
+            "exact": exact,
+            "fuzzy": fuzzy,
+            "rag": rag,
         }
         result_json = json.dumps(data, ensure_ascii=False)
 
+        all_names: list[str] = [
+            p["name"] for p in exact + fuzzy + rag if isinstance(p.get("name"), str)
+        ]
         log_tool_end("classify_project", sid, rid, {
-            "matched": [p["project_name"] for p in projects],
+            "exact": len(exact), "fuzzy": len(fuzzy), "rag": len(rag),
+            "matched": all_names,
         })
         return result_json
 
