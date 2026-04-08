@@ -51,6 +51,7 @@ async def search_coupon(
     radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     project_ids: Annotated[Optional[list[str]], Field(description="项目 ID 列表，来自 classify_project。无明确项目时传 null")] = None,
     shop_ids: Annotated[list[str], Field(description="商户 ID 列表；未指定商户时传空列表")] = [],
+    activity_type_text: Annotated[str, Field(description="优惠类型，原样传入用户的描述")] = "",
     date: Annotated[str, Field(description="查询日期（YYYY-MM-DD），用于过滤该日期有效的优惠。默认当天")] = "",
     semantic_query: Annotated[str, Field(description="用户对优惠的自然语言偏好描述。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数")] = "",
     sort_by: Annotated[str, Field(description="排序方式：default / promo_value / validity_end")] = "default",
@@ -97,6 +98,8 @@ async def search_coupon(
             payload["projectIds"] = [int(pid) for pid in project_ids]
         if shop_ids:
             payload["shopIds"] = [int(sid_val) for sid_val in shop_ids]
+        if activity_type_text:
+            payload["activityTypeText"] = activity_type_text
         if date:
             payload["date"] = date
         if semantic_query:

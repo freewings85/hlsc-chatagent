@@ -50,6 +50,7 @@ async def search_shops(
     use_current_location: Annotated[bool, Field(description="是否使用用户当前位置。当 location_text 来自 context 中的用户定位时设为 true")] = False,
     radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
+    shop_type_text: Annotated[str, Field(description="商户类型，原样传入用户的描述")] = "",
     semantic_query: Annotated[str, Field(description="语义搜索描述，如用户对商户的偏好。调用前回顾对话中用户提到的所有商户偏好，完整组装到此参数")] = "",
     project_ids: Annotated[Optional[list[str]], Field(description="项目 ID 列表，来自 classify_project。筛选能提供这些项目的商户")] = None,
     top: Annotated[int, Field(description="返回数量上限，默认 10")] = 10,
@@ -87,6 +88,10 @@ async def search_shops(
         # 商户名搜索
         if shop_name:
             payload["shopName"] = shop_name
+
+        # 商户类型
+        if shop_type_text:
+            payload["shopTypeText"] = shop_type_text
 
         # 语义搜索
         if semantic_query:

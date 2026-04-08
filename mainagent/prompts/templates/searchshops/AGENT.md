@@ -15,7 +15,7 @@
 ## 策略
 
 - 用户提到项目关键词 → 先 classify_project 识别，根据返回的 project_ids 调 search_shops 搜索
-- 复杂计算查询（"哪家最便宜""对比A店和B店价格"）调 call_query_codingagent
+- 复杂计算查询（"哪家最便宜""对比A店和B店价格"）→ 使用 searchshops-coding skill
 - 展示结果用 ShopCard 呈现每家商户，用对比视角（"A 离你最近、B 评分最高"）帮用户决策
 - 用户选好商户 → 确认到店时间 → create_contact_order 生成联系单（商户会主动联系用户）
 
