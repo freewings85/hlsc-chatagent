@@ -5,7 +5,7 @@
     2. 根据 cityId + project_id 搜索本市所有保险公司商户
 
 用法：
-    python search_insurance_company.py --project_id 1461
+    python search_insurance_company.py --project_id 123
 """
 
 from __future__ import annotations

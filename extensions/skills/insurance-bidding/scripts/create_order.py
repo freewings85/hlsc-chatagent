@@ -1,7 +1,7 @@
 """创建竞价订单 + 启动竞价 — 独立 CLI 脚本，通过 bash 工具执行。
 
 用法：
-    python create_order.py --project_id 1461 --shop_ids 87,88 --car_model_id mmu_9390
+    python create_order.py --project_id 123 --shop_ids 87,88 --car_model_id mmu_9390
 """
 
 from __future__ import annotations

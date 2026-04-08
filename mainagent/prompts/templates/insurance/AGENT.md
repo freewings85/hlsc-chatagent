@@ -5,7 +5,7 @@
 ## 能力边界
 
 - 收集车辆信息（collect_car_info）
-- 保险竞价不需要 classify_project，project_id 固定使用 {{insurance_project_id}}
+- 保险竞价不需要 classify_project
 - 只处理保险相关需求（车险投保、保险理赔），普通养车不在本场景
 - 不能直接向保险公司官方购买，通过保险代理/经纪机构办理
 
@@ -17,5 +17,3 @@
 ## 可用 skill
 
 - **insurance-bidding**：保险竞标全流程——收集前置条件、确认卡片、创建订单、返回 order card
-
-保险场景 project_id 固定 {{insurance_project_id}}，不需要记录。只在用户明确确认后记录。

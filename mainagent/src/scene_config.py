@@ -49,7 +49,7 @@ class SceneConfigRegistry:
         from src.scene_config import registry
         cfg = registry.get_scene("platform")
         cfg.tools   # ["match_project", ...]
-        cfg.vars    # {"insurance_project_id": "1461"}
+        cfg.vars    # {"key": "value"}
     """
 
     def __init__(self) -> None:

@@ -1,7 +1,7 @@
 """发送确认卡片并返回用户回复 — 通过 __INTERRUPT__ 协议与 agent 交互。
 
 用法：
-    python confirm_booking.py --project_id 1461 --shop_ids 87,88 --car_model_id 56
+    python confirm_booking.py --project_id 123 --shop_ids 87,88 --car_model_id 56
 
 流程：
     1. 输出 __INTERRUPT__:{confirm_booking 数据} 触发前端确认卡片

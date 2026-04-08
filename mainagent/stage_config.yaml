@@ -63,8 +63,6 @@ scenes:
   insurance:
     prompt_parts: [SYSTEM.md, SOUL.md, insurance/OUTPUT.md]
     agent_md: insurance/AGENT.md
-    vars:
-      insurance_project_id: 1461
     tools:
       - search_shops
       - collect_user_car_info
