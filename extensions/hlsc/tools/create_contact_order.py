@@ -40,7 +40,7 @@ async def create_contact_order(
     if not DATA_MANAGER_URL:
         return "Error: DATA_MANAGER_URL 未配置"
 
-    url: str = f"{DATA_MANAGER_URL}/web_owner/task/submit"
+    url: str = f"{DATA_MANAGER_URL}/service_ai_datamanager/task/submit"
 
     payload: dict[str, object] = {
         "conversationId": sid,
