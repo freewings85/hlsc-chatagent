@@ -58,6 +58,7 @@ def main() -> None:
                 service_name=get_agent_name(),
                 send_to_logfire=False,
                 scrubbing=False,
+                distributed_tracing=True,
                 additional_span_processors=[
                     SimpleSpanProcessor(OTLPSpanExporter(endpoint=logfire_config.endpoint)),
                 ],
