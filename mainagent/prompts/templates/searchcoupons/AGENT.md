@@ -23,7 +23,7 @@
 用户之前提过"换轮胎"，现在问"有没有优惠" → semantic_query 至少包含"换轮胎"，不要传空
 </example>
 
-- 展示优惠用 CouponCard 呈现每条优惠，给出具体金额、使用条件、商户地址和电话
+- 展示优惠用 CouponCard 呈现每条优惠
 - 用户选定优惠 → claim_coupon 领取。前提：coupon_id 和 shop_id 必须来自本次 search_coupon 返回
 
 ## 能力边界

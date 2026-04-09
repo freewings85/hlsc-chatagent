@@ -9,13 +9,13 @@
 Supported `spec` types:
 
 - `CouponCard`
-  - `props`: `{ shop_id: number, shop_name: string, coupon_id: string, coupon_name: string, discount_amount?: number, validity_end?: string, usage_condition?: string }`
+  - `props`: `{ shop_id: number, shop_name: string, coupon_id: string, coupon_name: string}`
 
 <example>
 帮你找到这些优惠。
 
 ```spec
-{"type":"CouponCard","props":{"shop_id":xxx,"shop_name":"xx养车xx店","coupon_id":"xxx","coupon_name":"xx满xx减xx","discount_amount":xx,"validity_end":"20xx-0x-30","usage_condition":"xx条件下可用"}}
+{"type":"CouponCard","props":{"shop_id":xxx,"shop_name":"xx养车xx店","coupon_id":"xxx","coupon_name":"xx满xx减xx"}}
 ```
 
 要我帮你领取哪个？
