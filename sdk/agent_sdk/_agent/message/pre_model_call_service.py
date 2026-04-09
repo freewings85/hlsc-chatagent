@@ -189,6 +189,13 @@ class PreModelCallMessageService:
         if not invoked:
             return None
 
+        # 只注入当前场景允许的 skills，避免跨场景干扰
+        if self.allowed_skills is not None:
+            allowed_set = set(self.allowed_skills)
+            invoked = {k: v for k, v in invoked.items() if v.name in allowed_set}
+            if not invoked:
+                return None
+
         sections = [
             f"### Skill: {skill.name}\n\n{skill.content}"
             for skill in sorted(invoked.values(), key=lambda s: s.invoked_at)
