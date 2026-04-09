@@ -45,6 +45,7 @@ scenes:
       - classify_project
       - update_session_state
       - call_query_codingagent
+      - bash
     skills:
       - saving-playbook
       - contact-order
