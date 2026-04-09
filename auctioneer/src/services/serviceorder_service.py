@@ -16,6 +16,7 @@ import httpx
 from agent_sdk.logging import log_http_request, log_http_response
 
 SERVICEORDER_URL: str = os.getenv("SERVICEORDER_URL", "")
+DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 
 
 class ServiceOrderService:
@@ -28,11 +29,11 @@ class ServiceOrderService:
         request_id: str = "",
     ) -> dict:
         """获取订单详情：状态 + 商户报价列表。"""
-        url: str = f"{SERVICEORDER_URL}/serviceorder/detail"
-        if not SERVICEORDER_URL:
-            raise RuntimeError("SERVICEORDER_URL 未配置")
+        url: str = f"{DATA_MANAGER_URL}/service_ai_datamanager/task/result"
+        if not DATA_MANAGER_URL:
+            raise RuntimeError("DATA_MANAGER_URL 未配置")
 
-        payload: dict[str, str] = {"orderId": order_id}
+        payload: dict[str, str] = {"taskId": order_id}
         log_http_request(url, "POST", session_id, request_id, payload)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
