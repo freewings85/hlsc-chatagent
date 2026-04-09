@@ -43,7 +43,3 @@ python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --project_id 项
 
 脚本会返回 order_id，用 ContactOrderCard 展示给用户。不要自己编造 order_id。
 
-## 完成标准
-
-- 脚本执行成功返回 order_id
-- 或用户取消了联系
