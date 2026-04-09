@@ -27,6 +27,10 @@ from hlsc.tools.prompt_loader import load_tool_prompt
 
 DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 SEARCH_PACKAGE_PATH: str = "/service_ai_datamanager/package/searchPackageByKeyword"
+CATEGORY_TREE_PATH: str = "/service_ai_datamanager/Category/allProjectCategoryTree"
+
+# 分类树缓存（去掉叶子层，只保留分类节点）
+_category_tree_cache: list[dict[str, str]] | None = None
 
 _DESCRIPTION: str = load_tool_prompt("classify_project")
 
@@ -44,6 +48,48 @@ def _parse_item(item: dict) -> dict[str, str | bool | float]:
         "leaf": bool(item.get("last", False)),
         "score": float(item.get("similarity") or 0),
     }
+
+
+async def _get_category_tree() -> list[dict[str, str]]:
+    """获取项目分类树（去掉叶子层，只返回分类节点名称）。带缓存。"""
+    global _category_tree_cache
+    if _category_tree_cache is not None:
+        return _category_tree_cache
+
+    if not DATA_MANAGER_URL:
+        return []
+
+    try:
+        url: str = f"{DATA_MANAGER_URL}{CATEGORY_TREE_PATH}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp: httpx.Response = await client.get(url)
+            resp.raise_for_status()
+            data: dict = resp.json()
+
+        if data.get("status") != 0:
+            return []
+
+        result: list[dict] = data.get("result") or []
+        categories: list[dict[str, str]] = []
+        for node in result:
+            if node.get("dataType") == "category":
+                cat: dict[str, str] = {
+                    "id": str(node.get("id", "")),
+                    "name": node.get("name", ""),
+                }
+                # 收集子分类名称（不含叶子）
+                children: list[str] = []
+                for child in node.get("childList") or []:
+                    if child.get("dataType") == "category":
+                        children.append(child.get("name", ""))
+                if children:
+                    cat["children"] = "、".join(children)
+                categories.append(cat)
+
+        _category_tree_cache = categories
+        return categories
+    except Exception:
+        return []
 
 
 def _select_projects(
@@ -147,11 +193,20 @@ async def classify_project(
             "projects": projects,
             "notice": notice,
         }
+
+        # 匹配失败时，返回分类树供 LLM 引导用户
+        if not projects:
+            categories: list[dict[str, str]] = await _get_category_tree()
+            if categories:
+                cat_names: str = "、".join(c["name"] for c in categories)
+                data["notice"] = f"未匹配到项目，所有分类如下：{cat_names}，请和用户确认属于哪个分类"
+                data["categories"] = categories
+
         result_json = json.dumps(data, ensure_ascii=False)
 
         log_tool_end("classify_project", sid, rid, {
             "count": len(projects),
-            "notice": notice,
+            "notice": data["notice"],
             "matched": [p["name"] for p in projects],
         })
         return result_json
