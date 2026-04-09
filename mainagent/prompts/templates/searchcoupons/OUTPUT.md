@@ -18,21 +18,21 @@ Supported `spec` types:
 {"type":"CouponCard","props":{"shop_id":xxx,"shop_name":"xx养车xx店","coupon_id":"xxx","coupon_name":"xx满xx减xx","discount_amount":xx,"validity_end":"20xx-0x-30","usage_condition":"xx条件下可用"}}
 ```
 
-要我帮你申请哪个？
+要我帮你领取哪个？
 </example>
 
 - `CouponOrderCard`
-  - 申领成功后展示。
+  - 领取成功后展示。
   - `props`: `{ order_id: string, shop_name: string, coupon_name: string, visit_time: string }`
 
 <example>
-已帮你申领成功！
+已帮你领取成功！
 
 ```spec
 {"type":"CouponOrderCard","props":{"order_id":"xxxx","shop_name":"xxx店","coupon_name":"stringname","visit_time":"timevalue"}}
 ```
 
-商家会收到你的预约信息，到店时报订单号即可。
+商家会收到你的领取信息，到店时报订单号即可。
 </example>
 
 ## `action`

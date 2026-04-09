@@ -53,7 +53,7 @@ scenes:
     agent_md: searchcoupons/AGENT.md
     tools:
       - search_coupon
-      - book_coupon
+      - claim_coupon
       - collect_user_location
       - classify_project
       - update_session_state
