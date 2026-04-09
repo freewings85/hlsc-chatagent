@@ -41,6 +41,7 @@ scenes:
     tools:
       - search_shops
       - collect_user_location
+      - collect_user_car_info
       - classify_project
       - update_session_state
       - call_query_codingagent
