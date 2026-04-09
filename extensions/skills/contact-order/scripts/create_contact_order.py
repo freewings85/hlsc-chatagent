@@ -1,7 +1,8 @@
 """生成联系单 — 独立 CLI 脚本，通过 bash 工具执行。
 
 用法：
-    python create_contact_order.py --shop_id 123 --shop_name "XX修理厂" --task_describe "想换轮胎，偏好米其林"
+    python create_contact_order.py --shop_id 123 --project_id 1200 --task_describe "想换轮胎，偏好米其林"
+    python create_contact_order.py --shop_id 123 --project_id 1200 --task_describe "小保养" --car_model_id mmu_9390
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 def submit_contact_order(
     conversation_id: str,
     shop_id: int,
+    project_id: int,
     task_describe: str = "",
     car_key: str = "",
 ) -> dict:
@@ -33,7 +35,7 @@ def submit_contact_order(
         "orderType": "contact",
         "taskDescribe": task_describe,
         "carKey": car_key,
-        "couponId": 0,
+        "packageList": [project_id],
         "commercialList": [shop_id],
     }
     _logger.info("[CONTACT_ORDER] POST %s payload=%s", url, json.dumps(payload, ensure_ascii=False))
@@ -46,66 +48,70 @@ def submit_contact_order(
     raise RuntimeError(f"生成联系单失败: {data.get('message', '未知错误')}")
 
 
-def build_order_card(result: dict, shop_name: str) -> str:
+def build_order_card(result: dict) -> str:
     """构建 ContactOrderCard 卡片文本。"""
     order_id: str = str(result.get("taskId", ""))
     card: dict = {
         "type": "ContactOrderCard",
         "props": {
             "order_id": order_id,
-            "shop_name": shop_name,
         },
     }
     card_json: str = json.dumps(card, ensure_ascii=False)
     return (
         f"```spec\n{card_json}\n```\n"
-        f"已帮您生成联系单，{shop_name}会主动联系您确认细节。"
+        f"联系单已生成，商户会主动联系您确认细节。"
     )
 
 
 def main(
     *,
     shop_id: int,
-    shop_name: str,
+    project_id: int,
     task_describe: str = "",
+    car_model_id: str = "",
 ) -> str:
     """生成联系单，返回 ContactOrderCard。
 
-    conversation_id 和 car_key 从环境变量读取（由 bash 工具自动注入）。
+    conversation_id 从环境变量 CONVERSATION_ID 读取（由 bash 工具自动注入）。
     """
     if not shop_id:
         return "缺少必要参数：shop_id 不能为空"
+    if not project_id:
+        return "缺少必要参数：project_id 不能为空"
 
     if not DATA_MANAGER_URL:
         return "缺少 DATA_MANAGER_URL 环境变量，无法生成联系单"
 
     conversation_id: str = os.getenv("CONVERSATION_ID", "")
-    car_key: str = os.getenv("CAR_MODEL_ID", "")
 
     try:
         result: dict = submit_contact_order(
             conversation_id=conversation_id,
             shop_id=shop_id,
+            project_id=project_id,
             task_describe=task_describe,
-            car_key=car_key,
+            car_key=car_model_id,
         )
     except Exception as e:
         return f"生成联系单失败：{e}"
 
-    return build_order_card(result, shop_name)
+    return build_order_card(result)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="生成联系单")
     parser.add_argument("--shop_id", required=True, type=int, help="商户 ID")
-    parser.add_argument("--shop_name", required=True, help="商户名称")
-    parser.add_argument("--task_describe", default="", help="用户需求描述")
+    parser.add_argument("--project_id", required=True, type=int, help="项目 ID")
+    parser.add_argument("--task_describe", required=True, help="用户需求描述")
+    parser.add_argument("--car_model_id", default="", help="车型 key（可选）")
     args = parser.parse_args()
 
     output: str = main(
         shop_id=args.shop_id,
-        shop_name=args.shop_name,
+        project_id=args.project_id,
         task_describe=args.task_describe,
+        car_model_id=args.car_model_id,
     )
     print(output)
     sys.exit(0)

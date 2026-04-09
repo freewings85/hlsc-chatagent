@@ -33,8 +33,9 @@ when_to_use: 用户选定了商户，要联系商户或让商户联系自己时
 
 执行脚本：
 ```bash
-python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --shop_name "商户名称" --task_describe "需求描述"
+python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --project_id 项目ID --task_describe "需求描述"
 ```
+> `--car_model_id` 可选，上下文中有车型信息时加上。
 
 脚本会返回 ContactOrderCard，直接展示给用户。
 
