@@ -31,15 +31,19 @@ when_to_use: 用户选定了商户，要联系商户或让商户联系自己时
 
 从对话中总结用户需求作为 task_describe 参数。一句话，至少包含项目名称，有偏好和要求也写进去。不要编造用户没说过的内容。
 
-执行脚本：
+执行脚本（3 个必传参数缺一不可，缺了脚本会报错）：
 ```bash
 python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --project_id 项目ID --task_describe "需求描述"
 ```
 > `--car_model_id` 可选，上下文中有车型信息时加上。
 
+- **shop_id**：必传，来自 search_shops 返回
+- **project_id**：必传，来自 classify_project 返回
+- **task_describe**：必传，从对话中总结的用户需求
+
 脚本会返回 order_id，用 ContactOrderCard 展示给用户。不要自己编造 order_id。
 
 ## 完成标准
 
-- 脚本执行成功返回 ContactOrderCard
+- 脚本执行成功返回 order_id
 - 或用户取消了联系

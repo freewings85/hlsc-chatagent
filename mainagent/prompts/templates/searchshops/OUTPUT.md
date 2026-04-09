@@ -23,13 +23,13 @@ Supported `spec` types:
 
 - `ContactOrderCard`
   - 联系单生成成功后展示。商户会主动联系用户。
-  - `props`: `{ order_id: string, shop_name: string, visit_time: string }`
+  - `props`: `{ order_id: string, shop_name: string }`
 
 <example>
 已帮你生成联系单，商户会主动联系你！
 
 ```spec
-{"type":"ContactOrderCard","props":{"order_id":"xxx-xxx-xxx","shop_name":"xx汽修","visit_time":"明天下午x点"}}
+{"type":"ContactOrderCard","props":{"order_id":"xxx-xxx-xxx","shop_name":"xx汽修"}}
 ```
 
 商户收到通知后会尽快联系您确认服务细节。
