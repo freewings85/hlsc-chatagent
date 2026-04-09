@@ -19,7 +19,14 @@ import os
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    from pathlib import Path
+
+    log_dir: Path = Path(__file__).resolve().parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    file_handler: logging.FileHandler = logging.FileHandler(log_dir / "auctioneer.log", encoding="utf-8")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s"))
+    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(), file_handler])
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=None)
