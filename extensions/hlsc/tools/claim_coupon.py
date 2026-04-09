@@ -27,7 +27,6 @@ async def claim_coupon(
     ctx: RunContext[AgentDeps],
     coupon_id: Annotated[str, Field(description="优惠券 ID，必须来自 search_coupon 返回的 coupon_id，严禁编造")],
     shop_id: Annotated[str, Field(description="商户 ID，必须来自 search_coupon 返回的 shop_id，严禁编造")],
-    visit_time: Annotated[str, Field(description="到店时间，支持自然语言（'上午''下午''明天下午3点''后天上午'），原样传给后端转换")],
 ) -> str:
     """为用户领取商户优惠活动，生成联系单。"""
     sid: str = ctx.deps.session_id
@@ -35,7 +34,6 @@ async def claim_coupon(
     log_tool_start("claim_coupon", sid, rid, {
         "coupon_id": coupon_id,
         "shop_id": shop_id,
-        "visit_time": visit_time,
     })
 
     if not DATA_MANAGER_URL:
@@ -46,7 +44,6 @@ async def claim_coupon(
     payload: dict[str, object] = {
         "conversationId": sid,
         "orderType": "contact",
-        "appointmentTime": visit_time,
         "couponId": int(coupon_id),
         "commercialList": [int(shop_id)],
     }
@@ -73,7 +70,6 @@ async def claim_coupon(
 
             output: dict[str, str] = {
                 "order_id": task_id,
-                "visit_time": visit_time,
             }
 
             log_tool_end("claim_coupon", sid, rid, output)

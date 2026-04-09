@@ -12,7 +12,6 @@
 - **项目**（可选）：用户提到了具体项目时 → classify_project 识别
 - **优惠偏好**（可选）：支付方式、赠品、时间限制等 → 组装到 semantic_query
 - **选定优惠**（领取时必须）：用户从搜索结果中选一个 → coupon_id + shop_id
-- **到店时间**（领取时必须）：用户确认什么时候去 → visit_time（支持"上午""下午""明天下午3点"等自然语言）
 
 ## 策略
 
@@ -25,7 +24,7 @@
 </example>
 
 - 展示优惠用 CouponCard 呈现每条优惠，给出具体金额、使用条件、商户地址和电话
-- 用户选定优惠 → 确认到店时间 → claim_coupon。前提：coupon_id 和 shop_id 必须来自本次 search_coupon 返回，visit_time 必须向用户确认过
+- 用户选定优惠 → claim_coupon 领取。前提：coupon_id 和 shop_id 必须来自本次 search_coupon 返回
 
 ## 能力边界
 

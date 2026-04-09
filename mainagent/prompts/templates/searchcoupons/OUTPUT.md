@@ -23,16 +23,16 @@ Supported `spec` types:
 
 - `CouponOrderCard`
   - 领取成功后展示。
-  - `props`: `{ order_id: string, shop_name: string, coupon_name: string, visit_time: string }`
+  - `props`: `{ order_id: string, shop_name: string, coupon_name: string }`
 
 <example>
 已帮你领取成功！
 
 ```spec
-{"type":"CouponOrderCard","props":{"order_id":"xxxx","shop_name":"xxx店","coupon_name":"stringname","visit_time":"timevalue"}}
+{"type":"CouponOrderCard","props":{"order_id":"xxxx","shop_name":"xxx店","coupon_name":"stringname"}}
 ```
 
-商家会收到你的领取信息，到店时报订单号即可。
+商家会收到你的领取信息，到店时出示即可。
 </example>
 
 ## `action`
