@@ -51,7 +51,7 @@ def _build_path_env() -> str:
 async def bash(
     ctx: RunContext[AgentDeps],
     command: str,
-    timeout: int = 120,
+    timeout: int = 600,
 ) -> str:
     """在 shell 中执行命令，返回输出结果。
 
