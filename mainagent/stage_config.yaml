@@ -44,9 +44,10 @@ scenes:
       - classify_project
       - update_session_state
       - call_query_codingagent
-      - create_contact_order
     skills:
       - saving-playbook
+      - contact-order
+      - searchshops-coding
 
   searchcoupons:
     prompt_parts: [SYSTEM.md, SOUL.md, searchcoupons/OUTPUT.md]

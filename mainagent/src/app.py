@@ -33,8 +33,6 @@ from hlsc.tools.claim_coupon import claim_coupon
 # 复杂查询
 from hlsc.tools.call_query_codingagent import call_query_codingagent
 
-# 商户联系单
-from hlsc.tools.create_contact_order import create_contact_order
 
 
 def create_agent_app() -> AgentApp:
@@ -64,7 +62,6 @@ def create_agent_app() -> AgentApp:
         # 复杂查询
         "call_query_codingagent": call_query_codingagent,
         # 商户联系单
-        "create_contact_order": create_contact_order,
         # orchestrator 委派
         "delegate": delegate,
     }
