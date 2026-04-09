@@ -8,7 +8,7 @@ when_to_use: 用户选定了商户，要联系商户或让商户联系自己时
 
 用户选好商户后，搞清楚用户的完整需求，生成联系单让商户主动联系用户。
 
-## 执行步骤
+## 执行步骤（严格按序执行，必须调用脚本，不要用文字模拟结果）
 
 ### 步骤 1：确认商户
 
@@ -37,7 +37,7 @@ python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --project_id 项
 ```
 > `--car_model_id` 可选，上下文中有车型信息时加上。
 
-脚本会返回 ContactOrderCard，直接展示给用户。
+脚本会返回 ContactOrderCard，直接展示给用户。不要自己编造 order_id 或卡片内容。
 
 ## 完成标准
 
