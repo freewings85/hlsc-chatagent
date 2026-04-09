@@ -44,6 +44,10 @@ logger = logging.getLogger(__name__)
 # 工具结果被替换后的占位符
 _PLACEHOLDER = "[工具结果已压缩，如需查看请重新调用工具]"
 
+# Skill 和 read 类型的 tool result 压缩阈值更低（token 数），因为内容在文件系统可恢复
+_LOW_THRESHOLD_TOOL_NAMES: frozenset[str] = frozenset({"Skill", "read_file"})
+_LOW_THRESHOLD_TOKENS: int = 250  # 约 1000 字符 / 4
+
 
 @dataclass
 class CompactResult:
@@ -310,29 +314,34 @@ class Compactor:
         if not to_replace:
             return 0
 
-        # 3. 先计算潜在节省量
+        # 3. 分两类计算：低阈值工具（Skill/read）和普通工具
         placeholder_tokens = len(_PLACEHOLDER) // 4
-        replaceable: list[tuple[int, int, int]] = []  # (msg_idx, part_idx, savings)
+        low_threshold_replaceable: list[tuple[int, int, int]] = []
+        normal_replaceable: list[tuple[int, int, int]] = []  # (msg_idx, part_idx, savings)
 
         for msg_idx, part_idx in to_replace:
             msg = messages[msg_idx]
-            if not isinstance(msg, ModelRequest):  # pragma: no cover — 防御性检查
+            if not isinstance(msg, ModelRequest):  # pragma: no cover
                 continue
             part = msg.parts[part_idx]
-            if not isinstance(part, ToolReturnPart):  # pragma: no cover — 防御性检查
+            if not isinstance(part, ToolReturnPart):  # pragma: no cover
                 continue
 
             old_tokens = estimate_part_tokens(part)
             savings = old_tokens - placeholder_tokens
-            if savings > 0:
-                replaceable.append((msg_idx, part_idx, savings))
+            if savings <= 0:
+                continue
 
-        total_savings = sum(s for _, _, s in replaceable)
-        if total_savings < self._config.min_savings_threshold:
-            return 0  # 节省不够，不替换
+            if part.tool_name in _LOW_THRESHOLD_TOOL_NAMES:
+                # Skill/read：超过低阈值就替换（内容在文件系统可恢复）
+                if old_tokens > _LOW_THRESHOLD_TOKENS:
+                    low_threshold_replaceable.append((msg_idx, part_idx, savings))
+            else:
+                normal_replaceable.append((msg_idx, part_idx, savings))
 
-        # 4. 确认值得，执行替换
-        for msg_idx, part_idx, _ in replaceable:
+        # 4. 低阈值工具：直接替换（不受全局 min_savings_threshold 限制）
+        total_savings: int = 0
+        for msg_idx, part_idx, savings in low_threshold_replaceable:
             msg = messages[msg_idx]
             assert isinstance(msg, ModelRequest)
             part = msg.parts[part_idx]
@@ -344,5 +353,23 @@ class Compactor:
                 tool_call_id=part.tool_call_id,
                 timestamp=part.timestamp,
             )
+            total_savings += savings
+
+        # 5. 普通工具：累计节省量超过 min_savings_threshold 才替换
+        normal_total = sum(s for _, _, s in normal_replaceable)
+        if normal_total >= self._config.min_savings_threshold:
+            for msg_idx, part_idx, savings in normal_replaceable:
+                msg = messages[msg_idx]
+                assert isinstance(msg, ModelRequest)
+                part = msg.parts[part_idx]
+                assert isinstance(part, ToolReturnPart)
+
+                msg.parts[part_idx] = ToolReturnPart(
+                    tool_name=part.tool_name,
+                    content=_PLACEHOLDER,
+                    tool_call_id=part.tool_call_id,
+                    timestamp=part.timestamp,
+                )
+                total_savings += savings
 
         return total_savings
