@@ -70,7 +70,7 @@ async def call_interrupt(
         if emitter is not None:
             await emitter.emit(EventModel(
                 session_id=session_id,
-                request_id="",
+                request_id=ctx.deps.request_id,
                 type=EventType.INTERRUPT,
                 data={
                     **data,
