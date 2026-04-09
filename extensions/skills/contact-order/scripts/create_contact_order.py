@@ -48,20 +48,10 @@ def submit_contact_order(
     raise RuntimeError(f"生成联系单失败: {data.get('message', '未知错误')}")
 
 
-def build_order_card(result: dict) -> str:
-    """构建 ContactOrderCard 卡片文本。"""
+def format_result(result: dict) -> str:
+    """返回 order_id。"""
     order_id: str = str(result.get("taskId", ""))
-    card: dict = {
-        "type": "ContactOrderCard",
-        "props": {
-            "order_id": order_id,
-        },
-    }
-    card_json: str = json.dumps(card, ensure_ascii=False)
-    return (
-        f"```spec\n{card_json}\n```\n"
-        f"联系单已生成，商户会主动联系您确认细节。"
-    )
+    return f"联系单已生成，order_id={order_id}"
 
 
 def main(
@@ -96,7 +86,7 @@ def main(
     except Exception as e:
         return f"生成联系单失败：{e}"
 
-    return build_order_card(result)
+    return format_result(result)
 
 
 if __name__ == "__main__":

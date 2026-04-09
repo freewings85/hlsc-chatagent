@@ -37,7 +37,7 @@ python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --project_id 项
 ```
 > `--car_model_id` 可选，上下文中有车型信息时加上。
 
-脚本会返回 ContactOrderCard，直接展示给用户。不要自己编造 order_id 或卡片内容。
+脚本会返回 order_id，用 ContactOrderCard 展示给用户。不要自己编造 order_id。
 
 ## 完成标准
 
