@@ -71,19 +71,15 @@ def main(
         reply = reply.strip()
         _logger.info("[INTERRUPT_PARSE] 纯文本回复: %s", repr(reply))
 
-    # 将已确认参数附带返回，避免 LLM 重构参数时漂移
+    # 返回用户回复 + 已确认参数（供 create_order.py 直接使用）
     shop_ids_str: str = ",".join(str(s) for s in shop_ids)
     confirmed_params: str = (
         f"--project_id {project_id} --shop_ids {shop_ids_str} --car_model_id {car_model_id}"
     )
     if remark:
         confirmed_params += f' --remark "{remark}"'
-    result: str = (
-        f"用户回复：{reply}\n"
-        f"已确认参数：{confirmed_params}\n"
-        f"请根据回复判断意图，确认则使用上述参数执行 create_order.py（不要修改参数），取消则告知车主。"
-    )
-    _logger.info("[INTERRUPT_RESULT] 返回给 LLM: %s", result)
+    result: str = f"用户回复：{reply}\n已确认参数：{confirmed_params}"
+    _logger.info("[INTERRUPT_RESULT] %s", result)
     return result
 
 
