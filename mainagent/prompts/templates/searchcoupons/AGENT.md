@@ -9,7 +9,7 @@
 ## 目标条件
 
 领取优惠需要收集以下信息：
-- **项目**（必须）：用户想做什么 → classify_project 识别，或从 session_state 复用
+- **项目**（可选）：用户提到了具体项目时 → classify_project 识别。用户没提项目只是泛问"有什么优惠"时，不追问项目，直接搜索
 - **优惠偏好**（可选）：支付方式、赠品、时间限制等 → 组装到 semantic_query
 - **选定优惠**（领取时必须）：用户从搜索结果中选一个 → coupon_id + shop_id
 - **到店时间**（领取时必须）：用户确认什么时候去 → visit_time（支持"上午""下午""明天下午3点"等自然语言）
@@ -35,7 +35,7 @@
 
 ## 失败处理
 
-- classify_project 无匹配 → "这个项目暂时没有相关优惠"
+- classify_project 无匹配 → 不传 project_ids，用 semantic_query 直接搜索试试，仍无结果再告知用户
 - search_coupon 返回 0 条 → 读 saving-methods 介绍平台九折等其他省钱方式
 - 用户不满意搜索结果 → 读 saving-methods 介绍其他省钱方式
 - 用户中途放弃 → "没问题，需要时随时找我"
