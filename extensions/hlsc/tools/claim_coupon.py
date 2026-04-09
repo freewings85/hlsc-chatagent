@@ -43,8 +43,8 @@ async def claim_coupon(
 
     payload: dict[str, object] = {
         "conversationId": sid,
-        "orderType": "contact",
-        "couponId": int(coupon_id),
+        "orderType": "activity",
+        "commercialActivityId": int(coupon_id),
         "commercialList": [int(shop_id)],
     }
 
