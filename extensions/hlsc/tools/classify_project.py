@@ -42,7 +42,7 @@ def _parse_item(item: dict) -> dict[str, str | bool | float]:
         "name": item.get("packageName", ""),
         "path": item.get("path") or "",
         "leaf": bool(item.get("last", False)),
-        "score": float(item.get("similarity", 0)),
+        "score": float(item.get("similarity") or 0),
     }
 
 
@@ -73,10 +73,10 @@ def _select_projects(
         return [], "未找到匹配项目"
 
     # 按 score 降序
-    all_candidates.sort(key=lambda x: float(x.get("similarity", 0)), reverse=True)
+    all_candidates.sort(key=lambda x: float(x.get("similarity") or 0), reverse=True)
 
     # 超过阈值的
-    above: list[dict] = [c for c in all_candidates if float(c.get("similarity", 0)) >= RAG_SCORE_THRESHOLD]
+    above: list[dict] = [c for c in all_candidates if float(c.get("similarity") or 0) >= RAG_SCORE_THRESHOLD]
 
     if above:
         # 有超过阈值的 → 取 top MAX_RESULTS
