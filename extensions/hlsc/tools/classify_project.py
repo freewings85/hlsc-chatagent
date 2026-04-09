@@ -198,8 +198,7 @@ async def classify_project(
         if not projects:
             categories: list[dict[str, str]] = await _get_category_tree()
             if categories:
-                cat_names: str = "、".join(c["name"] for c in categories)
-                data["notice"] = f"未匹配到项目，所有分类如下：{cat_names}，请和用户确认属于哪个分类"
+                data["notice"] = "未匹配到项目，以下是所有分类，请从中挑选几个可能相关的和用户确认"
                 data["categories"] = categories
 
         result_json = json.dumps(data, ensure_ascii=False)
