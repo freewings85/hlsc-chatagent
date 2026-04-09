@@ -27,18 +27,13 @@ when_to_use: 用户选定了商户，要联系商户或让商户联系自己时
 如果项目需要车型且上下文中没有车型信息 → 调 `collect_user_car_info` 获取。
 如果项目不需要车型或上下文已有车型 → 跳过。
 
-### 步骤 4：确认到店时间
-
-如果对话中用户还没说到店时间 → 问一句"您打算什么时候过去？"
-支持自然语言，如"明天下午""周六上午""后天"。
-
-### 步骤 5：生成联系单
+### 步骤 4：生成联系单
 
 从对话中总结用户需求作为 task_describe 参数。一句话，至少包含项目名称，有偏好和要求也写进去。不要编造用户没说过的内容。
 
 执行脚本：
 ```bash
-python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --shop_name "商户名称" --visit_time "到店时间" --task_describe "需求描述"
+python {SCRIPTS_DIR}/create_contact_order.py --shop_id 商户ID --shop_name "商户名称" --task_describe "需求描述"
 ```
 
 脚本会返回 ContactOrderCard，直接展示给用户。

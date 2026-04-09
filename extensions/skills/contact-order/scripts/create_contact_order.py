@@ -1,7 +1,7 @@
 """生成联系单 — 独立 CLI 脚本，通过 bash 工具执行。
 
 用法：
-    python create_contact_order.py --shop_id 123 --shop_name "XX修理厂" --visit_time "明天下午" --task_describe "想换轮胎，偏好米其林"
+    python create_contact_order.py --shop_id 123 --shop_name "XX修理厂" --task_describe "想换轮胎，偏好米其林"
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ DATA_MANAGER_URL: str = os.getenv("DATA_MANAGER_URL", "")
 def submit_contact_order(
     conversation_id: str,
     shop_id: int,
-    visit_time: str,
     task_describe: str = "",
     car_key: str = "",
 ) -> dict:
@@ -32,7 +31,6 @@ def submit_contact_order(
     payload: dict[str, object] = {
         "conversationId": conversation_id,
         "orderType": "contact",
-        "appointmentTime": visit_time,
         "taskDescribe": task_describe,
         "carKey": car_key,
         "couponId": 0,
@@ -48,7 +46,7 @@ def submit_contact_order(
     raise RuntimeError(f"生成联系单失败: {data.get('message', '未知错误')}")
 
 
-def build_order_card(result: dict, shop_name: str, visit_time: str) -> str:
+def build_order_card(result: dict, shop_name: str) -> str:
     """构建 ContactOrderCard 卡片文本。"""
     order_id: str = str(result.get("taskId", ""))
     card: dict = {
@@ -56,7 +54,6 @@ def build_order_card(result: dict, shop_name: str, visit_time: str) -> str:
         "props": {
             "order_id": order_id,
             "shop_name": shop_name,
-            "visit_time": visit_time,
         },
     }
     card_json: str = json.dumps(card, ensure_ascii=False)
@@ -70,7 +67,6 @@ def main(
     *,
     shop_id: int,
     shop_name: str,
-    visit_time: str,
     task_describe: str = "",
 ) -> str:
     """生成联系单，返回 ContactOrderCard。
@@ -90,28 +86,25 @@ def main(
         result: dict = submit_contact_order(
             conversation_id=conversation_id,
             shop_id=shop_id,
-            visit_time=visit_time,
             task_describe=task_describe,
             car_key=car_key,
         )
     except Exception as e:
         return f"生成联系单失败：{e}"
 
-    return build_order_card(result, shop_name, visit_time)
+    return build_order_card(result, shop_name)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="生成联系单")
     parser.add_argument("--shop_id", required=True, type=int, help="商户 ID")
     parser.add_argument("--shop_name", required=True, help="商户名称")
-    parser.add_argument("--visit_time", required=True, help="预计到店时间")
     parser.add_argument("--task_describe", default="", help="用户需求描述")
     args = parser.parse_args()
 
     output: str = main(
         shop_id=args.shop_id,
         shop_name=args.shop_name,
-        visit_time=args.visit_time,
         task_describe=args.task_describe,
     )
     print(output)
