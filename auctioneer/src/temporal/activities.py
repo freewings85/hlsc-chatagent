@@ -128,12 +128,12 @@ async def commit_order_activity(args: list) -> None:
     order_id: str = args[0]
     commercial_id: int = args[1]
     activity.logger.info("  [commit] order_id=%s, commercial_id=%d", order_id, commercial_id)
-    await serviceorder_service.commit_order(
+    result: dict = await serviceorder_service.commit_order(
         order_id=order_id,
         commercial_id=commercial_id,
         operator_name="AI",
     )
-    activity.logger.info("  [commit] 订单已提交")
+    activity.logger.info("  [commit] 订单已提交, result=%s", result)
 
 
 @activity.defn(name="cancel_order")
