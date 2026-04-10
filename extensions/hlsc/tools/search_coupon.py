@@ -120,8 +120,15 @@ async def search_coupon(
                 raise RuntimeError(f"查询优惠活动失败: {msg}")
 
             api_result: dict[str, object] = data.get("result", {})  # type: ignore[assignment]
-            platform_activities: list[dict[str, object]] = api_result.get("platformActivities", [])  # type: ignore[assignment]
-            shop_activities: list[dict[str, object]] = api_result.get("shopActivities", [])  # type: ignore[assignment]
+            _keep_fields: set[str] = {"activity_id", "activity_name", "shop_id", "shop_name"}
+            platform_activities: list[dict[str, object]] = [
+                {k: v for k, v in a.items() if k in _keep_fields}
+                for a in api_result.get("platformActivities", [])  # type: ignore[assignment]
+            ]
+            shop_activities: list[dict[str, object]] = [
+                {k: v for k, v in a.items() if k in _keep_fields}
+                for a in api_result.get("shopActivities", [])  # type: ignore[assignment]
+            ]
 
             output: dict[str, list[dict[str, object]]] = {
                 "platformActivities": platform_activities,

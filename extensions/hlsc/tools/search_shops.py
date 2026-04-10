@@ -133,29 +133,13 @@ async def search_shops(
         # 格式化结果
         shops: list[dict] = []
         for item in shops_raw:
-            svc: str = item.get("service_scope", "")
-            tag_list: list[str] = [t.strip() for t in svc.split(",") if t.strip()] if svc else []
             distance_km = item.get("distance_km")
-
             shops.append({
                 "shop_id": item.get("shop_id", ""),
                 "name": item.get("shop_name", ""),
-                "short_name": item.get("short_name", ""),
                 "address": item.get("address", ""),
-                "province": item.get("province", ""),
-                "city": item.get("city_name", ""),
-                "district": item.get("district", ""),
-                "shop_type": item.get("shop_type", ""),
-                "licensing": item.get("licensing", ""),
-                "specialty": item.get("specialty", ""),
-                "guarantee": item.get("guarantee", ""),
                 "distance": f"{distance_km}km" if distance_km is not None else "",
-                "rating": item.get("rating"),
-                "trading_count": item.get("trading_count", 0),
                 "phone": item.get("phone", ""),
-                "tags": tag_list,
-                "opening_start": item.get("opening_start", ""),
-                "opening_end": item.get("opening_end", ""),
             })
 
         log_tool_end("search_shops", sid, rid, {
