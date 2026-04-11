@@ -392,6 +392,120 @@ async def interrupt_reply(request: InterruptReplyRequest) -> JSONResponse:
         )
 
 
+@app.post("/chat/stream/async")
+async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> JSONResponse:
+    """Orchestrator 编排模式入口：接受编排字段 + 在 try/finally 里兜底 callback。
+
+    和 /chat/async 的区别：
+    - 不强依赖 Kafka（没启用时也能跑，事件扔到 /dev/null）
+    - 把 request 里的 workflow_id / current_step / step_skeleton 等透传进 Agent.run()
+    - 在 try/finally 里调 callback_url 通知 orchestrator turn 结束（design.md §8.1）
+
+    降级时 ChatManager 不应调这个接口，走 /chat/stream 或 /chat/async。
+    """
+    import time as _time
+    from agent_sdk._config.settings import get_kafka_config
+    from agent_sdk._event.event_emitter import EventEmitter
+    from agent_sdk._event.event_model import EventModel
+    from agent_sdk._event.event_sinker_kafka import KafkaSinker, get_kafka_producer
+
+    agent = _get_agent()
+    request_id: str = request.request_id or _resolve_trace_context(raw_request)[0]
+    _, parent_otel_context = _resolve_trace_context(raw_request)
+    task_id: str = f"{request.session_id}-orch-{request_id[:8]}"
+
+    # 事件队列 + sinker：Kafka 启用就走 Kafka，没启用就丢弃（orchestrator 不消费）
+    queue: asyncio.Queue[EventModel | None] = asyncio.Queue()
+    emitter = EventEmitter(queue)
+    kafka_config = get_kafka_config()
+
+    async def _drain_queue() -> None:
+        """Kafka 未启用时的 no-op drain：只把 queue 清空避免内存泄漏"""
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
+
+    async def _forward_to_kafka() -> None:
+        """Kafka 启用时的正常转发"""
+        try:
+            producer = await get_kafka_producer()
+            sinker = KafkaSinker(producer, kafka_config.topic)
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                await sinker.send(event)
+        except Exception:
+            logger.exception("Kafka 转发异常")
+
+    async def _run_with_callback() -> None:
+        """try/finally 兜底：任何出口都调 callback_url 通知 orchestrator"""
+        err_msg: str | None = None
+        status: str = "success"
+        try:
+            await agent.run(
+                message=request.message,
+                user_id=request.user_id,
+                session_id=request.session_id,
+                emitter=emitter,
+                temporal_client=_get_temporal_client(),
+                request_context=request.context,
+                request_id=request_id,
+                parent_otel_context=parent_otel_context,
+                # Orchestrator 编排字段透传
+                workflow_id=request.workflow_id,
+                orchestrator_url=request.orchestrator_url,
+                current_step_detail=request.current_step,
+                step_pending_fields=request.step_pending_fields,
+                step_skeleton=request.step_skeleton,
+                callback_url=request.callback_url,
+            )
+        except asyncio.CancelledError:
+            status = "stopped"
+            raise
+        except Exception as e:  # noqa: BLE001
+            status = "failure"
+            err_msg = str(e)
+            logger.exception(f"agent run failed: {request_id}")
+        finally:
+            # 保证 queue sentinel
+            queue.put_nowait(None)
+            _running_tasks.pop(task_id, None)
+            # 调 callback_url（orchestrator 会更新 turn_tasks 状态）
+            if request.callback_url:
+                import httpx as _httpx
+                try:
+                    async with _httpx.AsyncClient(timeout=5.0) as cli:
+                        # asyncio.shield 防止 finally 里的 callback 被 stop 二次取消
+                        await asyncio.shield(cli.post(
+                            request.callback_url,
+                            json={
+                                "request_id": request_id,
+                                "status": status,
+                                "error_message": err_msg,
+                                "completed_at": int(_time.time()),
+                            },
+                        ))
+                except Exception:
+                    logger.exception(f"callback failed: {request.callback_url}")
+
+    # 启动 agent 和事件 drain
+    loop_task = asyncio.create_task(_run_with_callback(), name=f"orch-loop-{task_id}")
+    _running_tasks[task_id] = (None, loop_task)
+
+    if kafka_config.enabled:
+        asyncio.create_task(_forward_to_kafka(), name=f"orch-kafka-{task_id}")
+    else:
+        asyncio.create_task(_drain_queue(), name=f"orch-drain-{task_id}")
+
+    return JSONResponse({
+        "status": "accepted",
+        "task_id": task_id,
+        "request_id": request_id,
+    })
+
+
 @app.post("/chat/async")
 async def chat_async(request: AsyncChatRequest, raw_request: Request) -> JSONResponse:
     """异步对话接口：立即返回 task_id，事件通过 Kafka 推送。
