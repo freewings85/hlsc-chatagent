@@ -2,7 +2,7 @@ Description:
 搜索商户/门店，支持按位置、项目、商户名、评分等条件筛选，返回门店列表。
 
 Usage notes:
-- location_text 原样传入用户提到的位置描述，包括城市、区、地标、路名等任何粒度，不做拆解加工。
+- location_text 原样传入用户提到的位置描述，包括地标、路名等，如果没有提到则传空。
 - use_current_location 仅在使用 context 中用户已有定位时设为 true。
 - radius 仅在用户明确给出距离数字时传入，"附近"不算明确距离。
 - shop_type_text 原样传入用户提到的商户类型描述，不做加工。
