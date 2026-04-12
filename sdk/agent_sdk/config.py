@@ -134,7 +134,7 @@ class AgentAppConfig:
     name: str = field(default_factory=get_agent_name)
     description: str = ""
     host: str = field(default_factory=lambda: os.getenv("SERVER_HOST", "0.0.0.0"))
-    port: int = field(default_factory=lambda: int(os.getenv("SERVER_PORT", "8100")))
+    port: int = field(default_factory=lambda: int(os.getenv("SERVER_PORT", "7100")))
     temporal_enabled: bool = field(
         default_factory=lambda: os.getenv("TEMPORAL_ENABLED", "false").lower() == "true"
     )

@@ -51,7 +51,7 @@ pytestmark = pytest.mark.asyncio
 _CHATAGENT_DIR: Path = Path(__file__).resolve().parent.parent
 _ORCHESTRATOR_DIR: Path = _CHATAGENT_DIR.parent / "com.celiang.hlsc.service.ai.orchestrator"
 
-# orchestrator 启动端口（和用户可能在跑的 :8101 错开）
+# orchestrator 启动端口（测试用，和正式的 :8100 错开）
 _ORCH_PORT: int = 8201
 _ORCH_URL: str = f"http://127.0.0.1:{_ORCH_PORT}"
 
