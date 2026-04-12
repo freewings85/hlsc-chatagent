@@ -88,7 +88,7 @@ class ServerConfig:
     """服务器配置"""
 
     host: str = field(default_factory=lambda: os.getenv("SERVER_HOST", "0.0.0.0"))
-    port: int = field(default_factory=lambda: int(os.getenv("SERVER_PORT", "7100")))
+    port: int = field(default_factory=lambda: int(os.getenv("SERVER_PORT", "8100")))
 
 
 @dataclass
