@@ -42,7 +42,7 @@ def _extract_context_location(ctx: RunContext[AgentDeps]) -> dict[str, object] |
         lng = getattr(loc, "lng", None)
         addr = getattr(loc, "address", "")
     if lat is not None and lng is not None:
-        return {"latitude": lat, "longitude": lng, "locationText": addr}
+        return {"latitude": lat, "longitude": lng, "city": addr}
     return None
 
 
@@ -76,11 +76,10 @@ async def search_shops(
         address_keywords: list[str] = []
         other_keywords: list[str] = []
         commercial_type_ids: list[int] = []
-        fuzzy: list[str] = []
 
         # 1. use_current_location=true 时，附带 context 的 lat/lng
+        ctx_loc: dict[str, object] | None = _extract_context_location(ctx)
         if use_current_location:
-            ctx_loc: dict[str, object] | None = _extract_context_location(ctx)
             if ctx_loc:
                 latitude = float(ctx_loc["latitude"])  # type: ignore[arg-type]
                 longitude = float(ctx_loc["longitude"])  # type: ignore[arg-type]
@@ -93,7 +92,7 @@ async def search_shops(
 
             try:
                 geocoded = await address_service.geocode(
-                    address=location_text, session_id=sid, request_id=rid,
+                    address=location_text, city=ctx_loc["city"],session_id=sid, request_id=rid,
                 )
                 logger.info("[search_shops] 步骤2 geocode结果: formatted=%s, lat=%s, lng=%s, city=%s",
                             geocoded.formatted_address, geocoded.latitude, geocoded.longitude, geocoded.city)

@@ -30,8 +30,8 @@ _DESCRIPTION: str = load_tool_prompt("search_coupon")
 async def search_coupon(
     ctx: RunContext[AgentDeps],
     project_ids: Annotated[Optional[list[int]], Field(description="项目 ID 列表，来自 classify_project。无明确项目时传 null")] = None,
-    shop_ids: Annotated[Optional[list[int]], Field(description="商户 ID 列表，来自 search_shops。无明确商户时传 null")] = None,
-    semantic_query: Annotated[list[str], Field(description="用户对优惠的自然语言偏好描述，提取关键词。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数")] = [],
+    shop_ids: Annotated[Optional[list[int]], Field(description="商户 ID 列表，来自 search_shops, 无明确商户时传 null。")] = None,
+    semantic_query: Annotated[list[str], Field(description="用户对优惠的自然语言偏好描述（不应该包含地址描述），提取关键词。调用前回顾对话中用户提到的所有优惠偏好，完整组装到此参数")] = [],
     top_k: Annotated[int, Field(description="返回数量上限，默认 10")] = 10,
 ) -> str:
     """根据项目、商户和语义条件查询可用的优惠活动。"""
