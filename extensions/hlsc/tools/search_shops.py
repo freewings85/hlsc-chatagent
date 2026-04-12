@@ -74,12 +74,14 @@ async def search_shops(
         commercial_keywords: list[str] = []
         commercial_type_ids: list[int] = []
         fuzzy: list[str] = []
+
         # 1. use_current_location=true 时，附带 context 的 lat/lng
         if use_current_location:
             ctx_loc: dict[str, object] | None = _extract_context_location(ctx)
             if ctx_loc:
                 latitude = float(ctx_loc["latitude"])  # type: ignore[arg-type]
                 longitude = float(ctx_loc["longitude"])  # type: ignore[arg-type]
+        logger.info("[search_shops] 步骤1完成: lat=%s, lng=%s", latitude, longitude)
 
         # 2. location_text 不为空 → 地址解析获取经纬度 + cityId
         if location_text:
@@ -90,6 +92,8 @@ async def search_shops(
                 geocoded = await address_service.geocode(
                     address=location_text, session_id=sid, request_id=rid,
                 )
+                logger.info("[search_shops] 步骤2 geocode结果: formatted=%s, lat=%s, lng=%s, city=%s",
+                            geocoded.formatted_address, geocoded.latitude, geocoded.longitude, geocoded.city)
                 # 将格式化地址添加到搜索关键词
                 if geocoded.formatted_address:
                     commercial_keywords.append(geocoded.formatted_address)
@@ -103,18 +107,22 @@ async def search_shops(
                     city_id = await query_city_id_service.get_city_id(
                         city_name=geocoded.city, session_id=sid, request_id=rid,
                     )
+                    logger.info("[search_shops] 步骤2 city_id=%s", city_id)
             except Exception as e:
-                logger.warning("地址解析失败: location_text='%s', error=%s", location_text, e)
+                logger.warning("[search_shops] 步骤2 地址解析失败: location_text='%s', error=%s", location_text, e)
             finally:
                 commercial_keywords.append(location_text)
-        
+        logger.info("[search_shops] 步骤2完成: lat=%s, lng=%s, city_id=%s, keywords=%s",
+                    latitude, longitude, city_id, commercial_keywords)
+
         # 3. shop_name如果不为空，添加到commercial_keywords
         if shop_name:
             commercial_keywords.append(shop_name)
-        
+
         # 4. semantic_query如果不为空，添加到commercial_keywords
         if semantic_query:
             commercial_keywords.extend(semantic_query)
+        logger.info("[search_shops] 步骤3-4完成: commercial_keywords=%s", commercial_keywords)
 
         # 5. 调用fusion_search_service, 获取commercial_type_ids
         from hlsc.services.restful.fusion_search_service import (
@@ -128,6 +136,7 @@ async def search_shops(
                 request_id=rid,
             )
             commercial_type_ids = result.get_source_ids(DOC_COMMERCIAL_TYPE)
+        logger.info("[search_shops] 步骤5完成: commercial_type_ids=%s", commercial_type_ids)
 
         # 6. 调用fusion_search_service, 获取fuzzy
         if commercial_keywords:
@@ -138,6 +147,7 @@ async def search_shops(
                 request_id=rid,
             )
             fuzzy = result.get_titles(DOC_COMMERCIAL)
+        logger.info("[search_shops] 步骤6完成: fuzzy=%s", fuzzy)
 
         # 7. 构建请求，调用 search_nearby_service
         sort_map: dict[str, str] = {
@@ -154,14 +164,16 @@ async def search_shops(
             order_by=sort_map.get(sort_by, "distance"),
             package_ids=project_ids if project_ids else None,
             city_id=city_id,
-            commercial_type=commercial_type_ids,
+            commercial_type=commercial_type_ids if commercial_type_ids else None,
             rating=min_rating,
-            fuzzy=fuzzy
+            fuzzy=fuzzy if fuzzy else None,
         )
+        logger.info("[search_shops] 步骤7 请求参数: %s", request)
 
         items: list[NearbyShopItem] = await search_nearby_service.search(
             request, session_id=sid, request_id=rid,
         )
+        logger.info("[search_shops] 步骤7完成: 返回 %d 条结果", len(items))
 
         if not items:
             log_tool_end("search_shops", sid, rid, {"shop_count": 0})
