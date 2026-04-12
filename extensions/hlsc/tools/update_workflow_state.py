@@ -55,7 +55,11 @@ async def update_workflow_state(
         handle = temporal_client.get_workflow_handle(workflow_id)
         result: StateChangeResult = await handle.execute_update(
             "on_state_changed",
-            StateChangeRequest(fields=fields),
+            StateChangeRequest(
+                user_id=ctx.deps.user_id,
+                session_id=ctx.deps.session_id,
+                fields=fields,
+            ),
             result_type=StateChangeResult,
         )
 
