@@ -175,6 +175,26 @@ async def search_shops(
         )
         logger.info("[search_shops] 步骤7完成: 返回 %d 条结果", len(items))
 
+        # 8. Fallback: 带项目过滤搜索无结果时，去掉项目条件重搜
+        if not items and project_ids and len(project_ids) > 0:
+            logger.info("[search_shops] 步骤8 项目过滤 fallback: project_ids=%s 搜索为空，去掉项目条件重搜", project_ids)
+            fallback_request: NearbyShopRequest = NearbyShopRequest(
+                latitude=request.latitude,
+                longitude=request.longitude,
+                top=request.top,
+                radius=request.radius,
+                order_by=request.order_by,
+                package_ids=None,
+                city_id=request.city_id,
+                commercial_type=request.commercial_type,
+                rating=request.rating,
+                fuzzy=request.fuzzy,
+            )
+            items = await search_nearby_service.search(
+                fallback_request, session_id=sid, request_id=rid,
+            )
+            logger.info("[search_shops] 步骤8 fallback完成: 返回 %d 条结果", len(items))
+
         if not items:
             log_tool_end("search_shops", sid, rid, {"shop_count": 0})
             return f"{location_text or '指定范围'}内未找到符合条件的门店"
@@ -193,7 +213,7 @@ async def search_shops(
                 "province": item.province_name,
                 "city": item.city_name,
                 "district": item.district_name,
-                "shop_type": item.commercial_type,
+                "shop_type": ",".join(item.commercial_type) if item.commercial_type else "",
                 "distance": f"{item.distance}m" if item.distance else "",
                 "rating": item.rating,
                 "trading_count": item.trading_count,

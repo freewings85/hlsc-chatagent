@@ -181,7 +181,7 @@ class FusionSearchService:
         }
         log_http_request(url, "POST", session_id, request_id, payload)
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response: httpx.Response = await client.post(url, json=payload)
             response.raise_for_status()
             data: dict = response.json()

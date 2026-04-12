@@ -100,10 +100,10 @@ class NearbyShopItem:
     address: str = ""
     service_scope: str = ""
     phone: str = ""
-    commercial_type: int = 0
+    commercial_type: list[str] = field(default_factory=list)
     opening_hours: str = ""
-    longitude: float|None = None
-    latitude: float|None = None
+    longitude: float | None = None
+    latitude: float | None = None
     distance: int = 0
     rating: float = 0.0
     trading_count: int = 0
@@ -120,16 +120,16 @@ class NearbyShopItem:
             province_name=raw.get("provinceName", ""),
             city_name=raw.get("cityName", ""),
             district_name=raw.get("districtName", ""),
-            address=raw.get("address", ""),
-            service_scope=raw.get("serviceScope", ""),
-            phone=raw.get("phone", ""),
-            commercial_type=raw.get("commercialType", 0),
-            opening_hours=raw.get("openingHours", ""),
-            longitude=raw.get("longitude", 0.0),
-            latitude=raw.get("latitude", 0.0),
+            address=raw.get("address") or "",
+            service_scope=raw.get("serviceScope") or "",
+            phone=raw.get("phone") or "",
+            commercial_type=raw.get("commercialType") or [],
+            opening_hours=raw.get("openingHours") or "",
+            longitude=raw.get("longitude"),
+            latitude=raw.get("latitude"),
             distance=raw.get("distance", 0),
-            rating=raw.get("rating", 0.0),
-            trading_count=raw.get("tradingCount", 0),
+            rating=float(raw.get("rating") or 0),
+            trading_count=int(raw.get("tradingCount") or 0),
             packages=raw.get("packages") or [],
         )
 
@@ -158,6 +158,8 @@ class SearchNearbyService:
 
         url: str = f"{DATA_MANAGER_URL}/service_ai_datamanager/shop/getNearbyShops"
         payload: dict = request.to_payload()
+        if session_id:
+            payload["sessionId"] = session_id
         log_http_request(url, "POST", session_id, request_id, payload)
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -169,7 +171,14 @@ class SearchNearbyService:
         if data.get("status") != 0:
             raise RuntimeError(f"搜索附近门店失败: {data.get('message', '未知错误')}")
 
-        commercials: list[dict] = data.get("result", {}).get("commercials", [])
+        raw_result = data.get("result", {})
+        # result 可能是 {"commercials": [...]} 或直接是 list
+        if isinstance(raw_result, list):
+            commercials = raw_result
+        elif isinstance(raw_result, dict):
+            commercials = raw_result.get("commercials", [])
+        else:
+            commercials = []
         return [NearbyShopItem.from_api(c) for c in commercials]
 
 
