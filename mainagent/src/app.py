@@ -18,6 +18,7 @@ from hlsc.tools.collect_user_car_info import collect_user_car_info
 from hlsc.tools.collect_user_location import collect_user_location
 from hlsc.tools.delegate import delegate
 from hlsc.tools.update_session_state import update_session_state
+from hlsc.tools.update_workflow_state import update_workflow_state
 
 # 分类与匹配
 from hlsc.tools.classify_project import classify_project
@@ -59,6 +60,8 @@ def create_agent_app() -> AgentApp:
         "confirm_booking": confirm_booking,
         # 会话状态
         "update_session_state": update_session_state,
+        # 编排模式下的 workflow 状态更新（Agent 直接调 Temporal，不经过 orchestrator）
+        "update_workflow_state": update_workflow_state,
         # 复杂查询
         "call_query_codingagent": call_query_codingagent,
         # 商户联系单
