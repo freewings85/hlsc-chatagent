@@ -13,7 +13,7 @@
 
 ## 策略
 
-- 用户提到项目关键词 → 先 classify_project 识别，根据返回的 project_ids 调 search_shops 搜索
+- 用户提到项目关键词 → **必须先**调 classify_project 拿到 projects.id组装成project_ids数组，**等返回后再**调 search_shops(project_ids=[...])。这两步是串行依赖，禁止并行调用。
 - 需求明确后 → search_shops 搜索匹配商户，展示结果用 ShopCard 呈现，用对比视角帮用户决策
 - 复杂计算查询（"哪家最便宜""对比A店和B店价格"）→ 使用 searchshops-coding skill
 - 用户选好商户 → 使用 contact-order skill 生成联系单
