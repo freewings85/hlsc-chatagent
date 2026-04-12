@@ -48,8 +48,8 @@ def _extract_context_location(ctx: RunContext[AgentDeps]) -> dict[str, object] |
 
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    location_text: Annotated[str, Field(description="用户提到的位置，原样传入，如'张江高科附近''南京西路'。")] = "",
-    use_current_location: Annotated[bool, Field(description="是否使用用户当前位置。当 location_text 来自 context 中的用户定位时设为 true")] = False,
+    location_text: Annotated[str, Field(description="仅传用户本轮明确说出的位置，原样传入如'张江高科附近''南京西路'，用户没提位置则传空字符串")] = "",
+    use_current_location: Annotated[bool, Field(description="是否使用用户当前位置，仅当用户希望查'附近'或'周围'等，依赖当前位置的商户时设为 true")] = False,
     radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
     shop_type_text: Annotated[str, Field(description="商户类型，原样传入用户的描述")] = "",

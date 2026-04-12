@@ -3,7 +3,7 @@ Description:
 
 Usage notes:
 - location_text 原样传入用户提到的位置描述，包括地标、路名等，如果没有提到则传空。
-- use_current_location 仅在使用 context 中用户已有定位时设为 true。
+- use_current_location 仅当用户希望查'附近'或'周围'等，依赖当前位置的商户时设为 true
 - radius 仅在用户明确给出距离数字时传入，"附近"不算明确距离。
 - shop_type_text 原样传入用户提到的商户类型描述，不做加工。
 - shop_name、min_rating 等条件参数须用户明确给出具体值时才传入，禁止猜测填充。
