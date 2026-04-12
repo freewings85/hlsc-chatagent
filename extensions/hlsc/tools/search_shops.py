@@ -210,18 +210,8 @@ async def search_shops(
                 "shop_id": item.commercial_id,
                 "name": item.commercial_name,
                 "address": item.address,
-                "province": item.province_name,
-                "city": item.city_name,
-                "district": item.district_name,
-                "shop_type": ",".join(item.commercial_type) if item.commercial_type else "",
                 "distance": f"{item.distance}m" if item.distance else "",
-                "rating": item.rating,
-                "trading_count": item.trading_count,
                 "phone": item.phone,
-                "tags": tag_list,
-                "opening_start": opening_parts[0].strip() if len(opening_parts) >= 1 else "",
-                "opening_end": opening_parts[1].strip() if len(opening_parts) >= 2 else "",
-                "packages": item.packages,
             })
 
         log_tool_end("search_shops", sid, rid, {
