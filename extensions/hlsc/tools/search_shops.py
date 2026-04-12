@@ -48,7 +48,7 @@ def _extract_context_location(ctx: RunContext[AgentDeps]) -> dict[str, object] |
 
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    location_text: Annotated[str, Field(description="用户提到的位置，原样传入，如'上海''嘉定区''张江高科附近''南京西路'。若用户未提及位置但 context 中有当前位置，使用 context 中的位置并设 use_current_location=true。若均无则先调 collect_user_location")] = "",
+    location_text: Annotated[str, Field(description="用户提到的位置，原样传入，如'张江高科附近''南京西路'。")] = "",
     use_current_location: Annotated[bool, Field(description="是否使用用户当前位置。当 location_text 来自 context 中的用户定位时设为 true")] = False,
     radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
@@ -221,15 +221,17 @@ async def search_shops(
 
         if not items:
             log_tool_end("search_shops", sid, rid, {"shop_count": 0})
-            return f"{location_text or '指定范围'}内未找到符合条件的门店"
+            current_km: int = (request.radius or 10000) // 1000
+            return json.dumps({
+                "total": 0,
+                "shops": [],
+                "notice": f"当前{current_km}公里范围内未找到符合条件的门店",
+                "suggest": f"是否需要扩大到{current_km * 2}公里范围搜索？请询问用户确认",
+            }, ensure_ascii=False)
 
         # 格式化结果
         shops: list[dict] = []
         for item in items:
-            svc: str = item.service_scope
-            tag_list: list[str] = [t.strip() for t in svc.split(",") if t.strip()] if svc else []
-            opening_parts: list[str] = item.opening_hours.split("-") if item.opening_hours else []
-
             shops.append({
                 "shop_id": item.commercial_id,
                 "name": item.commercial_name,
@@ -242,7 +244,7 @@ async def search_shops(
             "shop_count": len(shops),
             "shops": [s["name"] for s in shops],
         })
-        return json.dumps({"total": len(shops), "shops": shops}, ensure_ascii=False)
+        return json.dumps(result_data, ensure_ascii=False)
 
     except Exception as e:
         log_tool_end("search_shops", sid, rid, exc=e)
