@@ -208,7 +208,10 @@ class FusionSearchService:
         if data.get("status") != 0:
             raise RuntimeError(f"融合检索失败: {data.get('message', '未知错误')}")
 
-        return _parse_result(data.get("result", {}))
+        raw_result = data.get("result", {})
+        if not isinstance(raw_result, dict):
+            return FusionSearchResult()
+        return _parse_result(raw_result)
 
 
 fusion_search_service: FusionSearchService = FusionSearchService()
