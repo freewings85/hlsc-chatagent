@@ -88,8 +88,6 @@ class AgentDeps:
     # 同 turn 单次推进守卫（design.md §8.3）
     # 每次 agent.run() 开始时重置为 False；成功推进后 tool 侧置 True
     _step_mutation_committed: bool = False
-    # orchestrator 模式下的 callback_url（Agent try/finally 必须调）
-    callback_url: str | None = None
 
 
 # ── session_state 辅助函数 ──

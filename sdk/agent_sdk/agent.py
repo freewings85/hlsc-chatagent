@@ -181,13 +181,6 @@ class Agent:
         request_id: str | None = None,
         session_state: dict[str, Any] | None = None,
         parent_tool_call_id: str | None = None,
-        # ── Orchestrator 编排模式字段（可选）──
-        workflow_id: str | None = None,
-        orchestrator_url: str | None = None,
-        current_step_detail: dict[str, Any] | None = None,
-        step_pending_fields: list[str] | None = None,
-        step_skeleton: list[dict[str, Any]] | None = None,
-        callback_url: str | None = None,
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -252,13 +245,8 @@ class Agent:
             temporal_client=temporal_client,
             request_context=request_context,
             session_state=dict(session_state) if session_state else {},
-            # Orchestrator 编排字段
-            workflow_id=workflow_id,
-            orchestrator_url=orchestrator_url,
-            current_step_detail=current_step_detail,
-            step_pending_fields=step_pending_fields,
-            step_skeleton=step_skeleton,
-            callback_url=callback_url,
+            # orchestrator 编排字段由 StageHook 从 request_context.orchestrator 解包到 deps，
+            # 不在 Agent.run() 层面传参（见 mainagent/src/business_map_hook.py）
         )
 
         # Logfire span：将 session_id/request_id 注入 OpenTelemetry trace，
@@ -334,24 +322,9 @@ class Agent:
             if request_context is not None:
                 deps.request_context = request_context
 
-            # 11.1 Orchestrator 编排上下文注入（仅 orchestrator 模式）
-            # 把 step_skeleton + step_detail + step_pending_fields 渲染成一段
-            # 可读的 prompt，让 LLM 清楚当前该做什么、不能做什么。
-            # 详见 design.md §8.4。
-            if current_step_detail is not None:
-                from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
-                orch_text: str = render_orchestrator_prompt(
-                    step_skeleton=step_skeleton or [],
-                    current_step=current_step_detail,
-                    completed_steps=[],  # 骨架已包含状态，这里不再重复
-                    session_state=deps.session_state,
-                    step_pending_fields=step_pending_fields or [],
-                )
-                if orch_text:
-                    context_messages.append(ModelRequest(
-                        parts=[UserPromptPart(content=orch_text)],
-                        metadata={"is_meta": True, "source": "orchestrator_context"},
-                    ))
+            # 11.1 Orchestrator 编排上下文注入
+            # 由 HlscContextFormatter.format() 统一渲染（读 request_context.orchestrator），
+            # 不在 SDK 层面耦合 orchestrator 逻辑。见 mainagent/src/hlsc_context.py
 
             # 11.5 Session state 注入（工具可通过 deps._session_state_msg 引用更新内容）
             from agent_sdk._agent.deps import create_session_state_message

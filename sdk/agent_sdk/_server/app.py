@@ -439,6 +439,8 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
         except Exception:
             logger.exception("Kafka 转发异常")
 
+    _callback_url: str = request.callback_url or ""
+
     async def _run_with_callback() -> None:
         """try/finally 兜底：任何出口都调 callback_url 通知 orchestrator"""
         err_msg: str | None = None
@@ -453,13 +455,8 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
                 request_context=request.context,
                 request_id=request_id,
                 parent_otel_context=parent_otel_context,
-                # Orchestrator 编排字段透传
-                workflow_id=request.workflow_id,
-                orchestrator_url=request.orchestrator_url,
-                current_step_detail=request.current_step,
-                step_pending_fields=request.step_pending_fields,
-                step_skeleton=request.step_skeleton,
-                callback_url=request.callback_url,
+                # orchestrator 编排字段在 request_context.orchestrator 里，
+                # 由 StageHook 从 deps.request_context 解包到 deps 各字段
             )
         except asyncio.CancelledError:
             status = "stopped"
@@ -469,17 +466,14 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
             err_msg = str(e)
             logger.exception(f"agent run failed: {request_id}")
         finally:
-            # 保证 queue sentinel
             queue.put_nowait(None)
             _running_tasks.pop(task_id, None)
-            # 调 callback_url（orchestrator 会更新 turn_tasks 状态）
-            if request.callback_url:
+            if _callback_url:
                 import httpx as _httpx
                 try:
                     async with _httpx.AsyncClient(timeout=5.0) as cli:
-                        # asyncio.shield 防止 finally 里的 callback 被 stop 二次取消
                         await asyncio.shield(cli.post(
-                            request.callback_url,
+                            _callback_url,
                             json={
                                 "request_id": request_id,
                                 "status": status,
@@ -488,7 +482,7 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
                             },
                         ))
                 except Exception:
-                    logger.exception(f"callback failed: {request.callback_url}")
+                    logger.exception(f"callback failed: {_callback_url}")
 
     # 启动 agent 和事件 drain
     loop_task = asyncio.create_task(_run_with_callback(), name=f"orch-loop-{task_id}")

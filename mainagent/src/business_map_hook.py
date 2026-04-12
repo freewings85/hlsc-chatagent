@@ -137,7 +137,15 @@ async def _call_bma_classify(message: str, recent_turns: list[dict[str, str]] | 
 
 
 class StageHook:
-    """MainAgent 前置 Hook：BMA 分类 → 场景路由 → 加载配置。"""
+    """MainAgent 前置 Hook：BMA 分类 → 场景路由 → 加载配置。
+
+    两种模式：
+    - **编排模式**（request_context.orchestrator 非空）：
+      scenario / available_tools 由 orchestrator 提供，跳过 BMA 调用，
+      把 orchestrator 元数据解包到 deps 各字段供工具使用
+    - **降级模式**（request_context.orchestrator 为 None）：
+      走原有 BMA 分类 + 场景粘性 + SceneConfig 加载逻辑
+    """
 
     async def __call__(
         self,
@@ -148,6 +156,42 @@ class StageHook:
     ) -> None:
         _config_loader.ensure_loaded()
 
+        # ── 编排模式：orchestrator 已做好分类 + 工具过滤 ──────────
+        orch_ctx = _extract_orchestrator_context(deps)
+        if orch_ctx is not None:
+            scene: str = orch_ctx.scenario
+            config: SceneConfig = _config_loader.get_scene(scene)
+
+            # 场景配置
+            deps.current_scene = scene
+            deps.available_tools = orch_ctx.available_tools
+            deps.allowed_skills = config.skills
+            deps.current_scene_agent_md = config.agent_md if config.agent_md else None
+
+            # 把 orchestrator 元数据解包到 deps，供 update_session_state 工具使用
+            deps.workflow_id = orch_ctx.workflow_id
+            deps.orchestrator_url = orch_ctx.orchestrator_url
+            deps.current_step_detail = orch_ctx.current_step.model_dump() if hasattr(orch_ctx.current_step, "model_dump") else dict(orch_ctx.current_step)
+            deps.step_pending_fields = list(orch_ctx.step_pending_fields)
+            deps.step_skeleton = [
+                s.model_dump() if hasattr(s, "model_dump") else dict(s)
+                for s in orch_ctx.step_skeleton
+            ]
+            # 编排模式下 session_state 由 orchestrator 从 MySQL 传入，合并到 deps
+            if orch_ctx.session_state:
+                deps.session_state.update(orch_ctx.session_state)
+
+            logger.info(
+                "编排模式: user=%s, scene=%s, agent_md=%s, tools=%d, "
+                "step=%s, pending=%s",
+                user_id, scene, config.agent_md, len(orch_ctx.available_tools),
+                orch_ctx.current_step.id if hasattr(orch_ctx.current_step, "id") else "?",
+                orch_ctx.step_pending_fields,
+            )
+            return
+
+        # ── 降级模式：走原有 BMA 分类逻辑 ─────────────────────
+
         # 提取最近几轮对话历史给 BMA
         max_turns: int = int(os.getenv("CLASSIFY_RECENT_TURNS", "5"))
         recent_turns: list[dict[str, str]] = await _extract_recent_turns(deps, max_turns=max_turns)
@@ -157,7 +201,6 @@ class StageHook:
         scenes: list[str] = await _call_bma_classify(message, recent_turns=recent_turns)
 
         # 路由决策（含场景粘性：BMA 返回空时，如果上一轮有明确业务场景则保持）
-        scene: str
         if len(scenes) == 1:
             scene = scenes[0]
         elif len(scenes) > 1:
@@ -177,7 +220,7 @@ class StageHook:
                 scene = "guide"
 
         # 加载场景配置
-        config: SceneConfig = _config_loader.get_scene(scene)
+        config = _config_loader.get_scene(scene)
 
         # 设置 deps
         deps.current_scene = scene
@@ -192,3 +235,31 @@ class StageHook:
             "场景决策: user=%s, scene=%s, agent_md=%s, tools=%d, skills=%s",
             user_id, scene, config.agent_md, len(config.tools), config.skills,
         )
+
+
+def _extract_orchestrator_context(deps: AgentDeps) -> Any:
+    """从 deps.request_context 提取 OrchestratorContext（有就返回，没有返回 None）。
+
+    request_context 可能是 dict（HTTP 直传）或 HlscRequestContext（已解析）。
+    """
+    rc: Any = deps.request_context
+    if rc is None:
+        return None
+
+    # 已解析的 HlscRequestContext
+    orch: Any = getattr(rc, "orchestrator", None)
+    if orch is not None:
+        return orch
+
+    # dict 形式（HTTP 原始传入，未经 HlscRequestContext 解析）
+    if isinstance(rc, dict):
+        orch_raw: dict | None = rc.get("orchestrator")
+        if orch_raw is not None and isinstance(orch_raw, dict):
+            from src.hlsc_context import OrchestratorContext
+            try:
+                return OrchestratorContext(**orch_raw)
+            except Exception:
+                logger.warning("解析 OrchestratorContext 失败", exc_info=True)
+                return None
+
+    return None

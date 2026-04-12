@@ -1,8 +1,20 @@
-"""话痨说车业务请求上下文。"""
+"""话痨说车业务请求上下文 + Orchestrator 编排上下文。
+
+HlscRequestContext 扩展 SDK 的 RequestContext，加入：
+- current_car / current_location：请求级的车辆和位置信息
+- orchestrator：Orchestrator 编排上下文（None = 降级模式）
+
+OrchestratorContext 包含 workflow 骨架状态、当前 step 详情、会话状态等，
+由 orchestrator 的 Activity 在调 mainagent 时填充到 request_context.orchestrator。
+mainagent 侧据此注入 step 引导 prompt 并让 update_session_state 工具走编排分支。
+"""
 
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from pydantic import BaseModel
 
 from agent_sdk._common.request_context import ContextFormatter, RequestContext
 from hlsc.models import CarInfo, LocationInfo
@@ -10,17 +22,105 @@ from hlsc.models import CarInfo, LocationInfo
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+# ── Orchestrator 编排上下文模型 ──────────────────────────
+
+
+class StepFieldSpec(BaseModel):
+    """expected_fields 条目"""
+
+    name: str
+    type: str
+
+
+class StepBrief(BaseModel):
+    """全局骨架中的 step 条目（轻量）"""
+
+    id: str
+    name: str
+    goal_short: str
+    status: str  # "done" / "current" / "pending"
+
+
+class CurrentStepDetail(BaseModel):
+    """当前 step 的详细信息"""
+
+    id: str
+    name: str
+    goal: str
+    success_criteria: str
+    expected_fields: list[StepFieldSpec]
+    allowed_next: list[str]
+    skip_hint: str | None = None
+    repeatable: bool = False
+
+
+class OrchestratorContext(BaseModel):
+    """Orchestrator 编排上下文。
+
+    仅在 orchestrator 编排模式下非空。降级模式（ChatManager 直连 mainagent）时为 None。
+    mainagent 根据此字段是否存在决定走编排路径还是自驱路径。
+
+    传输路径：Orchestrator Activity → HTTP request_context.orchestrator → mainagent
+    """
+
+    # ── 标识 ──
+    workflow_id: str
+    """update_session_state 工具回调 /internal/advance_step 时的 opaque token"""
+
+    orchestrator_url: str
+    """/internal/advance_step 和 /internal/revert_step 的 base URL"""
+
+    scenario: str
+    """当前业务场景标识（insurance / platform / searchshops / ...）"""
+
+    # 注意：callback_url 不在这里。它是 HTTP 层通信机制，放在 AsyncChatRequest 顶层。
+
+    # ── Workflow 骨架状态 ──
+    step_skeleton: list[StepBrief]
+    """全局 step 列表 + 各自的 done/current/pending 状态"""
+
+    current_step: CurrentStepDetail
+    """当前聚焦 step 的完整细节"""
+
+    completed_steps: list[str]
+    """已完成的 step id 列表"""
+
+    # ── 业务状态 ──
+    session_state: dict[str, Any]
+    """从 MySQL session_states 表 query 出的全量 KV"""
+
+    step_pending_fields: list[str]
+    """当前 step 的 expected_fields 中还没收集的字段名（派生数据）"""
+
+    # ── 工具白名单 ──
+    available_tools: list[str]
+    """按 current_step.tools + defaults.tools_common 过滤后的工具名列表"""
+
+
+# ── 请求上下文 ───────────────────────────────────────────
+
+
 class HlscRequestContext(RequestContext):
-    """话痨说车请求上下文。"""
+    """话痨说车请求上下文。
+
+    降级模式下 orchestrator 为 None，和原来行为完全一样。
+    编排模式下 orchestrator 非空，mainagent 据此注入 step prompt + 工具路由。
+    """
 
     current_car: CarInfo | None = None
     current_location: LocationInfo | None = None
+    orchestrator: OrchestratorContext | None = None
+
+
+# ── 上下文格式化（注入 LLM 的文本）────────────────────────
 
 
 class HlscContextFormatter(ContextFormatter):
     """将 HlscRequestContext 格式化为注入 LLM 的文本。
 
-    每次 LLM 调用前执行，确保 LLM 始终能看到当前车辆和位置信息。
+    每次 LLM 调用前执行。分两部分：
+    1. 原有的 current_car + current_location 信息
+    2. 如果有 orchestrator 编排上下文，渲染 step_skeleton + step_detail + pending_fields
     """
 
     def format(self, context: RequestContext) -> str:
@@ -35,6 +135,7 @@ class HlscContextFormatter(ContextFormatter):
 
         parts: list[str] = []
 
+        # ── Part 1：车辆 + 位置 ──
         if context.current_car is not None:
             car: CarInfo = context.current_car
             parts.append(
@@ -51,4 +152,20 @@ class HlscContextFormatter(ContextFormatter):
         else:
             parts.append("current_location: (未设置)")
 
-        return "[request_context]: " + ", ".join(parts)
+        base_text: str = "### request_context\n\n" + ", ".join(parts)
+
+        # ── Part 2：Orchestrator 编排上下文 ──
+        if context.orchestrator is not None:
+            from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
+
+            orch: OrchestratorContext = context.orchestrator
+            orch_text: str = render_orchestrator_prompt(
+                step_skeleton=[s.model_dump() for s in orch.step_skeleton],
+                current_step=orch.current_step.model_dump(),
+                completed_steps=orch.completed_steps,
+                session_state=orch.session_state,
+                step_pending_fields=orch.step_pending_fields,
+            )
+            return base_text + "\n\n" + orch_text
+
+        return base_text

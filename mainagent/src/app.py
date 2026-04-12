@@ -76,9 +76,43 @@ def create_agent_app() -> AgentApp:
         after_run_hooks=[ProfileTriggerHook()],
     )
 
-    return AgentApp(
+    agent_app: AgentApp = AgentApp(
         agent,
         AgentAppConfig(
             description="汽修场景主 Agent，支持工具调用、文件操作、中断确认",
         ),
     )
+
+    # ── 注册 /classify 端点（mainagent 独有，供 orchestrator 调用）──
+    _register_classify_endpoint(agent_app, agent)
+
+    return agent_app
+
+
+def _register_classify_endpoint(agent_app: AgentApp, agent: Agent) -> None:
+    """在 AgentApp 的 FastAPI 实例上挂 /classify 路由。
+
+    这个端点是 mainagent 独有的——orchestrator 通过它获取 BMA 场景分类，
+    利用 mainagent 自带的对话历史做 recent_turns 上下文，不需要
+    orchestrator 侧维护 user_message_history 表。
+    """
+    from fastapi.responses import JSONResponse
+
+    from src.classify import ClassifyRequest, ClassifyResponse, classify_scenario
+
+    app = agent_app.app  # FastAPI 实例
+
+    @app.post("/classify")
+    async def classify(request: ClassifyRequest) -> JSONResponse:
+        # memory_service 需要用 agent 的 _build_memory_service 方法构建
+        memory_factory = agent._build_memory_service
+
+        scenario: str | None = await classify_scenario(
+            user_id=request.user_id,
+            session_id=request.session_id,
+            message=request.message,
+            memory_service_factory=memory_factory,
+        )
+        return JSONResponse(
+            content=ClassifyResponse(scenario=scenario).model_dump()
+        )
