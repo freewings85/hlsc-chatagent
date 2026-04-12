@@ -67,6 +67,11 @@ async def update_workflow_state(
         for k, v in fields.items():
             ctx.deps.session_state[k] = v
 
+        # 推进时静默：suppress 后续所有事件输出（文字不写 Kafka）
+        # workflow 会再调一次 agent 输出最终结果
+        if result.advanced and ctx.deps.emitter is not None:
+            ctx.deps.emitter.suppress_output = True
+
         summary: str
         if result.advanced:
             summary = f"ok. 已推进到 {result.current_step}"
