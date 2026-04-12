@@ -160,6 +160,10 @@ async def search_shops(
                     address_keywords.extend(titles)
                 else:
                     other_keywords.extend(titles)
+        # 去重（保持顺序）
+        shop_name_keywords = list(dict.fromkeys(shop_name_keywords))
+        address_keywords = list(dict.fromkeys(address_keywords))
+        other_keywords = list(dict.fromkeys(other_keywords))
         logger.info("[search_shops] 步骤6完成: shop_name_keywords=%s, address_keywords=%s, other_keywords=%s",
                     shop_name_keywords, address_keywords, other_keywords)
 
