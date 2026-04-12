@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Annotated, Optional
 from pydantic import Field
 from pydantic_ai import RunContext
@@ -18,6 +19,8 @@ from hlsc.services.restful.search_nearby_service import (
     search_nearby_service,
 )
 from hlsc.tools.prompt_loader import load_tool_prompt
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 _DESCRIPTION: str = load_tool_prompt("search_shops")
 
@@ -78,9 +81,32 @@ async def search_shops(
                 latitude = float(ctx_loc["latitude"])  # type: ignore[arg-type]
                 longitude = float(ctx_loc["longitude"])  # type: ignore[arg-type]
 
-        # 2. location_text如果不为空，先调用地址服务获取city name，再根据city name查cityId(TODO)
+        # 2. location_text 不为空 → 地址解析获取经纬度 + cityId
         if location_text:
-            commercial_keywords.append(location_text)
+            from hlsc.services.restful.address_service import address_service
+            from hlsc.services.restful.query_city_id_service import query_city_id_service
+
+            try:
+                geocoded = await address_service.geocode(
+                    address=location_text, session_id=sid, request_id=rid,
+                )
+                # 将格式化地址添加到搜索关键词
+                if geocoded.formatted_address:
+                    commercial_keywords.append(geocoded.formatted_address)
+                # 补充经纬度（context 定位优先，地址解析兜底）
+                if latitude is None and geocoded.latitude is not None:
+                    latitude = geocoded.latitude
+                if longitude is None and geocoded.longitude is not None:
+                    longitude = geocoded.longitude
+                # 根据 city 查询 cityId
+                if geocoded.city:
+                    city_id = await query_city_id_service.get_city_id(
+                        city_name=geocoded.city, session_id=sid, request_id=rid,
+                    )
+            except Exception as e:
+                logger.warning("地址解析失败: location_text='%s', error=%s", location_text, e)
+            finally:
+                commercial_keywords.append(location_text)
         
         # 3. shop_name如果不为空，添加到commercial_keywords
         if shop_name:
