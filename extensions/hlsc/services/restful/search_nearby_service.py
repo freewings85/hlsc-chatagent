@@ -43,6 +43,9 @@ class NearbyShopRequest:
     trading_count: int | None = None
     fuzzy: list[str] | None = None
     equipment: list[int] | None = None
+    commercial_name: list[str] | None = None
+    address: list[str] | None = None
+    is_on_activity: bool | None = None
     order_by: str = "distance"
 
     def to_payload(self) -> dict:
@@ -84,6 +87,12 @@ class NearbyShopRequest:
             payload["fuzzy"] = self.fuzzy
         if self.equipment is not None:
             payload["equipment"] = self.equipment
+        if self.commercial_name is not None:
+            payload["commercialName"] = self.commercial_name
+        if self.address is not None:
+            payload["address"] = self.address
+        if self.is_on_activity is not None:
+            payload["isOnActivity"] = self.is_on_activity
         return payload
 
 

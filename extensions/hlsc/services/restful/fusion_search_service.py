@@ -86,6 +86,24 @@ class FusionSearchResult:
                 titles.append(item.title)
         return titles
 
+    def get_titles_by_keyword(self, doc_name: str) -> dict[str, list[str]]:
+        """按 keyword 分组获取 title 列表（去重、去空）。
+
+        返回 {keyword: [title1, title2, ...]}
+        """
+        groups: dict[str, list[str]] = {}
+        seen: dict[str, set[str]] = {}
+        for item in self.get_by_doc(doc_name):
+            if not item.keyword or not item.title:
+                continue
+            if item.keyword not in groups:
+                groups[item.keyword] = []
+                seen[item.keyword] = set()
+            if item.title not in seen[item.keyword]:
+                seen[item.keyword].add(item.title)
+                groups[item.keyword].append(item.title)
+        return groups
+
 
 # ============================================================
 # 解析

@@ -57,6 +57,7 @@ async def search_shops(
     project_ids: Annotated[Optional[list[int]], Field(description="项目 ID 列表，来自 classify_project。筛选能提供这些项目的商户")] = None,
     top: Annotated[int, Field(description="返回数量上限，默认 10")] = 10,
     min_rating: Annotated[Optional[float], Field(description="最低评分，仅用户明确给出时传入")] = None,
+    is_on_activity: Annotated[bool, Field(description="是否正在搞优惠活动")] = False,
     sort_by: Annotated[str, Field(description="排序方式：default（默认相关度）/ distance（距离近优先）/ rating（评分高优先）/ trading_count（成交量高优先）")] = "default",
 ) -> str:
     """搜索商户，支持语义搜索 + 结构化过滤 + 位置过滤。"""
@@ -71,7 +72,9 @@ async def search_shops(
         latitude: float | None = None
         longitude: float | None = None
         city_id: int | None = None
-        commercial_keywords: list[str] = []
+        shop_name_keywords: list[str] = []
+        address_keywords: list[str] = []
+        other_keywords: list[str] = []
         commercial_type_ids: list[int] = []
         fuzzy: list[str] = []
 
@@ -96,7 +99,7 @@ async def search_shops(
                             geocoded.formatted_address, geocoded.latitude, geocoded.longitude, geocoded.city)
                 # 将格式化地址添加到搜索关键词
                 if geocoded.formatted_address:
-                    commercial_keywords.append(geocoded.formatted_address)
+                    address_keywords.append(geocoded.formatted_address)
                 # 补充经纬度（context 定位优先，地址解析兜底）
                 if latitude is None and geocoded.latitude is not None:
                     latitude = geocoded.latitude
@@ -111,18 +114,18 @@ async def search_shops(
             except Exception as e:
                 logger.warning("[search_shops] 步骤2 地址解析失败: location_text='%s', error=%s", location_text, e)
             finally:
-                commercial_keywords.append(location_text)
-        logger.info("[search_shops] 步骤2完成: lat=%s, lng=%s, city_id=%s, keywords=%s",
-                    latitude, longitude, city_id, commercial_keywords)
+                address_keywords.append(location_text)
+        logger.info("[search_shops] 步骤2完成: lat=%s, lng=%s, city_id=%s, address_keywords=%s",
+                    latitude, longitude, city_id, address_keywords)
 
-        # 3. shop_name如果不为空，添加到commercial_keywords
+        # 3. shop_name如果不为空，添加到shop_name_keywords
         if shop_name:
-            commercial_keywords.append(shop_name)
+            shop_name_keywords.append(shop_name)
 
-        # 4. semantic_query如果不为空，添加到commercial_keywords
+        # 4. semantic_query如果不为空，添加到other_keywords
         if semantic_query:
-            commercial_keywords.extend(semantic_query)
-        logger.info("[search_shops] 步骤3-4完成: commercial_keywords=%s", commercial_keywords)
+            other_keywords.extend(semantic_query)
+        logger.info("[search_shops] 步骤3-4完成: shop_name_keywords=%s, other_keywords=%s",shop_name_keywords, other_keywords)
 
         # 5. 调用fusion_search_service, 获取commercial_type_ids
         from hlsc.services.restful.fusion_search_service import (
@@ -138,16 +141,27 @@ async def search_shops(
             commercial_type_ids = result.get_source_ids(DOC_COMMERCIAL_TYPE)
         logger.info("[search_shops] 步骤5完成: commercial_type_ids=%s", commercial_type_ids)
 
-        # 6. 调用fusion_search_service, 获取fuzzy
-        if commercial_keywords:
+        # 6. 合并一次 fusionSearch，按返回的 keyword 归类回各列表
+        all_keywords: list[str] = shop_name_keywords + address_keywords + other_keywords
+        if all_keywords:
             result = await fusion_search_service.search(
-                keywords=commercial_keywords,
+                keywords=all_keywords,
                 doc_names=[DOC_COMMERCIAL],
                 session_id=sid,
                 request_id=rid,
             )
-            fuzzy = result.get_titles(DOC_COMMERCIAL)
-        logger.info("[search_shops] 步骤6完成: fuzzy=%s", fuzzy)
+            titles_by_kw: dict[str, list[str]] = result.get_titles_by_keyword(DOC_COMMERCIAL)
+            shop_name_set: set[str] = set(shop_name_keywords)
+            address_set: set[str] = set(address_keywords)
+            for kw, titles in titles_by_kw.items():
+                if kw in shop_name_set:
+                    shop_name_keywords.extend(titles)
+                elif kw in address_set:
+                    address_keywords.extend(titles)
+                else:
+                    other_keywords.extend(titles)
+        logger.info("[search_shops] 步骤6完成: shop_name_keywords=%s, address_keywords=%s, other_keywords=%s",
+                    shop_name_keywords, address_keywords, other_keywords)
 
         # 7. 构建请求，调用 search_nearby_service
         sort_map: dict[str, str] = {
@@ -157,6 +171,8 @@ async def search_shops(
             "trading_count": "tradingCount",
         }
         request: NearbyShopRequest = NearbyShopRequest(
+            commercial_name=shop_name_keywords if shop_name_keywords else None,
+            address=address_keywords if address_keywords else None,
             latitude=latitude,
             longitude=longitude,
             top=top,
@@ -166,7 +182,8 @@ async def search_shops(
             city_id=city_id,
             commercial_type=commercial_type_ids if commercial_type_ids else None,
             rating=min_rating,
-            fuzzy=fuzzy if fuzzy else None,
+            fuzzy=other_keywords if other_keywords else None,
+            is_on_activity = is_on_activity if is_on_activity else None,
         )
         logger.info("[search_shops] 步骤7 请求参数: %s", request)
 
@@ -179,6 +196,8 @@ async def search_shops(
         if not items and project_ids and len(project_ids) > 0:
             logger.info("[search_shops] 步骤8 项目过滤 fallback: project_ids=%s 搜索为空，去掉项目条件重搜", project_ids)
             fallback_request: NearbyShopRequest = NearbyShopRequest(
+                commercial_name=request.commercial_name,
+                address=request.address,
                 latitude=request.latitude,
                 longitude=request.longitude,
                 top=request.top,
@@ -189,6 +208,7 @@ async def search_shops(
                 commercial_type=request.commercial_type,
                 rating=request.rating,
                 fuzzy=request.fuzzy,
+                is_on_activity = request.is_on_activity,
             )
             items = await search_nearby_service.search(
                 fallback_request, session_id=sid, request_id=rid,
