@@ -1,13 +1,13 @@
 """update_workflow_state 工具：把收集到的业务字段写入 Workflow 状态。
 
 调用链路：
-    Agent LLM 调用此工具
-    → tool 从 deps 取 temporal_client + workflow_id
-    → handle.execute_update("on_state_changed", StateChangeRequest(fields={...}))
-    → Workflow 内部：写 MySQL → 调业务 transition → 可能切换 activity
-    → 返回 StateChangeResult
-    → tool 如果切换了且有新 AICall → 热切换 context
-    → tool 把结果返回给 LLM
+    LLM → update_workflow_state(fields)
+    → Temporal execute_update("on_state_changed", StateChangeRequest)
+    → Workflow: 写 MySQL → on_session_state_change（业务逻辑）
+    → 返回 StateChangeResult：
+        - tool_result_message + tool_result_data → 本轮 LLM 看到
+        - next_activity_* → 下一轮 agent 的 deps 热切换
+    → Tool 返回给 LLM：tool_result_message + tool_result_data
 """
 
 from __future__ import annotations
@@ -60,64 +60,59 @@ async def update_workflow_state(
             rpc_timeout=timedelta(seconds=60),
         )
 
-        # 同步刷新本地 session_state
+        # 同步刷新本地 session_state（给本轮后续工具调用看）
         for k, v in fields.items():
             if v is None:
                 ctx.deps.session_state.pop(k, None)
             else:
                 ctx.deps.session_state[k] = v
-
-        # 合并 workflow 返回的最新 session_state
         if result.new_session_state:
             ctx.deps.session_state.update(result.new_session_state)
 
-        if not result.advanced:
-            # 没切换 activity，返回确认
-            log_tool_end("update_workflow_state", sid, rid, {
-                "activity": result.current_step, "advanced": False,
-            })
-            return "ok. 已写入"
-
-        # ── activity 切换了 ──
-
-        # 热切换 tools / skills / prompt（如果新 activity 返回了 AICall）
-        if result.new_available_tools:
-            ctx.deps.available_tools = list(result.new_available_tools)
-        if result.new_available_skills:
-            new_skills: list[str] = list(result.new_available_skills)
-            ctx.deps.allowed_skills = new_skills
-            if new_skills and "Skill" not in ctx.deps.available_tools:
+        # ── 热切换下一轮 agent 的 deps（如果 workflow 指定了新 AICall）──
+        if result.next_activity_id:
+            ctx.deps.available_tools = list(result.next_tools)
+            ctx.deps.allowed_skills = list(result.next_skills)
+            if result.next_skills and "Skill" not in ctx.deps.available_tools:
                 ctx.deps.available_tools.append("Skill")
-
-        if result.new_step_detail:
-            ctx.deps.current_step_detail = result.new_step_detail
-            ctx.deps.step_skeleton = result.new_step_skeleton or None
+            ctx.deps.current_step_detail = {
+                "id": result.next_activity_id,
+                "name": result.next_activity_name or result.next_activity_id,
+                "goal": result.next_activity_goal,
+                "expected_fields": result.next_expected_fields,
+            }
+            ctx.deps.step_skeleton = list(result.new_activity_skeleton)
             ctx.deps.step_pending_fields = _calc_pending(
-                result.new_step_detail, ctx.deps.session_state,
+                result.next_expected_fields, ctx.deps.session_state,
             )
             _update_prompt(ctx.deps, result)
 
-        # 构造返回给 LLM 的文本
-        summary: str = "ok. 已写入"
-        if result.business_result:
-            summary += f"\n业务数据：{json.dumps(result.business_result, ensure_ascii=False)}"
-        new_goal: str = (result.new_step_detail or {}).get("goal", "")
-        if new_goal:
-            summary += f"\n接下来：{new_goal}"
+        # ── 构造给 LLM 的 tool result 文本 ──
+        parts: list[str] = []
+        if result.tool_result_message:
+            parts.append(result.tool_result_message)
+        else:
+            parts.append("ok")
+        if result.tool_result_data:
+            parts.append(f"数据：{json.dumps(result.tool_result_data, ensure_ascii=False)}")
+        if result.next_activity_goal:
+            parts.append(f"接下来：{result.next_activity_goal}")
 
         log_tool_end("update_workflow_state", sid, rid, {
-            "activity": result.current_step, "advanced": True,
+            "activity": result.current_activity,
+            "next_activity": result.next_activity_id,
         })
-        return summary
+        return "\n".join(parts)
 
     except Exception as e:
         log_tool_end("update_workflow_state", sid, rid, exc=e)
         return f"error: update_workflow_state failed - {e}"
 
 
-def _calc_pending(step_detail: dict[str, Any], session_state: dict[str, Any]) -> list[str]:
-    expected: list[dict[str, str]] = step_detail.get("expected_fields", [])
-    required: set[str] = {f["name"] for f in expected}
+def _calc_pending(
+    expected_fields: list[dict[str, str]], session_state: dict[str, Any],
+) -> list[str]:
+    required: set[str] = {f["name"] for f in expected_fields}
     return sorted(required - set(session_state.keys()))
 
 
@@ -126,8 +121,8 @@ def _update_prompt(deps: AgentDeps, result: Any) -> None:
     try:
         from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
         deps.system_prompt_override = render_orchestrator_prompt(
-            step_skeleton=result.new_step_skeleton or [],
-            current_step=result.new_step_detail or {},
+            step_skeleton=list(result.new_activity_skeleton),
+            current_step=deps.current_step_detail or {},
             session_state=deps.session_state,
             step_pending_fields=deps.step_pending_fields or [],
             scenario_label=getattr(deps, "scenario_label", ""),
