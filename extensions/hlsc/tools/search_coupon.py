@@ -60,8 +60,12 @@ async def search_coupon(
                 session_id=sid,
                 request_id=rid,
             )
-            fuzzy_keywords.extend(result.get_titles(DOC_COMMERCIAL_ACTIVITY))
-            fuzzy_keywords = list(dict.fromkeys(fuzzy_keywords))
+            expanded: list[str] = result.get_titles(DOC_COMMERCIAL_ACTIVITY)
+            if expanded:
+                fuzzy_keywords.extend(expanded)
+                fuzzy_keywords = list(set(fuzzy_keywords))
+            else:
+                fuzzy_keywords = []
         logger.info("[search_coupon] 步骤1-2完成: fuzzy_keywords=%s", fuzzy_keywords)
 
         # 3. 调用 search_activity_service

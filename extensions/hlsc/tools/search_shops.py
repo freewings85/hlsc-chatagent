@@ -53,7 +53,7 @@ async def search_shops(
     radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
     shop_type_text: Annotated[str, Field(description="商户类型，原样传入用户的描述")] = "",
-    semantic_query: Annotated[list[str], Field(description="其他语义搜索描述，如用户对商户的要求或偏好，提取关键词。调用前回顾对话中用户提到的商户搜索需求关键词，完整组装到此参数")] = [],
+    semantic_query: Annotated[list[str], Field(description="其他语义搜索描述，如用户对商户的**要求**或**偏好**，提取关键词(如服务好、实力强)，不要**地址**和**价格**相关的词。调用前回顾对话中用户提到的商户搜索需求关键词，完整组装到此参数")] = [],
     project_ids: Annotated[Optional[list[int]], Field(description="项目 ID 列表，来自 classify_project。筛选能提供这些项目的商户")] = None,
     top: Annotated[int, Field(description="返回数量上限，默认 10")] = 10,
     min_rating: Annotated[Optional[float], Field(description="最低评分，仅用户明确给出时传入")] = None,
@@ -153,17 +153,31 @@ async def search_shops(
             titles_by_kw: dict[str, list[str]] = result.get_titles_by_keyword(DOC_COMMERCIAL)
             shop_name_set: set[str] = set(shop_name_keywords)
             address_set: set[str] = set(address_keywords)
+            other_set: set[str] = set(other_keywords)
+            # 有命中 → extend 原列表；无命中 → 清空
+            has_shop_name: bool = False
+            has_address: bool = False
+            has_other: bool = False
             for kw, titles in titles_by_kw.items():
                 if kw in shop_name_set:
                     shop_name_keywords.extend(titles)
+                    has_shop_name = True
                 elif kw in address_set:
                     address_keywords.extend(titles)
-                else:
+                    has_address = True
+                elif kw in other_set:
                     other_keywords.extend(titles)
-        # 去重（保持顺序）
-        shop_name_keywords = list(dict.fromkeys(shop_name_keywords))
-        address_keywords = list(dict.fromkeys(address_keywords))
-        other_keywords = list(dict.fromkeys(other_keywords))
+                    has_other = True
+            if not has_shop_name:
+                shop_name_keywords = []
+            if not has_address:
+                address_keywords = []
+            if not has_other:
+                other_keywords = []
+        # 去重
+        shop_name_keywords = list(set(shop_name_keywords))
+        address_keywords = list(set(address_keywords))
+        other_keywords = list(set(other_keywords))
         logger.info("[search_shops] 步骤6完成: shop_name_keywords=%s, address_keywords=%s, other_keywords=%s",
                     shop_name_keywords, address_keywords, other_keywords)
 
