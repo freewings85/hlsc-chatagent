@@ -69,6 +69,12 @@ async def search_shops(
     })
 
     try:
+        # 过滤行政区域名（XX市/XX省/XX县/XX区），LLM 可能仍然传入
+        import re
+        if exact_location and re.fullmatch(r".+[市]", exact_location):
+            logger.info("[search_shops] exact_location='%s' 是行政区域，已忽略", exact_location)
+            exact_location = ""
+
         latitude: float | None = None
         longitude: float | None = None
         city_name: str = None
