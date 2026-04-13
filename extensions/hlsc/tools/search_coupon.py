@@ -60,7 +60,7 @@ async def search_coupon(
                 session_id=sid,
                 request_id=rid,
             )
-            expanded: list[str] = result.get_titles(DOC_COMMERCIAL_ACTIVITY)
+            expanded: list[str] = result.get_titles()
             if expanded:
                 fuzzy_keywords.extend(expanded)
                 fuzzy_keywords = list(set(fuzzy_keywords))

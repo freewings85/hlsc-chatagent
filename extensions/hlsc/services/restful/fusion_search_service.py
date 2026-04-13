@@ -76,24 +76,26 @@ class FusionSearchResult:
                     pass
         return ids
 
-    def get_titles(self, doc_name: str) -> list[str]:
-        """获取指定词库匹配的 title 列表（去重、去空）。"""
+    def get_titles(self, doc_name: str | None = None) -> list[str]:
+        """获取匹配的 title 列表（去重、去空）。doc_name 为 None 时不过滤。"""
+        items: list[MatchedItem] = self.get_by_doc(doc_name) if doc_name else self.all_items()
         seen: set[str] = set()
         titles: list[str] = []
-        for item in self.get_by_doc(doc_name):
+        for item in items:
             if item.title and item.title not in seen:
                 seen.add(item.title)
                 titles.append(item.title)
         return titles
 
-    def get_titles_by_keyword(self, doc_name: str) -> dict[str, list[str]]:
-        """按 keyword 分组获取 title 列表（去重、去空）。
+    def get_titles_by_keyword(self, doc_name: str | None = None) -> dict[str, list[str]]:
+        """按 keyword 分组获取 title 列表（去重、去空）。doc_name 为 None 时不过滤。
 
         返回 {keyword: [title1, title2, ...]}
         """
+        items: list[MatchedItem] = self.get_by_doc(doc_name) if doc_name else self.all_items()
         groups: dict[str, list[str]] = {}
         seen: dict[str, set[str]] = {}
-        for item in self.get_by_doc(doc_name):
+        for item in items:
             if not item.keyword or not item.title:
                 continue
             if item.keyword not in groups:

@@ -56,7 +56,7 @@ async def search_shops(
     semantic_query: Annotated[list[str], Field(description="其他语义搜索描述，如用户对商户的**要求**或**偏好**，提取关键词(如服务好、实力强)，不要**地址**和**价格**相关的词。调用前回顾对话中用户提到的商户搜索需求关键词，完整组装到此参数")] = [],
     project_ids: Annotated[Optional[list[int]], Field(description="项目 ID 列表，来自 classify_project。筛选能提供这些项目的商户")] = None,
     top: Annotated[int, Field(description="返回数量上限，默认 10")] = 10,
-    min_rating: Annotated[Optional[float], Field(description="最低评分，仅用户明确给出时传入")] = None,
+    min_rating: Annotated[Optional[float], Field(description="最低评分，用户明确给出时传入,如果用户要求类似'评分高'或'评价好'，则固定4.0")] = None,
     is_on_activity: Annotated[bool, Field(description="是否正在搞优惠活动")] = False,
     sort_by: Annotated[str, Field(description="排序方式：default（默认相关度）/ distance（距离近优先）/ rating（评分高优先）/ trading_count（成交量高优先）")] = "default",
 ) -> str:
@@ -150,7 +150,7 @@ async def search_shops(
                 session_id=sid,
                 request_id=rid,
             )
-            titles_by_kw: dict[str, list[str]] = result.get_titles_by_keyword(DOC_COMMERCIAL)
+            titles_by_kw: dict[str, list[str]] = result.get_titles_by_keyword()
             shop_name_set: set[str] = set(shop_name_keywords)
             address_set: set[str] = set(address_keywords)
             other_set: set[str] = set(other_keywords)
