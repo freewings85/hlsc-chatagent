@@ -4,13 +4,15 @@
     Agent LLM 调用此工具
     → tool 从 deps 取 temporal_client + workflow_id
     → handle.execute_update("on_state_changed", StateChangeRequest(fields={...}))
-    → Workflow 内部：写 MySQL + 判断字段是否齐了
+    → Workflow 内部：写 MySQL → 调业务 transition → 可能切换 activity
     → 返回 StateChangeResult
+    → tool 如果切换了且有新 AICall → 热切换 context
     → tool 把结果返回给 LLM
 """
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -65,23 +67,73 @@ async def update_workflow_state(
             else:
                 ctx.deps.session_state[k] = v
 
-        # 如果 workflow 返回了最新 session_state，合并
+        # 合并 workflow 返回的最新 session_state
         if result.new_session_state:
             ctx.deps.session_state.update(result.new_session_state)
 
+        if not result.advanced:
+            # 没切换 activity，返回确认
+            log_tool_end("update_workflow_state", sid, rid, {
+                "activity": result.current_step, "advanced": False,
+            })
+            return "ok. 已写入"
+
+        # ── activity 切换了 ──
+
+        # 热切换 tools / skills / prompt（如果新 activity 返回了 AICall）
+        if result.new_available_tools:
+            ctx.deps.available_tools = list(result.new_available_tools)
+        if result.new_available_skills:
+            new_skills: list[str] = list(result.new_available_skills)
+            ctx.deps.allowed_skills = new_skills
+            if new_skills and "Skill" not in ctx.deps.available_tools:
+                ctx.deps.available_tools.append("Skill")
+
+        if result.new_step_detail:
+            ctx.deps.current_step_detail = result.new_step_detail
+            ctx.deps.step_skeleton = result.new_step_skeleton or None
+            ctx.deps.step_pending_fields = _calc_pending(
+                result.new_step_detail, ctx.deps.session_state,
+            )
+            _update_prompt(ctx.deps, result)
+
+        # 构造返回给 LLM 的文本
         summary: str = "ok. 已写入"
-        if result.message:
-            summary += f"（{result.message}）"
+        if result.business_result:
+            summary += f"\n业务数据：{json.dumps(result.business_result, ensure_ascii=False)}"
+        new_goal: str = (result.new_step_detail or {}).get("goal", "")
+        if new_goal:
+            summary += f"\n接下来：{new_goal}"
 
         log_tool_end("update_workflow_state", sid, rid, {
-            "current_step": result.current_step,
-            "advanced": result.advanced,
+            "activity": result.current_step, "advanced": True,
         })
         return summary
 
     except Exception as e:
         log_tool_end("update_workflow_state", sid, rid, exc=e)
         return f"error: update_workflow_state failed - {e}"
+
+
+def _calc_pending(step_detail: dict[str, Any], session_state: dict[str, Any]) -> list[str]:
+    expected: list[dict[str, str]] = step_detail.get("expected_fields", [])
+    required: set[str] = {f["name"] for f in expected}
+    return sorted(required - set(session_state.keys()))
+
+
+def _update_prompt(deps: AgentDeps, result: Any) -> None:
+    """热切换 orchestrator prompt。"""
+    try:
+        from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
+        deps.system_prompt_override = render_orchestrator_prompt(
+            step_skeleton=result.new_step_skeleton or [],
+            current_step=result.new_step_detail or {},
+            session_state=deps.session_state,
+            step_pending_fields=deps.step_pending_fields or [],
+            scenario_label=getattr(deps, "scenario_label", ""),
+        )
+    except Exception:
+        pass
 
 
 update_workflow_state.__doc__ = _DESCRIPTION
