@@ -156,21 +156,16 @@ class StageHook:
     ) -> None:
         _config_loader.ensure_loaded()
 
-        # ── 编排模式：orchestrator 已做好分类 + 工具过滤 ──────────
+        # ── 编排模式：一切由 orchestratorContext 决定，不读 stage_config.yaml ──
         orch_ctx = _extract_orchestrator_context(deps)
         if orch_ctx is not None:
-            scene: str = orch_ctx.scenario
-            config: SceneConfig = _config_loader.get_scene(scene)
-
-            # 场景配置
-            deps.current_scene = scene
+            # 场景 + 工具 + skills + agent_md 全部由 workflow 控制
+            deps.current_scene = orch_ctx.scenario
             deps.available_tools = orch_ctx.available_tools
-            # 编排模式下不暴露 skill（流程由 workflow 驱动，避免 LLM 调 Skill 而非工具）
-            deps.allowed_skills = []
-            # 编排模式用通用 AGENT.md（讲机制），不用场景专属的（讲业务）
+            deps.allowed_skills = orch_ctx.available_skills if orch_ctx.available_skills else []
             deps.current_scene_agent_md = "orchestrated/AGENT.md"
 
-            # 把 orchestrator 元数据解包到 deps，供 update_session_state 工具使用
+            # orchestrator 元数据 → deps
             deps.workflow_id = orch_ctx.workflow_id
             deps.orchestrator_url = orch_ctx.orchestrator_url
             deps.current_step_detail = orch_ctx.current_step.model_dump() if hasattr(orch_ctx.current_step, "model_dump") else dict(orch_ctx.current_step)
@@ -179,16 +174,14 @@ class StageHook:
                 s.model_dump() if hasattr(s, "model_dump") else dict(s)
                 for s in orch_ctx.step_skeleton
             ]
-            # 编排模式下 session_state 由 orchestrator 从 MySQL 传入，合并到 deps
             if orch_ctx.session_state:
                 deps.session_state.update(orch_ctx.session_state)
 
             logger.info(
-                "编排模式: user=%s, scene=%s, agent_md=%s, tools=%d, "
-                "step=%s, pending=%s",
-                user_id, scene, config.agent_md, len(orch_ctx.available_tools),
+                "编排模式: user=%s, scene=%s, tools=%s, skills=%s, step=%s",
+                user_id, orch_ctx.scenario, orch_ctx.available_tools,
+                orch_ctx.available_skills,
                 orch_ctx.current_step.id if hasattr(orch_ctx.current_step, "id") else "?",
-                orch_ctx.step_pending_fields,
             )
             return
 

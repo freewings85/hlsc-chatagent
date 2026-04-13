@@ -90,13 +90,15 @@ async def update_workflow_state(
         if result.new_session_state:
             ctx.deps.session_state.update(result.new_session_state)
 
-        # 2. 切换可用工具（DynamicToolset per_run_step=True 下一步自动生效）
+        # 2. 切换可用工具 + skills（DynamicToolset per_run_step=True 下一步自动生效）
         if result.new_available_tools:
-            # 保留 Skill 工具（如果有）
-            has_skill: bool = "Skill" in ctx.deps.available_tools
             ctx.deps.available_tools = list(result.new_available_tools)
-            if has_skill and "Skill" not in ctx.deps.available_tools:
-                ctx.deps.available_tools.append("Skill")
+        # skills 白名单（空列表 = 不暴露 Skill 工具）
+        new_skills: list[str] = getattr(result, "new_available_skills", []) or []
+        ctx.deps.allowed_skills = new_skills
+        # 如果新 step 有 skills，确保 Skill 工具在 available_tools 里
+        if new_skills and "Skill" not in ctx.deps.available_tools:
+            ctx.deps.available_tools.append("Skill")
 
         # 3. 更新 deps 上的编排字段
         ctx.deps.current_step_detail = result.new_step_detail or None

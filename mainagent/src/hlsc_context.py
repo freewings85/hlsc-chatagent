@@ -49,9 +49,8 @@ class CurrentStepDetail(BaseModel):
     id: str
     name: str
     goal: str
-    success_criteria: str
     expected_fields: list[StepFieldSpec]
-    allowed_next: list[str]
+    success_criteria: str = ""
     skip_hint: str | None = None
     repeatable: bool = False
 
@@ -97,9 +96,11 @@ class OrchestratorContext(BaseModel):
     step_pending_fields: list[str]
     """当前 step 的 expected_fields 中还没收集的字段名（派生数据）"""
 
-    # ── 工具白名单 ──
+    # ── 工具 & Skill 白名单 ──
     available_tools: list[str]
-    """按 current_step.tools + defaults.tools_common 过滤后的工具名列表"""
+    """当前 step 可用的工具名列表"""
+    available_skills: list[str] = []
+    """当前 step 可用的 skill 名列表（空 = 不暴露 Skill 工具）"""
 
 
 # ── 请求上下文 ───────────────────────────────────────────
