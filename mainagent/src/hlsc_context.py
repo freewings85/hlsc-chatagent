@@ -30,6 +30,8 @@ class StepFieldSpec(BaseModel):
 
     name: str
     type: str
+    label: str = ""
+    """中文显示名，如"车架号 VIN"。空则 Checklist 中只显示 name"""
 
 
 class StepBrief(BaseModel):
@@ -72,6 +74,9 @@ class OrchestratorContext(BaseModel):
 
     scenario: str
     """当前业务场景标识（insurance / platform / searchshops / ...）"""
+
+    scenario_label: str = ""
+    """场景中文名（如"保险竞价"），Checklist 进度条显示用"""
 
     # 注意：callback_url 不在这里。它是 HTTP 层通信机制，放在 AsyncChatRequest 顶层。
 
@@ -162,9 +167,9 @@ class HlscContextFormatter(ContextFormatter):
             orch_text: str = render_orchestrator_prompt(
                 step_skeleton=[s.model_dump() for s in orch.step_skeleton],
                 current_step=orch.current_step.model_dump(),
-                completed_steps=orch.completed_steps,
                 session_state=orch.session_state,
                 step_pending_fields=orch.step_pending_fields,
+                scenario_label=orch.scenario_label,
             )
             return base_text + "\n\n" + orch_text
 

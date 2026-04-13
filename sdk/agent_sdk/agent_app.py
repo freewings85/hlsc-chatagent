@@ -301,13 +301,18 @@ class AgentApp:
                 finally:
                     self._running_tasks.pop(task_id, None)
                     # callback 通知 orchestrator turn 结束
+                    logger.info(f"[KAFKA_FWD] done, callback_url={callback_url or '(empty)'}")
                     if callback_url:
                         import time as _time
+                        # 从 context.orchestrator 取 workflow_id
+                        _orch_ctx = (context or {}).get("orchestrator", {}) if isinstance(context, dict) else {}
+                        _wf_id = _orch_ctx.get("workflow_id", "") if isinstance(_orch_ctx, dict) else ""
                         try:
                             import httpx as _httpx
                             async with _httpx.AsyncClient(timeout=5.0) as _cli:
                                 await _cli.post(callback_url, json={
                                     "request_id": request_id,
+                                    "workflow_id": _wf_id,
                                     "status": "success",
                                     "error_message": None,
                                     "completed_at": int(_time.time()),

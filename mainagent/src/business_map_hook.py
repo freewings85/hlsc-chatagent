@@ -165,8 +165,10 @@ class StageHook:
             # 场景配置
             deps.current_scene = scene
             deps.available_tools = orch_ctx.available_tools
-            deps.allowed_skills = config.skills
-            deps.current_scene_agent_md = config.agent_md if config.agent_md else None
+            # 编排模式下不暴露 skill（流程由 workflow 驱动，避免 LLM 调 Skill 而非工具）
+            deps.allowed_skills = []
+            # 编排模式用通用 AGENT.md（讲机制），不用场景专属的（讲业务）
+            deps.current_scene_agent_md = "orchestrated/AGENT.md"
 
             # 把 orchestrator 元数据解包到 deps，供 update_session_state 工具使用
             deps.workflow_id = orch_ctx.workflow_id

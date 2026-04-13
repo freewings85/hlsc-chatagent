@@ -23,7 +23,11 @@ from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, U
 
 from agent_sdk._agent.compact.compactor import CompactResult, Compactor
 from agent_sdk._agent.message.attachment_collector import AttachmentCollector
-from agent_sdk._agent.message.context_injector import inject_context, wrap_system_reminder
+from agent_sdk._agent.message.context_injector import (
+    extract_dynamic_text,
+    inject_context,
+    wrap_system_reminder,
+)
 
 if TYPE_CHECKING:
     from agent_sdk._agent.skills.invoked_store import InvokedSkillStore
@@ -46,6 +50,9 @@ class PreModelCallResult:
 
     compacted: bool
     """是否发生了 compact（调用方据此决定是否更新 MemoryMessageService）。"""
+
+    dynamic_text: str = ""
+    """动态 context 纯文本，由 loop 注入到发给 LLM 的最后一条消息。"""
 
 
 def _remove_by_source(messages: list[ModelMessage], source: str) -> None:
@@ -142,10 +149,14 @@ class PreModelCallMessageService:
         if compact_result.compacted and compact_result.attachments:
             self._attachment_collector.inject(working, compact_result)
 
+        # 提取动态 context 文本，交给 loop 注入到最后一条消息
+        dynamic_text: str = extract_dynamic_text(self._context_messages)
+
         return PreModelCallResult(
             model_messages=working,
             working_messages=list(working),
             compacted=compact_result.compacted,
+            dynamic_text=dynamic_text,
         )
 
     def _build_skill_listing_attachment(self) -> ModelRequest | None:

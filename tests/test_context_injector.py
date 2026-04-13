@@ -14,8 +14,9 @@ from pydantic_ai.messages import (
 )
 
 from agent_sdk._agent.message.context_injector import (
-    DYNAMIC_CONTEXT_END,
-    DYNAMIC_CONTEXT_START,
+    DYNAMIC_CONTEXT_TAG,
+    build_dynamic_context_part,
+    extract_dynamic_text,
     inject_context,
     strip_dynamic_context,
 )
@@ -38,7 +39,7 @@ def _make_user_msg(content: str) -> ModelRequest:
 
 
 class TestInjectContext:
-    """测试 inject_context 的静态/动态拆分。"""
+    """测试 inject_context 的静态注入 + 动态清理。"""
 
     def test_static_context_prepended(self) -> None:
         """静态 context（agent_md, memory）应合并 prepend 到 [0]。"""
@@ -58,8 +59,8 @@ class TestInjectContext:
         assert "MEMORY.md 内容" in first_content
         assert "<system-reminder>" in first_content
 
-    def test_dynamic_context_appended_to_last_user_message(self) -> None:
-        """动态 context（request_context, session_state）应追加到最后 user message。"""
+    def test_dynamic_context_not_injected_by_inject_context(self) -> None:
+        """动态 context 不由 inject_context 注入（由 loop 注入到 node.request）。"""
         messages: list = [_make_user_msg("帮我找个店")]
         context_msgs: list[ModelRequest] = [
             _make_context_msg("AGENT.md 内容", "agent_md"),
@@ -69,16 +70,13 @@ class TestInjectContext:
 
         inject_context(messages, context_msgs)
 
-        # 最后一条 user message 应包含动态 context
+        # 最后一条 user message 不应包含动态 context
         last_user_content: str = messages[-1].parts[0].content
-        assert DYNAMIC_CONTEXT_START in last_user_content
-        assert "current_car: 朗逸" in last_user_content
-        assert "session_state" in last_user_content
-        # 原始内容也在
+        assert DYNAMIC_CONTEXT_TAG not in last_user_content
         assert "帮我找个店" in last_user_content
 
     def test_static_and_dynamic_separated(self) -> None:
-        """静态在 [0]，动态在最后 user message，不混合。"""
+        """静态在 [0]，动态不注入到消息中。"""
         messages: list = [_make_user_msg("附近有什么修车店")]
         context_msgs: list[ModelRequest] = [
             _make_context_msg("AGENT 静态内容", "agent_md"),
@@ -92,9 +90,9 @@ class TestInjectContext:
         assert "AGENT 静态内容" in first_content
         assert "位置: 浦东" not in first_content
 
-        # 最后 user message 包含动态
+        # 最后 user message 不包含动态
         last_content: str = messages[-1].parts[0].content
-        assert "位置: 浦东" in last_content
+        assert DYNAMIC_CONTEXT_TAG not in last_content
 
     def test_no_dynamic_context_no_marker(self) -> None:
         """没有动态 context 时，user message 不应有 dynamic-context 标记。"""
@@ -106,29 +104,147 @@ class TestInjectContext:
         inject_context(messages, context_msgs)
 
         last_content: str = messages[-1].parts[0].content
-        assert DYNAMIC_CONTEXT_START not in last_content
+        assert DYNAMIC_CONTEXT_TAG not in last_content
+
+    def test_old_dynamic_context_stripped_from_history(self) -> None:
+        """inject_context 应清理历史消息上残留的旧 dynamic-context。"""
+        old_dynamic: str = "\n<dynamic-context>\nold_stuff\n</dynamic-context>"
+        messages: list[ModelMessage] = [
+            _make_user_msg("旧消息" + old_dynamic),
+            ModelResponse(parts=[TextPart(content="回复")]),
+            _make_user_msg("新消息"),
+        ]
+        context_msgs: list[ModelRequest] = [
+            _make_context_msg("AGENT 内容", "agent_md"),
+        ]
+
+        inject_context(messages, context_msgs)
+
+        # 旧消息上的 dynamic-context 应被清理
+        old_msg: ModelRequest = messages[1]  # [0] is merged context
+        old_content: str = old_msg.parts[0].content
+        assert DYNAMIC_CONTEXT_TAG not in old_content
+        assert "旧消息" in old_content
+
+    def test_new_format_dynamic_context_stripped(self) -> None:
+        """inject_context 应清理新格式的 dynamic-context（带 system-reminder 包裹）。"""
+        new_dynamic: str = (
+            "\n<system-reminder>\n<dynamic-context>\nnew_stuff\n</dynamic-context>\n</system-reminder>"
+        )
+        messages: list[ModelMessage] = [
+            _make_user_msg("消息" + new_dynamic),
+        ]
+
+        inject_context(messages, [])
+
+        content: str = messages[0].parts[0].content
+        assert DYNAMIC_CONTEXT_TAG not in content
+        assert "<system-reminder>" not in content
+        assert "消息" in content
+
+
+class TestExtractDynamicText:
+    """测试 extract_dynamic_text 提取动态上下文文本。"""
+
+    def test_extract_from_request_context(self) -> None:
+        """从 request_context 消息中提取文本。"""
+        context_msgs: list[ModelRequest] = [
+            _make_context_msg("AGENT.md 内容", "agent_md"),
+            _make_context_msg("current_car: 朗逸", "request_context"),
+        ]
+
+        text: str = extract_dynamic_text(context_msgs)
+
+        assert "current_car: 朗逸" in text
+        assert "AGENT.md 内容" not in text  # 静态不提取
+
+    def test_extract_multiple_dynamic(self) -> None:
+        """多个动态消息合并提取。"""
+        context_msgs: list[ModelRequest] = [
+            _make_context_msg("car=朗逸", "request_context"),
+            _make_context_msg("scene=guide", "session_state"),
+        ]
+
+        text: str = extract_dynamic_text(context_msgs)
+
+        assert "car=朗逸" in text
+        assert "scene=guide" in text
+
+    def test_extract_empty_when_no_dynamic(self) -> None:
+        """没有动态消息时返回空字符串。"""
+        context_msgs: list[ModelRequest] = [
+            _make_context_msg("AGENT 内容", "agent_md"),
+        ]
+
+        text: str = extract_dynamic_text(context_msgs)
+        assert text == ""
+
+
+class TestBuildDynamicContextPart:
+    """测试 build_dynamic_context_part 构建。"""
+
+    def test_builds_user_prompt_part(self) -> None:
+        """应返回包含 system-reminder + ## dynamic-context 的 UserPromptPart。"""
+        part: UserPromptPart = build_dynamic_context_part("car=朗逸")
+
+        assert isinstance(part, UserPromptPart)
+        assert isinstance(part.content, str)
+        assert "<system-reminder>" in part.content
+        assert DYNAMIC_CONTEXT_TAG in part.content
+        assert "car=朗逸" in part.content
+        assert "</system-reminder>" in part.content
+
+    def test_content_structure(self) -> None:
+        """验证内容结构：<system-reminder> 包裹 ## dynamic-context。"""
+        part: UserPromptPart = build_dynamic_context_part("test_content")
+        content: str = part.content
+
+        # system-reminder 在外层
+        sr_start: int = content.index("<system-reminder>")
+        sr_end: int = content.index("</system-reminder>")
+        dc_start: int = content.index("## dynamic-context")
+
+        assert sr_start < dc_start < sr_end
+        assert "test_content" in content
 
 
 class TestStripDynamicContext:
     """测试 strip_dynamic_context 剥离逻辑（持久化前用）。"""
 
-    def test_strip_removes_dynamic_block(self) -> None:
-        """应移除 <dynamic-context> 块及其内容。"""
-        text: str = f"用户消息{DYNAMIC_CONTEXT_START}\n动态内容\n{DYNAMIC_CONTEXT_END}"
+    def test_strip_old_format(self) -> None:
+        """应移除旧格式 <dynamic-context> 块及其内容。"""
+        text: str = "用户消息\n<dynamic-context>\n动态内容\n</dynamic-context>"
         result: str = strip_dynamic_context(text)
         assert result == "用户消息"
         assert "动态内容" not in result
 
+    def test_strip_new_format(self) -> None:
+        """应移除新格式（system-reminder 包裹）的 <dynamic-context> 块。"""
+        text: str = (
+            "用户消息\n"
+            "<system-reminder>\n<dynamic-context>\n动态内容\n</dynamic-context>\n</system-reminder>"
+        )
+        result: str = strip_dynamic_context(text)
+        assert result == "用户消息"
+        assert "动态内容" not in result
+        assert "<system-reminder>" not in result
+
+    def test_strip_standalone_new_format(self) -> None:
+        """独立的新格式（整个内容都是 dynamic-context）应被完全移除。"""
+        text: str = (
+            "<system-reminder>\n<dynamic-context>\n动态内容\n</dynamic-context>\n</system-reminder>"
+        )
+        result: str = strip_dynamic_context(text)
+        assert result == ""
+
     def test_strip_preserves_text_without_marker(self) -> None:
         """没有标记时应原样返回。"""
-        text: str = "普通文本"
-        result: str = strip_dynamic_context(text)
+        result: str = strip_dynamic_context("普通文本")
         assert result == "普通文本"
 
     def test_strip_handles_empty_string(self) -> None:
         """空字符串应返回空。"""
-        result: str = strip_dynamic_context("")
-        assert result == ""
+        assert strip_dynamic_context("") == ""
 
 
 # --------------------------------------------------------------------------- #
@@ -156,111 +272,84 @@ def _make_tool_return_request(tool_name: str, call_id: str, result: str) -> Mode
     ])
 
 
-class TestMultiTurnDynamicContext:
-    """多轮对话场景下动态 context 的注入行为。"""
+class TestInjectContextCleanup:
+    """测试 inject_context 对历史消息中旧 dynamic-context 的清理。"""
 
-    def test_dynamic_appended_to_last_user_in_multi_turn(self) -> None:
-        """多轮 user/assistant 交替，动态 context 应追加到最后一条 user message。"""
+    def test_old_dynamic_context_cleaned_on_new_turn(self) -> None:
+        """模拟多轮对话：上一轮 user message 有 dynamic-context，inject 应清理掉。"""
+        old_dynamic: str = (
+            "\n<dynamic-context>\n"
+            "[request_context]: current_car: (未设置)\n"
+            "</dynamic-context>"
+        )
         messages: list[ModelMessage] = [
-            _make_user_msg("第一轮用户消息"),
-            _make_assistant_msg("第一轮助手回复"),
-            _make_user_msg("第二轮用户消息"),
-            _make_assistant_msg("第二轮助手回复"),
-            _make_user_msg("第三轮用户消息"),
+            _make_user_msg("南翔医院附近有可以洗车的店吗" + old_dynamic),
+            ModelResponse(parts=[
+                ToolCallPart(
+                    tool_name="search_shops",
+                    args='{"location_text":"南翔医院"}',
+                    tool_call_id="call_1",
+                ),
+            ]),
+            ModelRequest(parts=[
+                ToolReturnPart(
+                    tool_name="search_shops",
+                    content='{"total": 10}',
+                    tool_call_id="call_1",
+                ),
+            ]),
+            ModelResponse(parts=[TextPart(content="找到这些店…")]),
+            _make_user_msg("附近有补胎的活动吗？"),
         ]
+
         context_msgs: list[ModelRequest] = [
             _make_context_msg("AGENT.md 内容", "agent_md"),
-            _make_context_msg("car=朗逸", "request_context"),
+            _make_context_msg("car: 朗逸", "request_context"),
         ]
 
         inject_context(messages, context_msgs)
 
-        # 动态 context 只追加到最后一条 user message（第三轮）
-        last_user: ModelRequest = messages[-1]
-        last_content: str = last_user.parts[0].content
-        assert DYNAMIC_CONTEXT_START in last_content
-        assert "car=朗逸" in last_content
-        assert "第三轮用户消息" in last_content
+        # 旧 user message 上的 dynamic-context 应被清理
+        # messages[0] 是 merged static context，messages[1] 是旧 user message
+        old_user_msg: ModelRequest = messages[1]
+        old_content: str = old_user_msg.parts[0].content  # type: ignore[union-attr]
+        assert DYNAMIC_CONTEXT_TAG not in old_content
+        assert "南翔医院" in old_content
 
-        # 前面的 user messages 不应包含动态 context
-        # messages[0] 是 merged static context, messages[1] 是第一轮用户
-        first_user: ModelRequest = messages[1]
-        first_content: str = first_user.parts[0].content
-        assert DYNAMIC_CONTEXT_START not in first_content
+        # 新 user message 也不应被 inject_context 注入（由 loop 负责）
+        new_user_msg: ModelRequest = messages[-1]
+        new_content: str = new_user_msg.parts[0].content  # type: ignore[union-attr]
+        assert DYNAMIC_CONTEXT_TAG not in new_content
+        assert "附近有补胎的活动吗？" in new_content
 
-    def test_dynamic_appended_to_tool_return_as_last_user(self) -> None:
-        """最后一条 user message 是 tool_return 时，动态 context 追加到它的 UserPromptPart。
-
-        如果 tool_return 没有 UserPromptPart，应回退到 fallback。
-        """
+    def test_new_format_dynamic_context_cleaned(self) -> None:
+        """新格式（system-reminder 包裹）的 dynamic-context 也应被清理。"""
+        dc_part: UserPromptPart = build_dynamic_context_part("car=朗逸, scene=guide")
         messages: list[ModelMessage] = [
-            _make_user_msg("帮我查个店"),
-            _make_tool_call_response("search_shops", "call_1"),
-            _make_tool_return_request("search_shops", "call_1", "找到 3 家店"),
-        ]
-        context_msgs: list[ModelRequest] = [
-            _make_context_msg("state: active", "session_state"),
+            ModelRequest(parts=[
+                UserPromptPart(content="用户消息"),
+                dc_part,  # 上一轮 loop 注入的 dynamic-context part
+            ]),
+            ModelResponse(parts=[TextPart(content="回复")]),
+            _make_user_msg("新消息"),
         ]
 
-        inject_context(messages, context_msgs)
+        inject_context(messages, [])
 
-        # tool_return 的 ModelRequest 没有 UserPromptPart，所以会 fallback
-        # 验证 fallback 消息被追加
-        last_msg: ModelMessage = messages[-1]
-        assert isinstance(last_msg, ModelRequest)
-        # fallback 消息应包含 dynamic content
-        found_dynamic: bool = False
-        for part in last_msg.parts:
+        # 旧的 dynamic-context part 内容应被清理（变为空字符串）
+        first_msg: ModelRequest = messages[0]
+        for part in first_msg.parts:
             if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                if "state: active" in part.content:
-                    found_dynamic = True
-        # 如果 fallback 被使用，它应该是最后一条；
-        # 如果 tool_return 之前的 user msg 被选中，也 OK
-        # 关键是动态 context 出现在某处
-        any_has_dynamic: bool = any(
-            DYNAMIC_CONTEXT_START in part.content
-            for msg in messages
-            if isinstance(msg, ModelRequest)
-            for part in msg.parts
-            if isinstance(part, UserPromptPart) and isinstance(part.content, str)
-        )
-        assert any_has_dynamic or found_dynamic
-
-    def test_earlier_user_messages_not_modified(self) -> None:
-        """确认动态 context 只影响最后一条 user message，不影响更早的消息。"""
-        messages: list[ModelMessage] = [
-            _make_user_msg("消息A"),
-            _make_assistant_msg("回复A"),
-            _make_user_msg("消息B"),
-        ]
-        context_msgs: list[ModelRequest] = [
-            _make_context_msg("dynamic_data", "request_context"),
-        ]
-
-        inject_context(messages, context_msgs)
-
-        # 消息A 不应包含动态 context
-        msg_a: ModelRequest = messages[0]
-        for part in msg_a.parts:
-            if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                assert DYNAMIC_CONTEXT_START not in part.content
-
-        # 消息B 应包含动态 context
-        msg_b: ModelRequest = messages[-1]
-        msg_b_content: str = msg_b.parts[0].content
-        assert DYNAMIC_CONTEXT_START in msg_b_content
-        assert "dynamic_data" in msg_b_content
+                assert DYNAMIC_CONTEXT_TAG not in part.content
 
 
 class TestFromModelMessagesStrip:
     """测试 from_model_messages 中 strip_dynamic_context 的剥离行为。"""
 
-    def test_strip_dynamic_in_user_prompt_part(self) -> None:
-        """UserPromptPart 中的 <dynamic-context> 应被 from_model_messages 剥离。"""
+    def test_strip_old_format_in_user_prompt_part(self) -> None:
+        """UserPromptPart 中旧格式 <dynamic-context> 应被剥离。"""
         original_text: str = "用户原始消息"
-        dynamic_block: str = (
-            f"{DYNAMIC_CONTEXT_START}\ncar=朗逸\nstate=active\n{DYNAMIC_CONTEXT_END}"
-        )
+        dynamic_block: str = "\n<dynamic-context>\ncar=朗逸\n</dynamic-context>"
         messages: list[ModelMessage] = [
             ModelRequest(parts=[
                 UserPromptPart(content=original_text + dynamic_block),
@@ -272,22 +361,35 @@ class TestFromModelMessagesStrip:
         assert len(result) == 1
         assert result[0].role == "user"
         assert result[0].content == "用户原始消息"
-        assert DYNAMIC_CONTEXT_START not in result[0].content
-        assert "car=朗逸" not in result[0].content
+        assert DYNAMIC_CONTEXT_TAG not in result[0].content
+
+    def test_strip_new_format_standalone_part(self) -> None:
+        """独立的 dynamic-context UserPromptPart（新格式）应被剥离为空。"""
+        dc_part: UserPromptPart = build_dynamic_context_part("car=朗逸")
+        messages: list[ModelMessage] = [
+            ModelRequest(parts=[
+                UserPromptPart(content="用户消息"),
+                dc_part,
+            ]),
+        ]
+
+        result = from_model_messages(messages)
+
+        assert len(result) == 1
+        assert result[0].content == "用户消息"
+        assert DYNAMIC_CONTEXT_TAG not in result[0].content
 
     def test_strip_preserves_tool_results(self) -> None:
         """剥离 dynamic context 不影响同一 ModelRequest 中的 ToolReturnPart。"""
-        dynamic_block: str = (
-            f"{DYNAMIC_CONTEXT_START}\nsession=xyz\n{DYNAMIC_CONTEXT_END}"
-        )
+        dc_part: UserPromptPart = build_dynamic_context_part("session=xyz")
         messages: list[ModelMessage] = [
             ModelRequest(parts=[
-                UserPromptPart(content="查询结果" + dynamic_block),
                 ToolReturnPart(
                     tool_name="search_shops",
                     content="找到 5 家店",
                     tool_call_id="call_123",
                 ),
+                dc_part,
             ]),
         ]
 
@@ -295,22 +397,21 @@ class TestFromModelMessagesStrip:
 
         assert len(result) == 1
         user_msg = result[0]
-        assert user_msg.content == "查询结果"
         assert len(user_msg.tool_results) == 1
         assert user_msg.tool_results[0].content == "找到 5 家店"
+        assert DYNAMIC_CONTEXT_TAG not in user_msg.content
 
     def test_strip_in_multi_turn_messages(self) -> None:
-        """多轮消息中所有 UserPromptPart 的 dynamic-context 都应被剥离。"""
-        dynamic_block: str = (
-            f"{DYNAMIC_CONTEXT_START}\ndynamic_stuff\n{DYNAMIC_CONTEXT_END}"
-        )
+        """多轮消息中所有 dynamic-context 都应被剥离。"""
         messages: list[ModelMessage] = [
             ModelRequest(parts=[
-                UserPromptPart(content="消息1" + dynamic_block),
+                UserPromptPart(content="消息1"),
+                build_dynamic_context_part("dynamic1"),
             ]),
             ModelResponse(parts=[TextPart(content="回复1")]),
             ModelRequest(parts=[
-                UserPromptPart(content="消息2" + dynamic_block),
+                UserPromptPart(content="消息2"),
+                build_dynamic_context_part("dynamic2"),
             ]),
         ]
 
@@ -320,33 +421,5 @@ class TestFromModelMessagesStrip:
         assert result[0].content == "消息1"
         assert result[1].content == "回复1"
         assert result[2].content == "消息2"
-        # 确认所有动态标记都被剥离
         for msg in result:
-            assert DYNAMIC_CONTEXT_START not in msg.content
-            assert "dynamic_stuff" not in msg.content
-
-    def test_meta_messages_with_dynamic_skipped(self) -> None:
-        """is_meta 的 merged context 消息不应出现在持久化结果中。"""
-        messages: list[ModelMessage] = [
-            # merged static context（is_meta=True）
-            ModelRequest(
-                parts=[UserPromptPart(content="<system-reminder>AGENT内容</system-reminder>")],
-                metadata={"is_meta": True, "source": "merged_context"},
-            ),
-            # 普通 user message 带 dynamic
-            ModelRequest(parts=[
-                UserPromptPart(
-                    content=f"你好{DYNAMIC_CONTEXT_START}\nstate\n{DYNAMIC_CONTEXT_END}",
-                ),
-            ]),
-            ModelResponse(parts=[TextPart(content="你好！")]),
-        ]
-
-        result = from_model_messages(messages)
-
-        # is_meta 消息不应进入持久化（content_parts 和 tool_results 都为空 → 被跳过）
-        # 但 merged_context 有 UserPromptPart，所以实际上会产出一条
-        # 关键是 dynamic-context 被剥离
-        user_msgs = [m for m in result if m.role == "user"]
-        for um in user_msgs:
-            assert DYNAMIC_CONTEXT_START not in um.content
+            assert DYNAMIC_CONTEXT_TAG not in msg.content

@@ -227,27 +227,26 @@ async def _emit_model_stream(
     ctx: Any,
     emitter: EventEmitter,
     task: SessionRequestTask,
-    messages_count: int = 0,
-    messages: list[ModelMessage] | None = None,
-    user_prompt: str | None = None,
     agent_name: str = "main",
     parent_tool_call_id: str | None = None,
 ) -> None:
     """流式消费 ModelRequestNode，逐 token 发出 TEXT / TOOL_CALL 事件。
 
     stream 结束后 node._result 已设置，后续 run.next(node) 不会重复调 LLM。
+    日志在 node.stream(ctx) 进入后打印，此时 _prepare_request 已执行，
+    ctx.state.message_history 是发给 LLM 的真实完整消息列表。
     """
-    log_llm_start(
-        "ModelRequestNode",
-        messages_count=messages_count,
-        messages=messages,
-        user_prompt=user_prompt,
-    )
-
     _text_parts: list[str] = []
     _tool_call_names: list[str] = []
 
     async with node.stream(ctx) as agent_stream:
+        # _prepare_request 已执行，ctx.state.message_history 是真实发给 LLM 的消息
+        actual_messages: list[ModelMessage] = ctx.state.message_history
+        log_llm_start(
+            "ModelRequestNode",
+            messages_count=len(actual_messages),
+            messages=actual_messages,
+        )
         async for event in agent_stream:
             if isinstance(event, PartStartEvent):
                 part = event.part
@@ -483,6 +482,11 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
 
                     run._graph_run.state.message_history[:] = pre_result.model_messages
 
+                    # 注入 dynamic-context 到发给 LLM 的最后一条消息
+                    if pre_result.dynamic_text:
+                        from agent_sdk._agent.message.context_injector import build_dynamic_context_part
+                        node.request.parts.append(build_dynamic_context_part(pre_result.dynamic_text))
+
                     if _first_llm_call:
                         pending_user: str | None = task.message
                     else:
@@ -500,9 +504,6 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
 
                     await _emit_model_stream(
                         node, run.ctx, emitter, task,
-                        messages_count=len(pre_result.model_messages),
-                        messages=pre_result.model_messages,
-                        user_prompt=task.message if _first_llm_call else None,
                         agent_name=agent_name,
                         parent_tool_call_id=ctx.parent_tool_call_id,
                     )

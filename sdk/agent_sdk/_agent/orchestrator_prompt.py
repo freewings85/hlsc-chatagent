@@ -1,96 +1,56 @@
-"""Orchestrator 编排模式的系统提示词渲染。
+"""Orchestrator 编排模式的动态上下文渲染（v2）。
 
-对应 orchestrator-design.md §8.4。把 workflow 的骨架状态和当前 step 详情渲染成
-一段可读的 system prompt 注入到 LLM 上下文里。
-
-不能把全部细节塞进来——prompt 长度控制，重点：
-- 全局骨架（让 Agent 知道自己在整个流程的什么位置）
-- 当前 step 的目标 + 成功判据 + 需要收集的字段
-- allowed_next（Workflow 已经按 requires 过滤过）
-- step_pending_fields（温和提醒哪些字段还没齐）
-- 推进规则（强约束：工具返回非 ok 时必须如实告诉用户）
+设计原则：
+- Checklist 作为唯一的字段状态视图（合并 expected_fields + session_state + pending）
+- 进度条一行（不展开非当前 step 的 goal）
+- 只渲染动态数据，静态行为准则放 AGENT.md
+- ~100 token/轮，比 v1（~400 token）节省 75%
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+# 值截断阈值
+_VALUE_MAX: int = 40
+
 
 def render_orchestrator_prompt(
     step_skeleton: list[dict[str, Any]],
     current_step: dict[str, Any],
-    completed_steps: list[str],
     session_state: dict[str, Any],
     step_pending_fields: list[str],
+    scenario_label: str = "",
 ) -> str:
     """渲染 orchestrator 编排上下文。"""
     parts: list[str] = []
 
-    # 全局骨架
-    if step_skeleton:
-        parts.append("## 当前场景 Workflow 全局骨架")
+    # ── 进度条（一行）──
+    progress: str = _render_progress(step_skeleton, scenario_label)
+    if progress:
+        parts.append(progress)
         parts.append("")
-        parts.append(_render_skeleton(step_skeleton))
+
+    # ── 当前目标 ──
+    goal: str = current_step.get("goal", "")
+    if goal:
+        parts.append(f"## 目标\n{goal}")
         parts.append("")
 
-    # 当前 step 详情
-    parts.append("## 当前聚焦 Step")
-    parts.append("")
-    parts.append(f"- **Step ID**: {current_step.get('id', '')}")
-    parts.append(f"- **名称**: {current_step.get('name', '')}")
-    parts.append(f"- **目标**: {current_step.get('goal', '')}")
-    parts.append(f"- **完成标准**: {current_step.get('success_criteria', '')}")
-    parts.append(
-        f"- **需要收集的字段**: {_render_fields(current_step.get('expected_fields', []))}"
+    # ── Checklist ──
+    checklist: str = _render_checklist(
+        current_step.get("expected_fields", []),
+        session_state,
+        step_pending_fields,
     )
-    allowed_next: list[str] = current_step.get("allowed_next") or []
-    parts.append(
-        f"- **允许的下一步**: {', '.join(allowed_next) if allowed_next else '(END)'}"
-    )
-    skip_hint: str | None = current_step.get("skip_hint")
-    if skip_hint:
-        parts.append(f"- **跳过提示**: {skip_hint}")
-    parts.append("")
+    if checklist:
+        parts.append(f"## Checklist\n{checklist}")
+        parts.append("")
 
-    # 会话状态
-    parts.append("## 已收集的会话状态")
-    parts.append("")
-    parts.append(_render_session_state(session_state))
-    parts.append("")
-
-    # 待收集字段（温和提醒）
-    parts.append("## 当前 Step 待收集字段")
-    parts.append("")
-    parts.append(_render_pending_fields(step_pending_fields))
-    parts.append("")
-
-    # 推进规则
-    parts.append("## 推进规则")
-    parts.append("")
-    parts.append(
-        "- **收集到 current_step.expected_fields 中的全部字段后**，必须调用 "
-        "`update_session_state(updates={...}, advance_to=<next_step_id>)` 工具把"
-        "字段写入并声明推进"
-    )
-    parts.append(
-        "- `advance_to` 必须在 `allowed_next` 里；`END` 表示整个流程结束"
-    )
-    parts.append(
-        "- 如果用户改变主意要回到之前的步骤，调 "
-        "`update_session_state(updates={}, revert_to=<step_id>, revert_reason=...)`"
-    )
-    parts.append(
-        "- **不要**擅自声称完成了某个 step —— 没调 `update_session_state` 就不算数"
-    )
-    parts.append(
-        "- **工具返回值必须信**：工具返回以 `error:` 或大写错误码开头时"
-        "（如 `MISSING_FIELDS:...` / `ILLEGAL_TRANSITION:...`），说明推进被拒，"
-        "本轮 final 必须如实告诉用户缺了什么，**不能假装已完成**"
-    )
-    parts.append(
-        "- **同 turn 内最多推进一次**：advance/revert 成功后不要在同一 turn 再"
-        "调 `update_session_state` 做第二次推进，直接生成 final 回复结束本轮"
-    )
+    # ── 指令行 ──
+    hint: str = _render_action_hint(step_pending_fields)
+    if hint:
+        parts.append(hint)
 
     return "\n".join(parts)
 
@@ -98,51 +58,79 @@ def render_orchestrator_prompt(
 # ── 渲染辅助 ───────────────────────────────────────────────
 
 
-def _render_skeleton(skeleton: list[dict[str, Any]]) -> str:
-    """渲染全局骨架：
-        ✓ collect_info     收集投保信息
-        * propose_quotes   出价与推送          ← 当前
-        ○ ...
-    """
-    lines: list[str] = []
-    for brief in skeleton:
+def _render_progress(
+    skeleton: list[dict[str, Any]],
+    scenario_label: str,
+) -> str:
+    """一行进度：## 进度：保险竞价 [1/2]\n✓ 收集信息 → * 生成报价"""
+    if not skeleton:
+        return ""
+
+    total: int = len(skeleton)
+    current_idx: int = 0
+    markers: list[str] = []
+
+    for i, brief in enumerate(skeleton):
         status: str = brief.get("status", "pending")
-        marker: str = {"done": "✓", "current": "*", "pending": "○"}.get(status, "○")
-        suffix: str = "        ← 当前" if status == "current" else ""
-        sid: str = brief.get("id", "")
-        goal_short: str = brief.get("goal_short", "")
-        lines.append(f"{marker} {sid:<20}{goal_short}{suffix}")
+        name: str = brief.get("name", brief.get("id", ""))
+        if status == "done":
+            markers.append(f"✓ {name}")
+        elif status == "current":
+            current_idx = i + 1
+            markers.append(f"* {name}")
+        else:
+            markers.append(f"○ {name}")
+
+    # 超过 5 步时折叠远端 pending
+    if total > 5:
+        keep: int = current_idx + 1
+        if keep < total:
+            remaining: int = total - keep
+            markers = markers[:keep] + [f"○ ...({remaining} 步)"]
+
+    label: str = f"：{scenario_label}" if scenario_label else ""
+    return f"## 进度{label} [{current_idx}/{total}]\n" + " → ".join(markers)
+
+
+def _render_checklist(
+    expected_fields: list[dict[str, str]],
+    session_state: dict[str, Any],
+    pending: list[str],
+) -> str:
+    """渲染 [x]/[ ] checklist。"""
+    if not expected_fields:
+        return ""
+
+    pending_set: set[str] = set(pending)
+    lines: list[str] = []
+
+    for f in expected_fields:
+        name: str = f.get("name", "")
+        label: str = f.get("label", "")
+        display: str = f"{name}（{label}）" if label else name
+
+        if name not in pending_set:
+            value: Any = session_state.get(name)
+            value_str: str = _format_value(value)
+            lines.append(f"- [x] {display} = {value_str}")
+        else:
+            lines.append(f"- [ ] {display}")
+
     return "\n".join(lines)
 
 
-def _render_fields(fields: list[dict[str, str]]) -> str:
-    if not fields:
-        return "(无)"
-    return ", ".join(f"{f.get('name', '')}:{f.get('type', '')}" for f in fields)
+def _format_value(value: Any) -> str:
+    """短值完整显示，长值截断。"""
+    if value is None:
+        return "(已收集)"
+    s: str = str(value)
+    if len(s) <= _VALUE_MAX:
+        return s
+    return s[:_VALUE_MAX] + "..."
 
 
-def _render_session_state(state: dict[str, Any]) -> str:
-    if not state:
-        return "(空)"
-    pairs: list[str] = []
-    for k, v in state.items():
-        if v is None:
-            continue
-        v_str: str = str(v)
-        if len(v_str) > 100:
-            v_str = v_str[:100] + "..."
-        pairs.append(f"- {k} = {v_str}")
-    return "\n".join(pairs) if pairs else "(空)"
-
-
-def _render_pending_fields(pending: list[str]) -> str:
-    if not pending:
-        return (
-            "(无，当前 step 的必填字段都已齐备，"
-            "可以调 update_session_state 推进)"
-        )
-    return (
-        f"💡 当前 step 还需要：{', '.join(pending)}\n\n"
-        f"在合适的时机自然地向用户询问这些信息，**不要打断用户正在问的话题**。"
-        f"如果用户本轮问的是别的事，先正常回答再伺机询问。"
-    )
+def _render_action_hint(pending: list[str]) -> str:
+    """Checklist 下方的指令行。"""
+    if pending:
+        return "→ 从用户消息中提取信息后及时调 update_workflow_state 写入，不必等全部收齐"
+    return "→ 全部字段已齐，调 update_workflow_state(fields={...}) 写入"

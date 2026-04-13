@@ -2,13 +2,15 @@
 
 分为两类：
 - **静态 context**（AGENT.md、MEMORY.md）：合并为一条消息 prepend 到 [0]，利于 prompt cache
-- **动态 context**（request_context、session_state）：追加到最后一条 user message 末尾，
-  用 DYNAMIC_CONTEXT 标记包裹，持久化时剥离
+- **动态 context**（request_context、session_state）：由 loop 在发给 LLM 前注入到最后一条消息末尾，
+  用 <system-reminder><dynamic-context> 标记包裹，持久化时剥离
 
 参考 Claude Code 的注入机制 + prompt caching 优化。
 """
 
 from __future__ import annotations
+
+import re
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
@@ -18,9 +20,16 @@ _MERGED_META_SOURCE = "merged_context"
 # 动态 context 的 source 标识（request_context、session_state）
 _DYNAMIC_SOURCES: frozenset[str] = frozenset({"request_context", "session_state"})
 
-# 动态 context 在 user message 中的包裹标记
-DYNAMIC_CONTEXT_START = "\n<dynamic-context>"
-DYNAMIC_CONTEXT_END = "</dynamic-context>"
+# 动态 context 检测用的标记（用于测试断言）
+DYNAMIC_CONTEXT_TAG = "## dynamic-context"
+
+# strip 用的正则：匹配新格式（## dynamic-context）和旧格式（<dynamic-context>）
+_STRIP_DYNAMIC_RE: re.Pattern[str] = re.compile(
+    r"\n?<system-reminder>\n## dynamic-context\n.*?\n</system-reminder>"  # 新格式
+    r"|"
+    r"\n?(?:<system-reminder>\n?)?<dynamic-context>.*?</dynamic-context>\n?(?:</system-reminder>)?",  # 旧格式
+    re.DOTALL,
+)
 
 
 def wrap_system_reminder(content: str) -> str:
@@ -75,91 +84,77 @@ def merge_context_messages(context_messages: list[ModelRequest]) -> ModelRequest
     )
 
 
-def _extract_dynamic_text(dynamic_messages: list[ModelRequest]) -> str:
-    """从动态 context messages 中提取纯文本。"""
+def extract_dynamic_text(context_messages: list[ModelRequest]) -> str:
+    """从 context_messages 中提取动态 context 的纯文本。"""
+    _, dynamic_msgs = _split_context(context_messages)
     parts: list[str] = []
-    for msg in dynamic_messages:
+    for msg in dynamic_msgs:
         for part in msg.parts:
             if isinstance(part, UserPromptPart) and isinstance(part.content, str):
                 parts.append(part.content)
     return "\n\n".join(parts) if parts else ""
 
 
+def build_dynamic_context_part(dynamic_text: str) -> UserPromptPart:
+    """构建包含动态 context 的 UserPromptPart。
+
+    格式：<system-reminder> + markdown ## dynamic-context 标题 + 内容
+    作为最后一条消息的最后一个 part 追加，确保 LLM 始终能看到最新上下文。
+    """
+    content: str = wrap_system_reminder(
+        f"## dynamic-context\n\n{dynamic_text}"
+    )
+    return UserPromptPart(content=content)
+
+
 def inject_context(
     messages: list[ModelMessage],
     context_messages: list[ModelRequest],
 ) -> None:
-    """将上下文消息注入到消息列表中（prompt cache 友好）。
+    """将静态上下文注入到消息列表中（prompt cache 友好）。
 
     - 静态 context（AGENT.md、MEMORY.md）→ 合并为一条 prepend 到 [0]
-    - 动态 context（request_context、session_state）→ 追加到最后一条 user message 末尾
+    - 动态 context 不在此处注入（由 loop 在发给 LLM 前注入到 node.request）
 
     直接修改 messages 列表（in-place）。
     """
-    # 移除旧的 merged context
+    # 移除旧的 merged context 和旧的 dynamic_context_fallback
     messages[:] = [
         msg for msg in messages
         if not (
             isinstance(msg, ModelRequest)
             and isinstance(msg.metadata, dict)
-            and msg.metadata.get("source") == _MERGED_META_SOURCE
+            and msg.metadata.get("source") in (_MERGED_META_SOURCE, "dynamic_context_fallback")
         )
     ]
 
-    static_msgs, dynamic_msgs = _split_context(context_messages)
+    # 清理所有消息上残留的旧 dynamic-context，移除 strip 后变空的 part
+    for msg in messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        for part in msg.parts:
+            if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                part.content = strip_dynamic_context(part.content)
+        msg.parts[:] = [
+            p for p in msg.parts
+            if not (isinstance(p, UserPromptPart) and isinstance(p.content, str) and not p.content)
+        ]
+
+    static_msgs, _ = _split_context(context_messages)
 
     # 静态 context → prepend [0]（prompt cache 友好）
     merged: ModelRequest | None = merge_context_messages(static_msgs)
     if merged is not None:
         messages.insert(0, merged)
 
-    # 动态 context → 追加到最后一条 user message
-    dynamic_text: str = _extract_dynamic_text(dynamic_msgs)
-    if dynamic_text:
-        _append_dynamic_to_last_user_message(messages, dynamic_text)
-
-
-def _append_dynamic_to_last_user_message(
-    messages: list[ModelMessage],
-    dynamic_text: str,
-) -> None:
-    """将动态 context 追加到最后一条 user message 的 content 末尾。
-
-    用 DYNAMIC_CONTEXT 标记包裹，持久化时可识别并剥离。
-    """
-    wrapped: str = f"{DYNAMIC_CONTEXT_START}\n{dynamic_text}\n{DYNAMIC_CONTEXT_END}"
-
-    # 从后往前找最后一条包含 UserPromptPart 的 ModelRequest
-    for i in range(len(messages) - 1, -1, -1):
-        msg: ModelMessage = messages[i]
-        if not isinstance(msg, ModelRequest):
-            continue
-        # 跳过 is_meta 消息
-        if isinstance(msg.metadata, dict) and msg.metadata.get("is_meta"):
-            continue
-        for part in msg.parts:
-            if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                # 先剥离旧的 dynamic context，再追加新的（防止多轮重复追加）
-                part.content = strip_dynamic_context(part.content) + wrapped
-                return
-
-    # 没找到 user message（不应该发生），退化为独立消息 prepend
-    fallback: ModelRequest = ModelRequest(
-        parts=[UserPromptPart(content=wrap_system_reminder(dynamic_text))],
-        metadata={"is_meta": True, "source": "dynamic_context_fallback"},
-    )
-    messages.append(fallback)
-
 
 def strip_dynamic_context(text: str) -> str:
-    """从文本中剥离 <dynamic-context> 标记及其内容。
+    """从文本中剥离 <dynamic-context> 块及其 <system-reminder> 外层包裹。
+
+    兼容两种格式：
+    - 旧格式：\\n<dynamic-context>...内容...</dynamic-context>
+    - 新格式：<system-reminder>\\n<dynamic-context>...内容...</dynamic-context>\\n</system-reminder>
 
     用于持久化前清理，确保动态 context 不进审计日志。
     """
-    start_idx: int = text.find(DYNAMIC_CONTEXT_START)
-    if start_idx == -1:
-        return text
-    end_idx: int = text.find(DYNAMIC_CONTEXT_END, start_idx)
-    if end_idx == -1:
-        return text[:start_idx]
-    return text[:start_idx] + text[end_idx + len(DYNAMIC_CONTEXT_END):]
+    return _STRIP_DYNAMIC_RE.sub("", text)
