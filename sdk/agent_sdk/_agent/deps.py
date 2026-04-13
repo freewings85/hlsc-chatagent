@@ -85,6 +85,8 @@ class AgentDeps:
     step_pending_fields: list[str] | None = None
     # 全局骨架（所有 step 的状态，用于 system prompt 渲染地图）
     step_skeleton: list[dict[str, Any]] | None = None
+    # 场景中文名（如"保险竞价"），orchestrator prompt 进度条显示用
+    scenario_label: str = ""
     # 同 turn 单次推进守卫（design.md §8.3）
     # 每次 agent.run() 开始时重置为 False；成功推进后 tool 侧置 True
     _step_mutation_committed: bool = False

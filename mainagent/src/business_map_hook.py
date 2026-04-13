@@ -168,6 +168,7 @@ class StageHook:
             # orchestrator 元数据 → deps
             deps.workflow_id = orch_ctx.workflow_id
             deps.orchestrator_url = orch_ctx.orchestrator_url
+            deps.scenario_label = orch_ctx.scenario_label or ""
             deps.current_step_detail = orch_ctx.current_step.model_dump() if hasattr(orch_ctx.current_step, "model_dump") else dict(orch_ctx.current_step)
             deps.step_pending_fields = list(orch_ctx.step_pending_fields)
             deps.step_skeleton = [

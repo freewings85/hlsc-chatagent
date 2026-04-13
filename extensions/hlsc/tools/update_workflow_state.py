@@ -143,6 +143,7 @@ def _update_orchestrator_prompt(deps: AgentDeps, result: Any) -> None:
             current_step=result.new_step_detail,
             session_state=deps.session_state,
             step_pending_fields=deps.step_pending_fields or [],
+            scenario_label=deps.scenario_label,
         )
         deps.system_prompt_override = new_prompt
     except Exception:
