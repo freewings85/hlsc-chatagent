@@ -20,7 +20,7 @@ from hlsc.services.restful.search_nearby_service import (
 )
 from hlsc.tools.prompt_loader import load_tool_prompt
 
-logger: logging.Logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger("chatagent")
 
 _DESCRIPTION: str = load_tool_prompt("search_shops")
 
@@ -71,10 +71,11 @@ async def search_shops(
     try:
         latitude: float | None = None
         longitude: float | None = None
+        city_name: str = None
         city_id: int | None = None
-        shop_name_keywords: list[str] = []
-        address_keywords: list[str] = []
-        other_keywords: list[str] = []
+        shop_name_keywords: set[str] = set()
+        address_keywords: set[str] = set()
+        other_keywords: set[str] = set()
         commercial_type_ids: list[int] = []
 
         # 1. use_current_location=true 时，附带 context 的 lat/lng
@@ -83,7 +84,8 @@ async def search_shops(
             if ctx_loc:
                 latitude = float(ctx_loc["latitude"])  # type: ignore[arg-type]
                 longitude = float(ctx_loc["longitude"])  # type: ignore[arg-type]
-        logger.info("[search_shops] 步骤1完成: lat=%s, lng=%s", latitude, longitude)
+                city_name = ctx_loc["city"]
+        logger.info("[search_shops] 步骤1完成: lat=%s, lng=%s, city=%s", latitude, longitude, city_name)
 
         # 2. location_text 不为空 → 地址解析获取经纬度 + cityId
         if location_text:
@@ -92,13 +94,13 @@ async def search_shops(
 
             try:
                 geocoded = await address_service.geocode(
-                    address=location_text, city=ctx_loc["city"],session_id=sid, request_id=rid,
+                    address=location_text, city=city_name, session_id=sid, request_id=rid,
                 )
                 logger.info("[search_shops] 步骤2 geocode结果: formatted=%s, lat=%s, lng=%s, city=%s",
                             geocoded.formatted_address, geocoded.latitude, geocoded.longitude, geocoded.city)
                 # 将格式化地址添加到搜索关键词
                 if geocoded.formatted_address:
-                    address_keywords.append(geocoded.formatted_address)
+                    address_keywords.add(geocoded.formatted_address)
                 # 补充经纬度（context 定位优先，地址解析兜底）
                 if latitude is None and geocoded.latitude is not None:
                     latitude = geocoded.latitude
@@ -113,18 +115,17 @@ async def search_shops(
             except Exception as e:
                 logger.warning("[search_shops] 步骤2 地址解析失败: location_text='%s', error=%s", location_text, e)
             finally:
-                if not use_exact_location:                                                                                                                                                                            
-                    address_keywords.append(location_text) 
+                address_keywords.add(location_text)                                                                                                                                                                             
         logger.info("[search_shops] 步骤2完成: lat=%s, lng=%s, city_id=%s, address_keywords=%s",
                     latitude, longitude, city_id, address_keywords)
 
         # 3. shop_name如果不为空，添加到shop_name_keywords
         if shop_name:
-            shop_name_keywords.append(shop_name)
+            shop_name_keywords.add(shop_name)
 
         # 4. semantic_query如果不为空，添加到other_keywords
         if semantic_query:
-            other_keywords.extend(semantic_query)
+            other_keywords.update(semantic_query)
         logger.info("[search_shops] 步骤3-4完成: shop_name_keywords=%s, other_keywords=%s",shop_name_keywords, other_keywords)
 
         # 5. 调用fusion_search_service, 获取commercial_type_ids
@@ -141,43 +142,44 @@ async def search_shops(
             commercial_type_ids = result.get_source_ids(DOC_COMMERCIAL_TYPE)
         logger.info("[search_shops] 步骤5完成: commercial_type_ids=%s", commercial_type_ids)
 
-        # 6. 合并一次 fusionSearch，按返回的 keyword 归类回各列表
-        all_keywords: list[str] = shop_name_keywords + address_keywords + other_keywords
-        if all_keywords:
+        # 6a. address_keywords 单独调 fusionSearch，keywordType=2（地址）
+        if address_keywords:
             result = await fusion_search_service.search(
-                keywords=all_keywords,
+                keywords=list(address_keywords),
+                doc_names=[DOC_COMMERCIAL],
+                metadata_filters={"keywordType": [2]},
+                session_id=sid,
+                request_id=rid,
+            )
+            expanded: list[str] = result.get_titles()
+            if expanded:
+                address_keywords.update(expanded)
+            else:
+                address_keywords = set()
+
+        # 6b. shop_name_keywords + other_keywords 合并调 fusionSearch（不限 keywordType）
+        name_other_keywords: set[str] = shop_name_keywords | other_keywords
+        if name_other_keywords:
+            result = await fusion_search_service.search(
+                keywords=list(name_other_keywords),
                 doc_names=[DOC_COMMERCIAL],
                 session_id=sid,
                 request_id=rid,
             )
             titles_by_kw: dict[str, list[str]] = result.get_titles_by_keyword()
-            shop_name_set: set[str] = set(shop_name_keywords)
-            address_set: set[str] = set(address_keywords)
-            other_set: set[str] = set(other_keywords)
-            # 有命中 → extend 原列表；无命中 → 清空
             has_shop_name: bool = False
-            has_address: bool = False
             has_other: bool = False
             for kw, titles in titles_by_kw.items():
-                if kw in shop_name_set:
-                    shop_name_keywords.extend(titles)
+                if kw in shop_name_keywords:
+                    shop_name_keywords.update(titles)
                     has_shop_name = True
-                elif kw in address_set:
-                    address_keywords.extend(titles)
-                    has_address = True
-                elif kw in other_set:
-                    other_keywords.extend(titles)
+                else:
+                    other_keywords.update(titles)
                     has_other = True
             if not has_shop_name:
-                shop_name_keywords = []
-            if not has_address:
-                address_keywords = []
+                shop_name_keywords = set()
             if not has_other:
-                other_keywords = []
-        # 去重
-        shop_name_keywords = list(set(shop_name_keywords))
-        address_keywords = list(set(address_keywords))
-        other_keywords = list(set(other_keywords))
+                other_keywords = set()
         logger.info("[search_shops] 步骤6完成: shop_name_keywords=%s, address_keywords=%s, other_keywords=%s",
                     shop_name_keywords, address_keywords, other_keywords)
 
@@ -189,8 +191,8 @@ async def search_shops(
             "trading_count": "tradingCount",
         }
         request: NearbyShopRequest = NearbyShopRequest(
-            commercial_name=shop_name_keywords if shop_name_keywords else None,
-            address=address_keywords if address_keywords else None,
+            commercial_name=list(shop_name_keywords) if shop_name_keywords else None,
+            address=list(address_keywords) if address_keywords else None,
             latitude=latitude,
             longitude=longitude,
             top=top,
@@ -200,7 +202,7 @@ async def search_shops(
             city_id=city_id,
             commercial_type=commercial_type_ids if commercial_type_ids else None,
             rating=min_rating,
-            fuzzy=other_keywords if other_keywords else None,
+            fuzzy=list(other_keywords) if other_keywords else None,
             is_on_activity = is_on_activity if is_on_activity else None,
         )
         logger.info("[search_shops] 步骤7 请求参数: %s", request)

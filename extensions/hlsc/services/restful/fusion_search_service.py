@@ -173,6 +173,7 @@ class FusionSearchService:
         top_k: int = 10,
         similarity_threshold: float = 0.3,
         vector_similarity_weight: float = 0.3,
+        metadata_filters: dict[str, list[int]] | None = None,
         session_id: str = "",
         request_id: str = "",
     ) -> FusionSearchResult:
@@ -184,6 +185,7 @@ class FusionSearchService:
             top_k: 每个关键词返回的最大匹配数
             similarity_threshold: RAG 相似度阈值
             vector_similarity_weight: 向量相似度权重
+            metadata_filters: 元数据过滤，如 {"keywordType": [1,2,3]}
 
         Raises:
             RuntimeError: DATA_MANAGER_URL 未配置或 API 返回错误状态
@@ -199,6 +201,8 @@ class FusionSearchService:
             "similarity_threshold": similarity_threshold,
             "vector_similarity_weight": vector_similarity_weight,
         }
+        if metadata_filters is not None:
+            payload["metadata_filters"] = metadata_filters
         log_http_request(url, "POST", session_id, request_id, payload)
 
         async with httpx.AsyncClient(timeout=30.0) as client:
