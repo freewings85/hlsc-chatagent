@@ -48,7 +48,7 @@ def _extract_context_location(ctx: RunContext[AgentDeps]) -> dict[str, object] |
 
 async def search_shops(
     ctx: RunContext[AgentDeps],
-    location_text: Annotated[str, Field(description="仅传用户提到的具体位置（地标、路名、小区、商圈等），如'张江高科''南京西路'。不接受省/市/县/镇等行政区域名（如'上海市''嘉定区''南翔镇'），用户没提具体位置则传空")] = "",
+    exact_location: Annotated[str, Field(description="具体位置（地标、路名、小区、商圈等），如'张江高科''南京西路'。不接受省/市/县/镇等行政区域名（如'上海市''嘉定区''南翔镇'），用户没提具体位置则传空")] = "",
     use_exact_location: Annotated[bool, Field(description="是否使用用户当前位置或具体位置，仅当用户希望查'附近'或'周围'等，依赖当前位置或具体位置的商户时设为 true")] = False,
     radius: Annotated[Optional[int], Field(description="搜索半径（米）。仅用户明确说了距离时传，如'3公里内'传 3000。用户说'附近'不算明确距离，不传")] = None,
     shop_name: Annotated[str, Field(description="按门店名称搜索，仅用户明确说出具体店名时传入")] = "",
@@ -64,7 +64,7 @@ async def search_shops(
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
     log_tool_start("search_shops", sid, rid, {
-        "location_text": location_text, "use_exact_location": use_exact_location,
+        "exact_location": exact_location, "use_exact_location": use_exact_location,
         "radius": radius, "shop_name": shop_name, "semantic_query": semantic_query, "top": top,
     })
 
@@ -87,14 +87,14 @@ async def search_shops(
                 city_name = ctx_loc["city"]
         logger.info("[search_shops] 步骤1完成: lat=%s, lng=%s, city=%s", latitude, longitude, city_name)
 
-        # 2. location_text 不为空 → 地址解析获取经纬度 + cityId
-        if location_text:
+        # 2. exact_location 不为空 → 地址解析获取经纬度 + cityId
+        if exact_location:
             from hlsc.services.restful.address_service import address_service
             from hlsc.services.restful.query_city_id_service import query_city_id_service
 
             try:
                 geocoded = await address_service.geocode(
-                    address=location_text, city=city_name, session_id=sid, request_id=rid,
+                    address=exact_location, city=city_name, session_id=sid, request_id=rid,
                 )
                 logger.info("[search_shops] 步骤2 geocode结果: formatted=%s, lat=%s, lng=%s, city=%s",
                             geocoded.formatted_address, geocoded.latitude, geocoded.longitude, geocoded.city)
@@ -113,9 +113,9 @@ async def search_shops(
                     )
                     logger.info("[search_shops] 步骤2 city_id=%s", city_id)
             except Exception as e:
-                logger.warning("[search_shops] 步骤2 地址解析失败: location_text='%s', error=%s", location_text, e)
+                logger.warning("[search_shops] 步骤2 地址解析失败: exact_location='%s', error=%s", exact_location, e)
             finally:
-                address_keywords.add(location_text)                                                                                                                                                                             
+                address_keywords.add(exact_location)                                                                                                                                                                             
         logger.info("[search_shops] 步骤2完成: lat=%s, lng=%s, city_id=%s, address_keywords=%s",
                     latitude, longitude, city_id, address_keywords)
 
