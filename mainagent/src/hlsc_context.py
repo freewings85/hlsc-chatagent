@@ -142,6 +142,16 @@ class HlscContextFormatter(ContextFormatter):
         parts: list[str] = []
 
         # ── Part 1：车辆 + 位置 ──
+        parts.append(self._format_request_info(context))
+
+        # ── Part 2：Orchestrator 编排上下文（activity 级别的动态数据）──
+        if context.orchestrator is not None:
+            parts.append(self._format_orchestrator(context.orchestrator))
+
+        return "\n\n".join(p for p in parts if p)
+
+    def _format_request_info(self, context: HlscRequestContext) -> str:
+        """格式化车辆和位置信息。"""
         info_parts: list[str] = []
         if context.current_car is not None:
             car: CarInfo = context.current_car
@@ -159,20 +169,16 @@ class HlscContextFormatter(ContextFormatter):
         else:
             info_parts.append("current_location: (未设置)")
 
-        parts.append("### request_context\n\n" + ", ".join(info_parts))
+        return "### request_context\n\n" + ", ".join(info_parts)
 
-        # ── Part 2：Orchestrator 编排上下文（activity 级别的动态数据）──
-        if context.orchestrator is not None:
-            from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
+    def _format_orchestrator(self, orch: OrchestratorContext) -> str:
+        """格式化 Orchestrator 编排上下文（进度条 + Checklist + 当前目标）。"""
+        from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
 
-            orch: OrchestratorContext = context.orchestrator
-            orch_text: str = render_orchestrator_prompt(
-                step_skeleton=[s.model_dump() for s in orch.step_skeleton],
-                current_step=orch.current_step.model_dump(),
-                session_state=orch.session_state,
-                step_pending_fields=orch.step_pending_fields,
-                scenario_label=orch.scenario_label,
-            )
-            parts.append(orch_text)
-
-        return "\n\n".join(parts)
+        return render_orchestrator_prompt(
+            step_skeleton=[s.model_dump() for s in orch.step_skeleton],
+            current_step=orch.current_step.model_dump(),
+            session_state=orch.session_state,
+            step_pending_fields=orch.step_pending_fields,
+            scenario_label=orch.scenario_label,
+        )
