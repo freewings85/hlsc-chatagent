@@ -25,82 +25,68 @@ logger: logging.Logger = logging.getLogger(__name__)
 # ── Orchestrator 编排上下文模型 ──────────────────────────
 
 
-class StepFieldSpec(BaseModel):
+class ActivityFieldSpec(BaseModel):
     """expected_fields 条目"""
 
     name: str
-    type: str
+    type: str = ""
     label: str = ""
     """中文显示名，如"车架号 VIN"。空则 Checklist 中只显示 name"""
 
 
-class StepBrief(BaseModel):
-    """全局骨架中的 step 条目（轻量）"""
+class ActivityBrief(BaseModel):
+    """全局骨架中的 activity 条目（轻量）"""
 
     id: str
     name: str
-    goal_short: str
+    goal_short: str = ""
     status: str  # "done" / "current" / "pending"
 
 
-class CurrentStepDetail(BaseModel):
-    """当前 step 的详细信息"""
+class CurrentActivityDetail(BaseModel):
+    """当前 activity 的详细信息（AICall 的内容）"""
 
     id: str
     name: str
     goal: str
-    expected_fields: list[StepFieldSpec]
-    success_criteria: str = ""
-    skip_hint: str | None = None
-    repeatable: bool = False
+    expected_fields: list[ActivityFieldSpec]
 
 
 class OrchestratorContext(BaseModel):
     """Orchestrator 编排上下文。
 
-    仅在 orchestrator 编排模式下非空。降级模式（ChatManager 直连 mainagent）时为 None。
-    mainagent 根据此字段是否存在决定走编排路径还是自驱路径。
-
-    传输路径：Orchestrator Activity → HTTP request_context.orchestrator → mainagent
+    Workflow → Activity → HTTP request_context.orchestrator → mainagent
     """
 
     # ── 标识 ──
     workflow_id: str
-    """update_session_state 工具回调 /internal/advance_step 时的 opaque token"""
-
     orchestrator_url: str
-    """/internal/advance_step 和 /internal/revert_step 的 base URL"""
 
     scenario: str
     """当前业务场景标识（insurance / platform / searchshops / ...）"""
 
     scenario_label: str = ""
-    """场景中文名（如"保险竞价"），Checklist 进度条显示用"""
+    """场景中文名（如"保险竞价"），进度条显示用"""
 
-    # 注意：callback_url 不在这里。它是 HTTP 层通信机制，放在 AsyncChatRequest 顶层。
+    # ── Activity 状态 ──
+    activity_skeleton: list[ActivityBrief] = []
+    """已访问的 activity 列表 + 各自的 done/current 状态"""
 
-    # ── Workflow 骨架状态 ──
-    step_skeleton: list[StepBrief]
-    """全局 step 列表 + 各自的 done/current/pending 状态"""
-
-    current_step: CurrentStepDetail
-    """当前聚焦 step 的完整细节"""
-
-    completed_steps: list[str]
-    """已完成的 step id 列表"""
+    current_activity: CurrentActivityDetail
+    """当前 activity 的详细信息"""
 
     # ── 业务状态 ──
-    session_state: dict[str, Any]
+    session_state: dict[str, Any] = {}
     """从 MySQL session_states 表 query 出的全量 KV"""
 
-    step_pending_fields: list[str]
-    """当前 step 的 expected_fields 中还没收集的字段名（派生数据）"""
+    activity_pending_fields: list[str] = []
+    """当前 activity 的 expected_fields 中还没收集的字段名"""
 
     # ── 工具 & Skill 白名单 ──
-    available_tools: list[str]
-    """当前 step 可用的工具名列表"""
+    available_tools: list[str] = []
+    """当前 activity 可用的工具名列表"""
     available_skills: list[str] = []
-    """当前 step 可用的 skill 名列表（空 = 不暴露 Skill 工具）"""
+    """当前 activity 可用的 skill 名列表（空 = 不暴露 Skill 工具）"""
 
 
 # ── 请求上下文 ───────────────────────────────────────────
@@ -176,9 +162,9 @@ class HlscContextFormatter(ContextFormatter):
         from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
 
         return render_orchestrator_prompt(
-            step_skeleton=[s.model_dump() for s in orch.step_skeleton],
-            current_step=orch.current_step.model_dump(),
+            step_skeleton=[a.model_dump() for a in orch.activity_skeleton],
+            current_step=orch.current_activity.model_dump(),
             session_state=orch.session_state,
-            step_pending_fields=orch.step_pending_fields,
+            step_pending_fields=orch.activity_pending_fields,
             scenario_label=orch.scenario_label,
         )

@@ -1,0 +1,11 @@
+{
+  "python.analysis.extraPaths": [
+    "sdk",
+    "extensions",
+    "mainagent",
+    "mainagent/src"
+  ],
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.useLibraryCodeForTypes": true,
+  "python.defaultInterpreterPath": "${workspaceFolder}/mainagent/.venv/bin/python"
+}

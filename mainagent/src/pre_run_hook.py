@@ -48,14 +48,14 @@ class PreRunHook:
         deps.orchestrator_url = orch_ctx.orchestrator_url
         deps.scenario_label = orch_ctx.scenario_label or ""
 
-        current_step: Any = orch_ctx.current_step
+        current_activity: Any = orch_ctx.current_activity
         deps.current_step_detail = (
-            current_step.model_dump() if hasattr(current_step, "model_dump") else dict(current_step)
+            current_activity.model_dump() if hasattr(current_activity, "model_dump") else dict(current_activity)
         )
-        deps.step_pending_fields = list(orch_ctx.step_pending_fields)
+        deps.step_pending_fields = list(orch_ctx.activity_pending_fields)
         deps.step_skeleton = [
-            s.model_dump() if hasattr(s, "model_dump") else dict(s)
-            for s in orch_ctx.step_skeleton
+            a.model_dump() if hasattr(a, "model_dump") else dict(a)
+            for a in orch_ctx.activity_skeleton
         ]
         if orch_ctx.session_state:
             deps.session_state.update(orch_ctx.session_state)
@@ -63,7 +63,7 @@ class PreRunHook:
         logger.info(
             "[PreRunHook] scene=%s, activity=%s, tools=%s, skills=%s",
             orch_ctx.scenario,
-            current_step.id if hasattr(current_step, "id") else "?",
+            current_activity.id if hasattr(current_activity, "id") else "?",
             orch_ctx.available_tools,
             orch_ctx.available_skills,
         )
