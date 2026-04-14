@@ -44,9 +44,13 @@ def _build_scene_system_prompt(scene_config: dict[str, Any]) -> str:
             if content:
                 parts.append(content)
 
-    # 拼接 agent_md
-    agent_md_file: str = scene_config.get("agent_md", "")
-    if agent_md_file:
+    # 拼接 agent_md（支持 list 或 str，兼容老格式）
+    raw_agent_md: Any = scene_config.get("agent_md", [])
+    agent_md_files: list[str] = (
+        raw_agent_md if isinstance(raw_agent_md, list)
+        else ([raw_agent_md] if raw_agent_md else [])
+    )
+    for agent_md_file in agent_md_files:
         agent_md_path: Path = templates_dir / agent_md_file
         if agent_md_path.exists():
             agent_md_content: str = agent_md_path.read_text(encoding="utf-8").strip()

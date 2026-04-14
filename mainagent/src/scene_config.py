@@ -22,13 +22,25 @@ logger: logging.Logger = logging.getLogger(__name__)
 # ============================================================
 
 
+class SceneNotFoundError(Exception):
+    """请求场景不在 stage_config.yaml 中——不在服务范围。"""
+
+    def __init__(self, scene_id: str, available: list[str]) -> None:
+        self.scene_id: str = scene_id
+        self.available: list[str] = available
+        super().__init__(
+            f"场景 '{scene_id}' 不在服务范围。可用场景: {available}"
+        )
+
+
 @dataclass
 class SceneConfig:
     """单个场景的完整配置。"""
 
     name: str
     prompt_parts: list[str] = field(default_factory=list)
-    agent_md: str = ""
+    # agent_md 是一组文件路径（相对于 prompts/templates/），按顺序拼接成 agent_md 正文
+    agent_md: list[str] = field(default_factory=list)
     tools: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)
     vars: dict[str, str] = field(default_factory=dict)
@@ -70,10 +82,16 @@ class SceneConfigRegistry:
         scene_data: dict[str, Any]
         for scene_id, scene_data in raw.get("scenes", {}).items():
             raw_vars: dict[str, Any] = scene_data.get("vars", {})
+            # agent_md 兼容：支持 list（新）或 str（老，自动转单元素 list）
+            raw_agent_md: Any = scene_data.get("agent_md", [])
+            agent_md_list: list[str] = (
+                raw_agent_md if isinstance(raw_agent_md, list)
+                else ([raw_agent_md] if raw_agent_md else [])
+            )
             self._scenes[scene_id] = SceneConfig(
                 name=scene_id,
                 prompt_parts=scene_data.get("prompt_parts", []),
-                agent_md=scene_data.get("agent_md", ""),
+                agent_md=agent_md_list,
                 tools=scene_data.get("tools", []),
                 skills=scene_data.get("skills", []),
                 vars={k: str(v) for k, v in raw_vars.items()},
@@ -86,12 +104,11 @@ class SceneConfigRegistry:
     # ---- 查询接口 ------------------------------------------------------
 
     def get_scene(self, scene_id: str) -> SceneConfig:
-        """获取场景配置。未匹配时回退到 guide。"""
+        """获取场景配置。未匹配时抛错（不在服务范围）。"""
         self.ensure_loaded()
         if scene_id in self._scenes:
             return self._scenes[scene_id]
-        logger.warning("场景 '%s' 不存在，回退到 guide", scene_id)
-        return self._scenes["guide"]
+        raise SceneNotFoundError(scene_id, list(self._scenes.keys()))
 
     def get_all_scenes(self) -> dict[str, SceneConfig]:
         """返回全部场景配置（只读视角）。"""

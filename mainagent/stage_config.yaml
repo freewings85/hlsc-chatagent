@@ -1,28 +1,43 @@
 # ============================================================
 # MainAgent 场景配置
 #
-# 6 个平等场景，由 BMA 每轮分类路由：
-#   - BMA 返回 [] → guide（引导）
-#   - BMA 返回 1 个场景 → 该场景
-#   - BMA 返回多个场景 → orchestrator（delegate 协调）
+# 每个场景声明：
+#   prompt_parts — 通用前置 + 输出规范（SYSTEM / SOUL / {scene}/OUTPUT.md），按顺序拼成 system_prompt
+#   agent_md     — 按顺序拼接成 agent_md 正文的文件列表（场景角色 + 编排说明）
+#   tools        — 旧直连路径使用（编排模式下由 orchestrator 的 AICall 指定）
+#   skills       — 旧直连路径使用（同上）
 #
-# 每个场景独立定义 prompt_parts / agent_md / tools / skills
+# 场景从 request_context.orchestrator.scenario 驱动：
+#   - orchestrator 模式：workflow 的 scenario 决定加载哪个场景
+#   - 旧直连路径：BMA 分类决定
 # ============================================================
 
 scenes:
+  debug:
+    prompt_parts: [SYSTEM.md, SOUL.md, debug/OUTPUT.md]
+    agent_md:
+      - debug/AGENT.md
+      - orchestrated/AGENT.md
+    tools:
+      - update_workflow_state
+    skills: []
+
   guide:
     prompt_parts: [SYSTEM.md, SOUL.md, guide/OUTPUT.md]
-    agent_md: guide/AGENT.md
+    agent_md:
+      - guide/AGENT.md
+      - orchestrated/AGENT.md
     tools:
       - list_user_cars
-      - update_session_state
     skills:
       - saving-methods
       - platform-intro
 
   platform:
     prompt_parts: [SYSTEM.md, SOUL.md, platform/OUTPUT.md]
-    agent_md: platform/AGENT.md
+    agent_md:
+      - platform/AGENT.md
+      - orchestrated/AGENT.md
     tools:
       - match_project
       - search_shops
@@ -31,19 +46,19 @@ scenes:
       - collect_user_location
       - list_user_cars
       - confirm_booking
-      - update_session_state
     skills:
       - saving-playbook
 
   searchshops:
     prompt_parts: [SYSTEM.md, SOUL.md, searchshops/OUTPUT.md]
-    agent_md: searchshops/AGENT.md
+    agent_md:
+      - searchshops/AGENT.md
+      - orchestrated/AGENT.md
     tools:
       - search_shops
       - collect_user_location
       - collect_user_car_info
       - classify_project
-      - update_session_state
       - call_query_codingagent
       - bash
     skills:
@@ -53,32 +68,35 @@ scenes:
 
   searchcoupons:
     prompt_parts: [SYSTEM.md, SOUL.md, searchcoupons/OUTPUT.md]
-    agent_md: searchcoupons/AGENT.md
+    agent_md:
+      - searchcoupons/AGENT.md
+      - orchestrated/AGENT.md
     tools:
       - search_coupon
       - claim_coupon
       - collect_user_location
       - classify_project
-      - update_session_state
     skills:
       - saving-methods
 
   insurance:
     prompt_parts: [SYSTEM.md, SOUL.md, insurance/OUTPUT.md]
-    agent_md: insurance/AGENT.md
+    agent_md:
+      - insurance/AGENT.md
+      - orchestrated/AGENT.md
     tools:
       - search_shops
       - collect_user_car_info
       - collect_user_location
       - list_user_cars
-      - update_session_state
-      - bash  # SDK 内置工具（create_default_tool_map 提供）
+      - bash
     skills:
       - insurance-bidding
 
   orchestrator:
     prompt_parts: [SYSTEM.md, SOUL.md, orchestrator/OUTPUT.md]
-    agent_md: orchestrator/AGENT.md
+    agent_md:
+      - orchestrator/AGENT.md
     tools:
       - delegate
     skills: []

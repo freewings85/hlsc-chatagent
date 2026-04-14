@@ -1,13 +1,10 @@
 """HLSC 主 Agent 的 PromptLoader 实现
 
-按场景约定组装 system prompt 和 agent_md。
+按 stage_config.yaml 里的声明加载场景 prompt。
 orchestrator 通过 request_context.orchestrator.scenario 指定场景，
-PreRunHook 解包到 deps.current_scene 后本模块按约定加载对应文件。
+PreRunHook 解包到 deps.current_scene，本模块据此查 stage_config 加载 prompt_parts + agent_md。
 
-静态前缀组成：
-    system_prompt = SYSTEM.md + SOUL.md（通用行为准则）
-    agent_md      = {scene}/AGENT.md + orchestrated/AGENT.md + {scene}/OUTPUT.md
-                   （场景角色 + 编排机制 + 输出规范）
+场景未指定或未在 stage_config.yaml 中声明 → 报错（不在服务范围）。
 """
 
 from __future__ import annotations
@@ -17,10 +14,15 @@ from pathlib import Path
 from typing import Any
 
 from agent_sdk.prompt_loader import PromptResult, TemplatePromptLoader
+from src.scene_config import SceneConfig, registry
 
 
 # 提示词根目录（基于本文件位置，不依赖 CWD）
 _TEMPLATES_DIR: Path = Path(__file__).resolve().parent.parent / "prompts" / "templates"
+
+
+class MissingSceneError(Exception):
+    """deps.current_scene 为空——请求未指定场景，不在服务范围。"""
 
 
 def _read_file(relative_path: str) -> str:
@@ -31,8 +33,17 @@ def _read_file(relative_path: str) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
+def _resolve_scene(deps: Any | None) -> SceneConfig:
+    """从 deps.current_scene 取出场景配置。空或找不到都抛错。"""
+    scene_id: str = getattr(deps, "current_scene", "") if deps else ""
+    if not scene_id:
+        raise MissingSceneError("请求未指定场景（deps.current_scene 为空），不在服务范围")
+    # registry.get_scene 找不到会抛 SceneNotFoundError
+    return registry.get_scene(scene_id)
+
+
 class MainPromptLoader(TemplatePromptLoader):
-    """MainAgent PromptLoader。按场景加载提示词。"""
+    """MainAgent PromptLoader。按 stage_config.yaml 加载场景 prompt。"""
 
     async def load(
         self,
@@ -41,9 +52,11 @@ class MainPromptLoader(TemplatePromptLoader):
         deps: Any | None = None,
         message: str | None = None,
     ) -> PromptResult:
-        # 通用 system prompt：SYSTEM.md + SOUL.md
+        scene: SceneConfig = _resolve_scene(deps)
+
+        # 通用 system prompt：按场景 prompt_parts 拼接
         system_parts: list[str] = []
-        for filename in ["SYSTEM.md", "SOUL.md"]:
+        for filename in scene.prompt_parts:
             content: str = _read_file(filename)
             if content:
                 system_parts.append(content)
@@ -66,13 +79,11 @@ class MainPromptLoader(TemplatePromptLoader):
         deps: Any | None = None,
         message: str | None = None,
     ) -> str | None:
-        """按约定拼装：{scene}/AGENT.md + orchestrated/AGENT.md + {scene}/OUTPUT.md。"""
-        scene: str = getattr(deps, "current_scene", "") if deps else ""
-        if not scene:
-            return None
+        """按 stage_config.yaml 里 agent_md 声明的文件顺序拼接。"""
+        scene: SceneConfig = _resolve_scene(deps)
 
         parts: list[str] = []
-        for filename in [f"{scene}/AGENT.md", "orchestrated/AGENT.md", f"{scene}/OUTPUT.md"]:
+        for filename in scene.agent_md:
             content: str = _read_file(filename)
             if content:
                 parts.append(content)
