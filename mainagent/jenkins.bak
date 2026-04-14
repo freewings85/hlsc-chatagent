@@ -3,17 +3,16 @@ projectname="com.celiang.hlsc.service.ai.chatagent"
 basename="com.celiang.hlsc.service.ai.base"
 dockerimage="registry.cn-shanghai.aliyuncs.com/51cjml/test-${projectname}:${dockertag}"
 
-# 在 workspace 上一级准备 base（完整 clone，uv.lock pin 的 commit 必须在 history 里）
-if [ -d "../${basename}" ]; then
-  (cd "../${basename}" && git fetch && git reset --hard origin/main)
+# 在 workspace 内部准备 base（完整 clone，uv.lock pin 的 commit 必须在 history 里）
+if [ -d "${basename}" ]; then
+  (cd "${basename}" && git fetch && git reset --hard origin/main)
 else
-  git clone ssh://git@git.51cjml.com:8022/ai-hlsc/${basename}.git "../${basename}"
+  git clone ssh://git@git.51cjml.com:8022/ai-hlsc/${basename}.git "${basename}"
 fi
 
 echo ${dockerimage} > ${projectname}.txt
 # scp ${projectname}.txt root@192.168.100.105:/root/
-# build context 为上一级，内含 base/ 和 chatagent/ 两兄弟
-docker build -f mainagent/Dockerfile -t ${dockerimage} ..
+docker build -f mainagent/Dockerfile -t ${dockerimage} .
 docker push ${dockerimage}
 
 ssh root@192.168.100.108 "docker rm -f ${projectname}"

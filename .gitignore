@@ -24,3 +24,6 @@ nacos-data/
 
 # 方案文档（不入库）
 *.txt
+
+# Docker build 时 Jenkins 在 workspace 内 clone 的 base 源码
+com.celiang.hlsc.service.ai.base/
