@@ -87,9 +87,6 @@ class AgentDeps:
     step_skeleton: list[dict[str, Any]] | None = None
     # 场景中文名（如"保险竞价"），orchestrator prompt 进度条显示用
     scenario_label: str = ""
-    # 场景特定的 prompt 内容（{scene}/AGENT.md + {scene}/OUTPUT.md 拼接）
-    # 放在 dynamic-context 中（不在静态前缀），保证静态前缀对所有 session 完全一致
-    scene_prompt: str = ""
     # 同 turn 单次推进守卫（design.md §8.3）
     # 每次 agent.run() 开始时重置为 False；成功推进后 tool 侧置 True
     _step_mutation_committed: bool = False

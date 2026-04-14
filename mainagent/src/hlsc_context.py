@@ -141,13 +141,7 @@ class HlscContextFormatter(ContextFormatter):
 
         parts: list[str] = []
 
-        # ── Part 1：场景特定 prompt（从 {scene}/AGENT.md + {scene}/OUTPUT.md 加载）──
-        # 放最前面，让 LLM 先看到业务上下文
-        scene_prompt: str = getattr(deps, "scene_prompt", "") if deps is not None else ""
-        if scene_prompt:
-            parts.append(scene_prompt)
-
-        # ── Part 2：车辆 + 位置 ──
+        # ── Part 1：车辆 + 位置 ──
         info_parts: list[str] = []
         if context.current_car is not None:
             car: CarInfo = context.current_car
@@ -167,7 +161,7 @@ class HlscContextFormatter(ContextFormatter):
 
         parts.append("### request_context\n\n" + ", ".join(info_parts))
 
-        # ── Part 3：Orchestrator 编排上下文（activity 级别的动态数据）──
+        # ── Part 2：Orchestrator 编排上下文（activity 级别的动态数据）──
         if context.orchestrator is not None:
             from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
 

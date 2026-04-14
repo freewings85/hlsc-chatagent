@@ -1,39 +1,23 @@
 """MainAgent 前置 Hook：agent 运行前从 orchestratorContext 解包配置到 deps。
 
-一切由 workflow 控制：scenario / tools / skills / agent_md / session_state。
-没有 orchestrator context 时打 warning，降级为使用默认 AGENT.md（不预设工具）。
+一切由 workflow 控制：scenario / tools / skills / session_state。
+没有 orchestrator context 时打 warning，降级为使用默认 AGENT.md。
 
-Prompt 分层（cache 优化）：
-- 静态前缀（所有 session 相同）：SYSTEM.md + SOUL.md + orchestrated/AGENT.md
-- 动态内容（dynamic-context，最后一条 user message 末尾）：
-  - 场景相关：{scene}/AGENT.md + {scene}/OUTPUT.md（从文件加载）
-  - activity 相关：goal / checklist / tools / business_data
+Prompt 分层：
+- 静态前缀（scene 决定，session 内不变）：
+    SYSTEM.md + SOUL.md + {scene}/AGENT.md + orchestrated/AGENT.md + {scene}/OUTPUT.md
+- 动态 context（最后一条 user message 末尾）：
+    activity 级别的 goal / checklist / tools / business_data
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from agent_sdk._agent.deps import AgentDeps
 
 logger: logging.Logger = logging.getLogger(__name__)
-
-# 场景特定 prompt 文件目录
-_TEMPLATES_DIR: Path = Path(__file__).resolve().parent.parent / "prompts" / "templates"
-
-
-def _load_scene_prompt(scene: str) -> str:
-    """加载 {scene}/AGENT.md + {scene}/OUTPUT.md 内容，拼接返回。"""
-    parts: list[str] = []
-    for filename in [f"{scene}/AGENT.md", f"{scene}/OUTPUT.md"]:
-        path: Path = _TEMPLATES_DIR / filename
-        if path.exists():
-            content: str = path.read_text(encoding="utf-8").strip()
-            if content:
-                parts.append(content)
-    return "\n\n".join(parts)
 
 
 class PreRunHook:
@@ -50,7 +34,7 @@ class PreRunHook:
 
         if orch_ctx is None:
             logger.warning(
-                "[PreRunHook] 无 orchestratorContext，走默认 AGENT.md（user=%s, session=%s）",
+                "[PreRunHook] 无 orchestratorContext，走默认配置（user=%s, session=%s）",
                 user_id, session_id,
             )
             return
@@ -59,10 +43,6 @@ class PreRunHook:
         deps.current_scene = orch_ctx.scenario
         deps.available_tools = list(orch_ctx.available_tools)
         deps.allowed_skills = list(orch_ctx.available_skills) if orch_ctx.available_skills else []
-        # 静态前缀用通用 AGENT.md（所有场景一样，cache 友好）
-        deps.current_scene_agent_md = "orchestrated/AGENT.md"
-        # 场景特定 prompt 放 dynamic-context（每个 scene 不同的业务说明）
-        deps.scene_prompt = _load_scene_prompt(orch_ctx.scenario)
 
         deps.workflow_id = orch_ctx.workflow_id
         deps.orchestrator_url = orch_ctx.orchestrator_url
