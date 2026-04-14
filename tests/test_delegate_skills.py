@@ -285,7 +285,7 @@ async def test_delegate_skill_loading() -> list[TestResult]:
 
     sub_agent_tools: list[str] = [
         t for t in all_tool_calls
-        if t not in ("delegate", "update_session_state", "Skill") and t != "unknown"
+        if t not in ("delegate", "Skill") and t != "unknown"
     ]
     skill_calls: list[str] = [t for t in all_tool_calls if t == "Skill"]
 

@@ -338,13 +338,12 @@ async def test_s10_location_mention() -> ScenarioResult:
 
     checks: dict[str, bool | str] = {
         "has_response": bool(r.response_text.strip()),
-        "called_update_session_state": "update_session_state" in r.tool_calls,
         "responds_to_location": any(
             kw in r.response_text for kw in ["朝阳", "位置", "附近", "修理厂", "商户"]
         ),
     }
 
-    passed: bool = checks.get("called_update_session_state", False)
+    passed: bool = checks.get("responds_to_location", False)
 
     return ScenarioResult(
         scenario_id="s10",

@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from temporalio.client import Client as TemporalClient
 
     from agent_sdk._agent.memory.memory_message_service import MemoryMessageService
-    from agent_sdk._agent.session_state_service import SessionStateService
     from agent_sdk._agent.skills.invoked_store import InvokedSkillStore
     from agent_sdk._agent.skills.registry import SkillRegistry
     from agent_sdk._common.request_context import RequestContext
@@ -70,8 +69,6 @@ class AgentDeps:
     _session_state_msg: ModelRequest | None = None
     # memory_service（由 agent.run 构建，供 hook 读取历史消息）
     memory_service: MemoryMessageService | None = None
-    # session_state 持久化服务（由 agent.run 构建，供 update_session_state 工具保存）
-    _session_state_service: SessionStateService | None = None
 
     # ── Orchestrator 编排字段（可选，降级模式全部为 None/空）──
     # update_workflow_state 工具检测 workflow_id 非空 → 进入 orchestrator 模式
