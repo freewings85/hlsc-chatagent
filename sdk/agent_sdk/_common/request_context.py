@@ -5,6 +5,7 @@
 """
 
 import abc
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -23,8 +24,12 @@ class ContextFormatter(abc.ABC):
     """
 
     @abc.abstractmethod
-    def format(self, context: RequestContext) -> str:
+    def format(self, context: RequestContext, deps: Any | None = None) -> str:
         """将上下文格式化为自然语言文本。
+
+        Args:
+            context: 请求上下文
+            deps: AgentDeps（可选，用于读取 hook 设置的场景 prompt 等）
 
         返回空字符串表示不注入。
         """

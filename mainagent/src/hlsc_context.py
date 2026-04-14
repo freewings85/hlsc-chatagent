@@ -129,7 +129,7 @@ class HlscContextFormatter(ContextFormatter):
     2. 如果有 orchestrator 编排上下文，渲染 step_skeleton + step_detail + pending_fields
     """
 
-    def format(self, context: RequestContext) -> str:
+    def format(self, context: RequestContext, deps: Any | None = None) -> str:
         # 支持 dict（从 HTTP 请求直接传入）和 HlscRequestContext
         if isinstance(context, dict):
             try:
@@ -141,26 +141,33 @@ class HlscContextFormatter(ContextFormatter):
 
         parts: list[str] = []
 
-        # ── Part 1：车辆 + 位置 ──
+        # ── Part 1：场景特定 prompt（从 {scene}/AGENT.md + {scene}/OUTPUT.md 加载）──
+        # 放最前面，让 LLM 先看到业务上下文
+        scene_prompt: str = getattr(deps, "scene_prompt", "") if deps is not None else ""
+        if scene_prompt:
+            parts.append(scene_prompt)
+
+        # ── Part 2：车辆 + 位置 ──
+        info_parts: list[str] = []
         if context.current_car is not None:
             car: CarInfo = context.current_car
-            parts.append(
+            info_parts.append(
                 f"current_car(car_model_id={car.car_model_id}, "
                 f"car_model_name={car.car_model_name}, "
                 f"vin_code={car.vin_code})"
             )
         else:
-            parts.append("current_car: (未设置)")
+            info_parts.append("current_car: (未设置)")
 
         if context.current_location is not None:
             loc: LocationInfo = context.current_location
-            parts.append(f"current_location(address={loc.address})")
+            info_parts.append(f"current_location(address={loc.address})")
         else:
-            parts.append("current_location: (未设置)")
+            info_parts.append("current_location: (未设置)")
 
-        base_text: str = "### request_context\n\n" + ", ".join(parts)
+        parts.append("### request_context\n\n" + ", ".join(info_parts))
 
-        # ── Part 2：Orchestrator 编排上下文 ──
+        # ── Part 3：Orchestrator 编排上下文（activity 级别的动态数据）──
         if context.orchestrator is not None:
             from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
 
@@ -172,6 +179,6 @@ class HlscContextFormatter(ContextFormatter):
                 step_pending_fields=orch.step_pending_fields,
                 scenario_label=orch.scenario_label,
             )
-            return base_text + "\n\n" + orch_text
+            parts.append(orch_text)
 
-        return base_text
+        return "\n\n".join(parts)
