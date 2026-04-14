@@ -85,7 +85,7 @@ async def update_workflow_state(
             ctx.deps.step_pending_fields = _calc_pending(
                 result.next_expected_fields, ctx.deps.session_state,
             )
-            _update_prompt(ctx.deps, result)
+            # prompt 不需要工具手动覆盖：下一轮 mainagent 会基于新 deps 自动重渲
 
         # ── 构造给 LLM 的 tool result 文本 ──
         parts: list[str] = []
@@ -114,21 +114,6 @@ def _calc_pending(
 ) -> list[str]:
     required: set[str] = {f["name"] for f in expected_fields}
     return sorted(required - set(session_state.keys()))
-
-
-def _update_prompt(deps: AgentDeps, result: Any) -> None:
-    """热切换 orchestrator prompt。"""
-    try:
-        from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
-        deps.system_prompt_override = render_orchestrator_prompt(
-            step_skeleton=list(result.new_activity_skeleton),
-            current_step=deps.current_step_detail or {},
-            session_state=deps.session_state,
-            step_pending_fields=deps.step_pending_fields or [],
-            scenario_label=getattr(deps, "scenario_label", ""),
-        )
-    except Exception:
-        pass
 
 
 update_workflow_state.__doc__ = _DESCRIPTION

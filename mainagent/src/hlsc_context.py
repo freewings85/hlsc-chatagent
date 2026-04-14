@@ -159,12 +159,12 @@ class HlscContextFormatter(ContextFormatter):
 
     def _format_orchestrator(self, orch: OrchestratorContext) -> str:
         """格式化 Orchestrator 编排上下文（进度条 + Checklist + 当前目标）。"""
-        from agent_sdk._agent.orchestrator_prompt import render_orchestrator_prompt
+        from src.orchestrator_prompt import render_orchestrator_prompt
 
         return render_orchestrator_prompt(
-            step_skeleton=[a.model_dump() for a in orch.activity_skeleton],
-            current_step=orch.current_activity.model_dump(),
+            activity_skeleton=[a.model_dump() for a in orch.activity_skeleton],
+            current_activity=orch.current_activity.model_dump(),
             session_state=orch.session_state,
-            step_pending_fields=orch.activity_pending_fields,
+            activity_pending_fields=orch.activity_pending_fields,
             scenario_label=orch.scenario_label,
         )

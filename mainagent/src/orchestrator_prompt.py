@@ -1,54 +1,51 @@
-"""Orchestrator 编排模式的动态上下文渲染（v2）。
+"""Orchestrator 编排模式的动态上下文渲染。
 
-设计原则：
-- Checklist 作为唯一的字段状态视图（合并 expected_fields + session_state + pending）
-- 进度条一行（不展开非当前 step 的 goal）
-- 只渲染动态数据，静态行为准则放 AGENT.md
-- ~100 token/轮，比 v1（~400 token）节省 75%
+放在 mainagent 而不是 SDK，因为 orchestrator 是业务概念，SDK 通用不耦合。
+
+渲染内容（每轮注入到最后一条 user message 末尾）：
+- 进度条
+- 当前 activity 目标
+- Checklist（已收集字段 + 待收集字段）
+- 行动提示
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-# 值截断阈值
 _VALUE_MAX: int = 40
 
 
 def render_orchestrator_prompt(
-    step_skeleton: list[dict[str, Any]],
-    current_step: dict[str, Any],
+    activity_skeleton: list[dict[str, Any]],
+    current_activity: dict[str, Any],
     session_state: dict[str, Any],
-    step_pending_fields: list[str],
+    activity_pending_fields: list[str],
     scenario_label: str = "",
 ) -> str:
     """渲染 orchestrator 编排上下文。"""
     parts: list[str] = []
 
-    # ── 进度条（一行）──
-    progress: str = _render_progress(step_skeleton, scenario_label)
+    progress: str = _render_progress(activity_skeleton, scenario_label)
     if progress:
         parts.append(progress)
         parts.append("")
 
-    # ── 当前目标 ──
-    goal: str = current_step.get("goal", "")
+    goal: str = current_activity.get("goal", "")
     if goal:
         parts.append(f"## 目标\n{goal}")
         parts.append("")
 
-    # ── Checklist ──
     checklist: str = _render_checklist(
-        current_step.get("expected_fields", []),
+        current_activity.get("expected_fields", []),
         session_state,
-        step_pending_fields,
+        activity_pending_fields,
     )
     if checklist:
         parts.append(f"## Checklist\n{checklist}")
         parts.append("")
 
-    # ── 指令行 ──
-    hint: str = _render_action_hint(step_pending_fields)
+    hint: str = _render_action_hint(activity_pending_fields)
     if hint:
         parts.append(hint)
 
