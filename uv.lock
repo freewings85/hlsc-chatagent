@@ -722,7 +722,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "agent-sdk", editable = "sdk" },
-    { name = "hlsc-orchestrator-protocol", editable = "../com.celiang.hlsc.service.ai.base" },
+    { name = "hlsc-orchestrator-protocol", git = "ssh://git@git.51cjml.com:8022/chenzifei/com.celiang.hlsc.service.ai.base.git" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -769,18 +769,11 @@ dev = [
 [[package]]
 name = "hlsc-orchestrator-protocol"
 version = "0.1.0"
-source = { editable = "../com.celiang.hlsc.service.ai.base" }
+source = { git = "ssh://git@git.51cjml.com:8022/chenzifei/com.celiang.hlsc.service.ai.base.git#f849ac2054f0bf86a5b1b4a3eda33d7cd93ad8fe" }
 dependencies = [
     { name = "aiomysql" },
     { name = "httpx" },
     { name = "temporalio" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiomysql", specifier = ">=0.2.0" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "temporalio", specifier = ">=1.8" },
 ]
 
 [[package]]
