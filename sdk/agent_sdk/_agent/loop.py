@@ -467,7 +467,7 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                         pre_call_service._system_prompt = deps.system_prompt_override
                         deps.system_prompt_override = None
 
-                    pre_result = await pre_call_service.handle(history)
+                    pre_result = await pre_call_service.handle(history, deps=deps)
 
                     if pre_result.compacted:
                         log_info(f"[COMPACT] iteration={iteration}")

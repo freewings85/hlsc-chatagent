@@ -1,13 +1,13 @@
 """MainAgent 前置 Hook：agent 运行前从 orchestratorContext 解包配置到 deps。
 
-一切由 workflow 控制：scenario / tools / skills / session_state。
+一切由 workflow 控制：scenario / instruction / tools / skills / session_state。
 没有 orchestrator context 时打 warning，降级为使用默认 AGENT.md。
 
 Prompt 分层：
 - 静态前缀（scene 决定，session 内不变）：
     SYSTEM.md + SOUL.md + {scene}/AGENT.md + orchestrated/AGENT.md + {scene}/OUTPUT.md
 - 动态 context（最后一条 user message 末尾）：
-    activity 级别的 goal / checklist / tools / business_data
+    activity 级别的 instruction（业务方完全拥有，框架不解析）
 """
 
 from __future__ import annotations
@@ -47,25 +47,17 @@ class PreRunHook:
         deps.workflow_id = orch_ctx.workflow_id
         deps.orchestrator_url = orch_ctx.orchestrator_url
         deps.scenario_label = orch_ctx.scenario_label or ""
+        deps.instruction = orch_ctx.instruction or ""
 
-        current_activity: Any = orch_ctx.current_activity
-        deps.current_step_detail = (
-            current_activity.model_dump() if hasattr(current_activity, "model_dump") else dict(current_activity)
-        )
-        deps.step_pending_fields = list(orch_ctx.activity_pending_fields)
-        deps.step_skeleton = [
-            a.model_dump() if hasattr(a, "model_dump") else dict(a)
-            for a in orch_ctx.activity_skeleton
-        ]
         if orch_ctx.session_state:
             deps.session_state.update(orch_ctx.session_state)
 
         logger.info(
-            "[PreRunHook] scene=%s, activity=%s, tools=%s, skills=%s",
+            "[PreRunHook] scene=%s, tools=%s, skills=%s, instruction_len=%d",
             orch_ctx.scenario,
-            current_activity.id if hasattr(current_activity, "id") else "?",
             orch_ctx.available_tools,
             orch_ctx.available_skills,
+            len(deps.instruction),
         )
 
 

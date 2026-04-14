@@ -73,23 +73,15 @@ class AgentDeps:
     # session_state 持久化服务（由 agent.run 构建，供 update_session_state 工具保存）
     _session_state_service: SessionStateService | None = None
 
-    # ── Orchestrator 编排字段（可选，降级模式全部为 None）──
-    # update_session_state 工具检测 workflow_id 非空 → 进入 orchestrator 模式
-    # 调用 orchestrator_url 的 /internal/advance_step 代理推进 workflow
+    # ── Orchestrator 编排字段（可选，降级模式全部为 None/空）──
+    # update_workflow_state 工具检测 workflow_id 非空 → 进入 orchestrator 模式
     workflow_id: str | None = None
     orchestrator_url: str | None = None
-    # 当前 step 的 dict 形式（从 CallAgentInput.current_step 直接继承）
-    # 工具侧需要读 expected_fields / allowed_next / id 做本地预校验
-    current_step_detail: dict[str, Any] | None = None
-    # 当前 step 还没收集的字段列表（派生数据，用于 system prompt 温和提示）
-    step_pending_fields: list[str] | None = None
-    # 全局骨架（所有 step 的状态，用于 system prompt 渲染地图）
-    step_skeleton: list[dict[str, Any]] | None = None
-    # 场景中文名（如"保险竞价"），orchestrator prompt 进度条显示用
+    # 当前 AICall 的 instruction 文本（业务方在 activity 里组织好，框架不解析）
+    # PreRunHook 从 orchestrator context 解包，update_workflow_state 工具热切换
+    instruction: str = ""
+    # 场景中文名（如"保险竞价"），仅用于日志/观测
     scenario_label: str = ""
-    # 同 turn 单次推进守卫（design.md §8.3）
-    # 每次 agent.run() 开始时重置为 False；成功推进后 tool 侧置 True
-    _step_mutation_committed: bool = False
 
 
 # ── session_state 辅助函数 ──

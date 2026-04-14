@@ -398,7 +398,7 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
 
     和 /chat/async 的区别：
     - 不强依赖 Kafka（没启用时也能跑，事件扔到 /dev/null）
-    - 把 request 里的 workflow_id / current_step / step_skeleton 等透传进 Agent.run()
+    - 把 request 里的 workflow_id / instruction / tools / skills 等透传进 Agent.run()
     - 在 try/finally 里调 callback_url 通知 orchestrator turn 结束（design.md §8.1）
 
     降级时 ChatManager 不应调这个接口，走 /chat/stream 或 /chat/async。

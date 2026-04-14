@@ -1,6 +1,6 @@
 """请求/响应模型
 
-编排模式下 orchestrator 的元数据（workflow_id / step_skeleton / current_step 等）
+编排模式下 orchestrator 的元数据（workflow_id / instruction / tools / skills 等）
 统一放在 context.orchestrator 里传入（见 mainagent/src/hlsc_context.py 的
 OrchestratorContext），不污染 ChatRequest 顶层字段。
 

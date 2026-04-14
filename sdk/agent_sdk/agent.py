@@ -308,23 +308,15 @@ class Agent:
             # 10. Context messages（来自 prompt_loader）
             context_messages: list[ModelRequest] = list(prompt_result.context_messages)
 
-            # 11. 请求上下文（始终注入完整 context，每轮 LLM 调用都能看到）
-            # formatter 可能有独立数据源（如 SceneOrchestrator 缓存），
-            # 因此即使 request_context 为 None 也需要调用 formatter
+            # 11. 请求上下文（占位 ModelRequest；每次 PreModelCall 重渲，读 deps 最新值）
+            # 工具（如 update_workflow_state）改 deps.instruction 后，下次 LLM 迭代就能看到新文本
             if self._context_formatter is not None:
-                fmt_input: Any = request_context if request_context is not None else {}
-                context_text: str = self._context_formatter.format(fmt_input, deps=deps)
-                if context_text:
-                    context_messages.append(ModelRequest(
-                        parts=[UserPromptPart(content=context_text)],
-                        metadata={"is_meta": True, "source": "request_context"},
-                    ))
+                context_messages.append(ModelRequest(
+                    parts=[],
+                    metadata={"is_meta": True, "source": "request_context"},
+                ))
             if request_context is not None:
                 deps.request_context = request_context
-
-            # 11.1 Orchestrator 编排上下文注入
-            # 由 HlscContextFormatter.format() 统一渲染（读 request_context.orchestrator），
-            # 不在 SDK 层面耦合 orchestrator 逻辑。见 mainagent/src/hlsc_context.py
 
             # 11.5 Session state 注入（工具可通过 deps._session_state_msg 引用更新内容）
             from agent_sdk._agent.deps import create_session_state_message
@@ -358,6 +350,8 @@ class Agent:
                 skill_registry=skill_registry if skill_registry and skill_registry.has_skills() else None,
                 invoked_skill_store=invoked_store if skill_registry and skill_registry.has_skills() else None,
                 system_prompt=prompt_result.system_prompt,
+                context_formatter=self._context_formatter,
+                request_context=request_context,
             )
 
             # 15. MCP toolsets

@@ -4,9 +4,9 @@ HlscRequestContext 扩展 SDK 的 RequestContext，加入：
 - current_car / current_location：请求级的车辆和位置信息
 - orchestrator：Orchestrator 编排上下文（None = 降级模式）
 
-OrchestratorContext 包含 workflow 骨架状态、当前 step 详情、会话状态等，
-由 orchestrator 的 Activity 在调 mainagent 时填充到 request_context.orchestrator。
-mainagent 侧据此注入 step 引导 prompt 并让 update_session_state 工具走编排分支。
+OrchestratorContext 是 AICall 的载体：workflow 把 instruction + tools + skills 塞进来，
+mainagent 侧 PreRunHook 解包到 deps，HlscContextFormatter 把 instruction 拼进 LLM 上下文。
+框架不解析 instruction，业务在 activity 里完全拥有这段文本。
 """
 
 from __future__ import annotations
@@ -25,35 +25,8 @@ logger: logging.Logger = logging.getLogger(__name__)
 # ── Orchestrator 编排上下文模型 ──────────────────────────
 
 
-class ActivityFieldSpec(BaseModel):
-    """expected_fields 条目"""
-
-    name: str
-    type: str = ""
-    label: str = ""
-    """中文显示名，如"车架号 VIN"。空则 Checklist 中只显示 name"""
-
-
-class ActivityBrief(BaseModel):
-    """全局骨架中的 activity 条目（轻量）"""
-
-    id: str
-    name: str
-    goal_short: str = ""
-    status: str  # "done" / "current" / "pending"
-
-
-class CurrentActivityDetail(BaseModel):
-    """当前 activity 的详细信息（AICall 的内容）"""
-
-    id: str
-    name: str
-    goal: str
-    expected_fields: list[ActivityFieldSpec]
-
-
 class OrchestratorContext(BaseModel):
-    """Orchestrator 编排上下文。
+    """Orchestrator 编排上下文（AICall 的载体）。
 
     Workflow → Activity → HTTP request_context.orchestrator → mainagent
     """
@@ -66,27 +39,20 @@ class OrchestratorContext(BaseModel):
     """当前业务场景标识（insurance / platform / searchshops / ...）"""
 
     scenario_label: str = ""
-    """场景中文名（如"保险竞价"），进度条显示用"""
+    """场景中文名（如"保险竞价"），日志/观测用"""
 
-    # ── Activity 状态 ──
-    activity_skeleton: list[ActivityBrief] = []
-    """已访问的 activity 列表 + 各自的 done/current 状态"""
+    # ── AICall 内容 ──
+    instruction: str = ""
+    """业务 activity 在 AICall 里组织好的指令文本（框架不解析）"""
 
-    current_activity: CurrentActivityDetail
-    """当前 activity 的详细信息"""
-
-    # ── 业务状态 ──
-    session_state: dict[str, Any] = {}
-    """从 MySQL session_states 表 query 出的全量 KV"""
-
-    activity_pending_fields: list[str] = []
-    """当前 activity 的 expected_fields 中还没收集的字段名"""
-
-    # ── 工具 & Skill 白名单 ──
     available_tools: list[str] = []
     """当前 activity 可用的工具名列表"""
     available_skills: list[str] = []
     """当前 activity 可用的 skill 名列表（空 = 不暴露 Skill 工具）"""
+
+    # ── 业务状态 ──
+    session_state: dict[str, Any] = {}
+    """从 MySQL session_states 表 query 出的全量 KV"""
 
 
 # ── 请求上下文 ───────────────────────────────────────────
@@ -96,7 +62,7 @@ class HlscRequestContext(RequestContext):
     """话痨说车请求上下文。
 
     降级模式下 orchestrator 为 None，和原来行为完全一样。
-    编排模式下 orchestrator 非空，mainagent 据此注入 step prompt + 工具路由。
+    编排模式下 orchestrator 非空，mainagent 据此注入 activity 指令 + 工具白名单。
     """
 
     current_car: CarInfo | None = None
@@ -112,7 +78,7 @@ class HlscContextFormatter(ContextFormatter):
 
     每次 LLM 调用前执行。分两部分：
     1. 原有的 current_car + current_location 信息
-    2. 如果有 orchestrator 编排上下文，渲染 step_skeleton + step_detail + pending_fields
+    2. 如果有 orchestrator 编排上下文，直接把 instruction 拼进来
     """
 
     def format(self, context: RequestContext, deps: Any | None = None) -> str:
@@ -130,9 +96,17 @@ class HlscContextFormatter(ContextFormatter):
         # ── Part 1：车辆 + 位置 ──
         parts.append(self._format_request_info(context))
 
-        # ── Part 2：Orchestrator 编排上下文（activity 级别的动态数据）──
-        if context.orchestrator is not None:
-            parts.append(self._format_orchestrator(context.orchestrator))
+        # ── Part 2：Orchestrator 编排上下文（activity instruction）──
+        # 优先用 deps.instruction（update_workflow_state 热切换后是最新的），
+        # 否则回落到 context.orchestrator.instruction。
+        instruction: str = ""
+        if deps is not None and getattr(deps, "instruction", ""):
+            instruction = deps.instruction
+        elif context.orchestrator is not None:
+            instruction = context.orchestrator.instruction
+
+        if instruction:
+            parts.append(self._format_orchestrator(instruction))
 
         return "\n\n".join(p for p in parts if p)
 
@@ -157,14 +131,6 @@ class HlscContextFormatter(ContextFormatter):
 
         return "### request_context\n\n" + ", ".join(info_parts)
 
-    def _format_orchestrator(self, orch: OrchestratorContext) -> str:
-        """格式化 Orchestrator 编排上下文（进度条 + Checklist + 当前目标）。"""
-        from src.orchestrator_prompt import render_orchestrator_prompt
-
-        return render_orchestrator_prompt(
-            activity_skeleton=[a.model_dump() for a in orch.activity_skeleton],
-            current_activity=orch.current_activity.model_dump(),
-            session_state=orch.session_state,
-            activity_pending_fields=orch.activity_pending_fields,
-            scenario_label=orch.scenario_label,
-        )
+    def _format_orchestrator(self, instruction: str) -> str:
+        """把 activity 指令文本拼进 LLM 上下文。"""
+        return f"### orchestrator\n\n{instruction}"

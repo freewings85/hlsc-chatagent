@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, SystemPromptPart, UserPromptPart
 
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 _SYSTEM_PROMPT_SOURCE = "system_prompt"
 _SKILL_LISTING_SOURCE = "skill_listing"
 _INVOKED_SKILLS_SOURCE = "invoked_skills"
+_REQUEST_CONTEXT_SOURCE = "request_context"
 
 
 @dataclass
@@ -95,6 +96,8 @@ class PreModelCallMessageService:
         skill_registry: SkillRegistry | None = None,
         invoked_skill_store: InvokedSkillStore | None = None,
         system_prompt: str = "",
+        context_formatter: Any | None = None,
+        request_context: Any | None = None,
     ) -> None:
         self._compactor = compactor
         self._context_messages = context_messages
@@ -104,12 +107,20 @@ class PreModelCallMessageService:
         self._system_prompt = system_prompt
         # 场景允许的 skill 列表（None = 不限制）。由 loop 每轮从 deps 同步。
         self.allowed_skills: list[str] | None = None
+        # request_context 渲染：每次 handle() 前跑 formatter，拿 deps 最新值
+        # mutate context_messages 里 source=request_context 的 ModelRequest 的 parts
+        self._context_formatter = context_formatter
+        self._request_context = request_context
 
-    async def handle(self, messages: list[ModelMessage]) -> PreModelCallResult:
+    async def handle(self, messages: list[ModelMessage], deps: Any | None = None) -> PreModelCallResult:
         """处理消息，返回 PreModelCallResult。
 
         不修改传入的 messages（创建新列表后 in-place 操作）。
+        deps 由 loop 每次迭代传入，用于 request_context 重渲（读 deps.instruction 等最新值）。
         """
+        # 0. 重渲 request_context（读 deps 最新值，mutate 占位 ModelRequest 的 parts）
+        self._rerender_request_context(deps)
+
         working: list[ModelMessage] = list(messages)
 
         # 0b. skill_listing attachment（先插，让后续 0a 把 invoked_skills 推到 [0]）
@@ -158,6 +169,24 @@ class PreModelCallMessageService:
             compacted=compact_result.compacted,
             dynamic_text=dynamic_text,
         )
+
+    def _rerender_request_context(self, deps: Any | None) -> None:
+        """每次 handle() 前重跑 formatter，把最新文本写到 source=request_context 的 ModelRequest。
+
+        占位消息由 agent.run() 初始化时插入 context_messages。这里只 mutate parts。
+        """
+        if self._context_formatter is None:
+            return
+        fmt_input: Any = self._request_context if self._request_context is not None else {}
+        context_text: str = self._context_formatter.format(fmt_input, deps=deps)
+        for msg in self._context_messages:
+            if (
+                isinstance(msg, ModelRequest)
+                and isinstance(msg.metadata, dict)
+                and msg.metadata.get("source") == _REQUEST_CONTEXT_SOURCE
+            ):
+                msg.parts = [UserPromptPart(content=context_text)] if context_text else []
+                return
 
     def _build_skill_listing_attachment(self) -> ModelRequest | None:
         """构建 available skills 的 system-reminder 附件（Decision 2）。

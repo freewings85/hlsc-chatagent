@@ -5,14 +5,13 @@
     → Temporal execute_update("on_state_changed", StateChangeRequest)
     → Workflow: 写 MySQL → on_session_state_change（业务逻辑）
     → 返回 StateChangeResult：
-        - tool_result_message + tool_result_data → 本轮 LLM 看到
-        - next_activity_* → 下一轮 agent 的 deps 热切换
-    → Tool 返回给 LLM：tool_result_message + tool_result_data
+        - tool_result_message       → 本轮 LLM 看到的 tool result 文本
+        - next_instruction/tools/…  → 下一轮 agent 的 deps 热切换
+    → Tool 返回给 LLM：tool_result_message
 """
 
 from __future__ import annotations
 
-import json
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -70,50 +69,22 @@ async def update_workflow_state(
             ctx.deps.session_state.update(result.new_session_state)
 
         # ── 热切换下一轮 agent 的 deps（如果 workflow 指定了新 AICall）──
-        if result.next_activity_id:
+        if result.next_instruction:
+            ctx.deps.instruction = result.next_instruction
             ctx.deps.available_tools = list(result.next_tools)
             ctx.deps.allowed_skills = list(result.next_skills)
             if result.next_skills and "Skill" not in ctx.deps.available_tools:
                 ctx.deps.available_tools.append("Skill")
-            ctx.deps.current_step_detail = {
-                "id": result.next_activity_id,
-                "name": result.next_activity_name or result.next_activity_id,
-                "goal": result.next_activity_goal,
-                "expected_fields": result.next_expected_fields,
-            }
-            ctx.deps.step_skeleton = list(result.new_activity_skeleton)
-            ctx.deps.step_pending_fields = _calc_pending(
-                result.next_expected_fields, ctx.deps.session_state,
-            )
-            # prompt 不需要工具手动覆盖：下一轮 mainagent 会基于新 deps 自动重渲
-
-        # ── 构造给 LLM 的 tool result 文本 ──
-        parts: list[str] = []
-        if result.tool_result_message:
-            parts.append(result.tool_result_message)
-        else:
-            parts.append("ok")
-        if result.tool_result_data:
-            parts.append(f"数据：{json.dumps(result.tool_result_data, ensure_ascii=False)}")
-        if result.next_activity_goal:
-            parts.append(f"接下来：{result.next_activity_goal}")
 
         log_tool_end("update_workflow_state", sid, rid, {
             "activity": result.current_activity,
-            "next_activity": result.next_activity_id,
+            "has_next_instruction": bool(result.next_instruction),
         })
-        return "\n".join(parts)
+        return result.tool_result_message or "ok"
 
     except Exception as e:
         log_tool_end("update_workflow_state", sid, rid, exc=e)
         return f"error: update_workflow_state failed - {e}"
-
-
-def _calc_pending(
-    expected_fields: list[dict[str, str]], session_state: dict[str, Any],
-) -> list[str]:
-    required: set[str] = {f["name"] for f in expected_fields}
-    return sorted(required - set(session_state.keys()))
 
 
 update_workflow_state.__doc__ = _DESCRIPTION
