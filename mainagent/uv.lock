@@ -784,7 +784,7 @@ dev = [
 [[package]]
 name = "hlsc-orchestrator-protocol"
 version = "0.1.0"
-source = { git = "ssh://git@git.51cjml.com:8022/chenzifei/com.celiang.hlsc.service.ai.base.git#f849ac2054f0bf86a5b1b4a3eda33d7cd93ad8fe" }
+source = { git = "ssh://git@git.51cjml.com:8022/chenzifei/com.celiang.hlsc.service.ai.base.git#84ca8e0150e044b719fa4fdb652b9361c7bd2d1b" }
 dependencies = [
     { name = "aiomysql" },
     { name = "httpx" },

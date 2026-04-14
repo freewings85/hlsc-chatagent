@@ -12,7 +12,8 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+import asyncio
+import os
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -23,6 +24,11 @@ from agent_sdk.logging import log_tool_start, log_tool_end
 from hlsc.tools.prompt_loader import load_tool_prompt
 
 _DESCRIPTION: str = load_tool_prompt("update_workflow_state")
+
+# Agent 等 workflow update 返回的墙钟超时（秒）
+# Temporal 的 rpc_timeout 只管单次 poll，execute_update 会一直循环 poll 直到 handler 返回。
+# 这个墙钟上限防止 tool 阻塞 agent 太久。调试时可以调大。
+_CALL_WORKFLOW_TIMEOUT: float = float(os.getenv("CALL_WORKFLOW_TIMEOUT", "120"))
 
 
 async def update_workflow_state(
@@ -48,16 +54,23 @@ async def update_workflow_state(
         from orchestrator_protocol import StateChangeRequest, StateChangeResult
 
         handle = temporal_client.get_workflow_handle(workflow_id)
-        result: StateChangeResult = await handle.execute_update(
-            "on_state_changed",
-            StateChangeRequest(
-                user_id=ctx.deps.user_id,
-                session_id=ctx.deps.session_id,
-                fields=fields,
-            ),
-            result_type=StateChangeResult,
-            rpc_timeout=timedelta(seconds=60),
-        )
+        try:
+            async with asyncio.timeout(_CALL_WORKFLOW_TIMEOUT):
+                result: StateChangeResult = await handle.execute_update(
+                    "on_state_changed",
+                    StateChangeRequest(
+                        user_id=ctx.deps.user_id,
+                        session_id=ctx.deps.session_id,
+                        fields=fields,
+                    ),
+                    result_type=StateChangeResult,
+                )
+        except asyncio.TimeoutError:
+            log_tool_end("update_workflow_state", sid, rid, exc=TimeoutError(f">{_CALL_WORKFLOW_TIMEOUT}s"))
+            return (
+                f"error: workflow update 超时（>{_CALL_WORKFLOW_TIMEOUT}s）。"
+                f"请告知用户系统繁忙，稍后再试。"
+            )
 
         # 同步刷新本地 session_state（给本轮后续工具调用看）
         for k, v in fields.items():
@@ -80,7 +93,7 @@ async def update_workflow_state(
             "activity": result.current_activity,
             "has_next_instruction": bool(result.next_instruction),
         })
-        return result.tool_result_message or "ok"
+        return result.tool_result_message
 
     except Exception as e:
         log_tool_end("update_workflow_state", sid, rid, exc=e)
