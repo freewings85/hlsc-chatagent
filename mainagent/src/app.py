@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ProfileTriggerHook, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
-from src.business_map_hook import StageHook
+from src.pre_run_hook import PreRunHook
 from src.hlsc_context import HlscContextFormatter
 from src.prompt_loader import create_main_prompt_loader
 
@@ -75,7 +75,7 @@ def create_agent_app() -> AgentApp:
         prompt_loader=prompt_loader,
         tools=ToolConfig(manual=tool_map, exclude=["write", "edit"]),
         context_formatter=formatter,
-        before_agent_run_hook=StageHook(),
+        before_agent_run_hook=PreRunHook(),
         after_run_hooks=[ProfileTriggerHook()],
     )
 
