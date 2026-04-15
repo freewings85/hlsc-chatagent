@@ -39,7 +39,6 @@ from agent_sdk._utils.session_logger import (
     log_llm_end,
     log_llm_start,
     log_request_end,
-    log_request_start,
     log_tool_end,
     log_tool_start,
 )
@@ -408,13 +407,8 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
     # 请求上下文：子 agent 不管理（父 agent 已设置）
     if not is_sub_agent:
         set_request_context(task.session_id, task.request_id)
-    log_request_start(
-        session_id=task.session_id,
-        user_query=task.message,
-        user_id=task.user_id,
-        request_id=task.request_id,
-        request_context=task.context,
-    )
+    # 注意：log_request_start 已由 Agent._run_request 在 PreRunHook 之前调用，
+    # 这样 PreRunHook / prompt_loader 阶段的失败也能落到 session 日志。这里不再重复
 
     try:
         iteration: int = 0
