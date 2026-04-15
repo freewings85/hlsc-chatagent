@@ -1,17 +1,21 @@
 """PreModelCallMessageService：每次 ModelRequestNode 前的消息处理管道。
 
-封装设计文档 §3.3 中的处理流程：
-  0a. invoked_skills inject — 已激活 skill 指令 → prepend（compact 安全）
-  0b. skill_listing inject  — 可用 skill 列表 → prepend（Decision 2）
-  1.  context injection     — AGENTS.md / MEMORY.md → prepend to [0]
-  2.  attachment inject     — changed_files → append（compact 之前）
-  3.  compact check         — microcompact 或 full compact
-  4.  post-compact attach   — 若 full compact 产出了 attachments，重新注入
+处理流程：
+  0.  rerender request_context — 用 deps 最新值重渲 source=request_context 的占位
+  1a. skill_listing inject     — 可用 skill 列表（元信息）→ prepend，稳定利于 cache
+  1b. system_prompt inject     — 始终 [0]，cache breakpoint
+  2.  static context injection — AGENTS.md / MEMORY.md → prepend 到 [0]
+  3.  attachment inject        — changed_files → append（compact 之前）
+  4.  compact check            — microcompact 或 full compact
+  5.  post-compact attach      — 若 full compact 产出了 attachments，重新注入
 
 返回 PreModelCallResult：
-  - model_messages   — 直接替换 run._graph_run.state.message_history
-  - working_messages — 若 compact 发生，调用 MemoryMessageService.update() 持久化
-  - compacted        — 是否发生了 compact
+  - model_messages      — 直接替换 run._graph_run.state.message_history
+  - working_messages    — 若 compact 发生，调用 MemoryMessageService.update() 持久化
+  - compacted           — 是否发生了 compact
+  - dynamic_text        — 动态 context 纯文本，由 loop 注入到最后一条 user message 的 parts
+  - invoked_skills_tail — 已激活 skill 纯文本；仅 compact 触发那一轮非空，作为 compact
+                          兜底（正常情况下 SKILL.md 在 skill tool result 里，对话历史自然带）
 """
 
 from __future__ import annotations
@@ -35,7 +39,6 @@ if TYPE_CHECKING:
 
 _SYSTEM_PROMPT_SOURCE = "system_prompt"
 _SKILL_LISTING_SOURCE = "skill_listing"
-_INVOKED_SKILLS_SOURCE = "invoked_skills"
 _REQUEST_CONTEXT_SOURCE = "request_context"
 
 
@@ -53,7 +56,10 @@ class PreModelCallResult:
     """是否发生了 compact（调用方据此决定是否更新 MemoryMessageService）。"""
 
     dynamic_text: str = ""
-    """动态 context 纯文本，由 loop 注入到发给 LLM 的最后一条消息。"""
+    """动态 context 纯文本，由 loop 每轮注入到最后一条 user message 的 parts。"""
+
+    invoked_skills_tail: str = ""
+    """已激活 skill 纯文本；仅 compact 触发那一轮非空，compact 兜底用。"""
 
 
 def _remove_by_source(messages: list[ModelMessage], source: str) -> None:
@@ -79,13 +85,15 @@ def _make_meta_request(content: str, source: str) -> ModelRequest:
 class PreModelCallMessageService:
     """每次 ModelRequestNode 前调用，产出 model_messages。
 
-    处理顺序（与设计文档 §3.3 及 Decision 2/3 一致）：
-    0a. invoked_skills inject ← InvokedSkillStore.get_all()
-    0b. skill_listing inject  ← SkillRegistry.format_listing()
-    1.  context injection     ← inject_context()
-    2.  attachment inject     ← AttachmentCollector.inject()（compact 之前）
-    3.  compact check         ← Compactor.check()
-    4.  post-compact attach   ← 若 full compact 产出了 attachments，重新注入
+    处理顺序：
+    0.  rerender request_context ← 用 deps 最新值重渲占位 ModelRequest
+    1a. skill_listing inject     ← SkillRegistry.format_listing()（元信息，prepend 头部）
+    1b. system_prompt inject     ← 始终 [0]
+    2.  context injection        ← inject_context()（静态 AGENT.md/MEMORY.md）
+    3.  attachment inject        ← AttachmentCollector.inject()（compact 之前）
+    4.  compact check            ← Compactor.check()
+    5.  post-compact attach      ← 若 full compact 产出了 attachments，重新注入
+    6.  invoked_skills_tail      ← 仅 compact 发生时产出；不动消息，交给 loop 尾部注入
     """
 
     def __init__(
@@ -123,26 +131,17 @@ class PreModelCallMessageService:
 
         working: list[ModelMessage] = list(messages)
 
-        # 0b. skill_listing attachment（先插，让后续 0a 把 invoked_skills 推到 [0]）
-        # 最终顺序：[0]=invoked_skills, [1]=skill_listing, [2]=context, ...
+        # 1a. skill_listing attachment（元信息，头部；allowed_skills 不变则 cache 友好）
         _remove_by_source(working, _SKILL_LISTING_SOURCE)
         if self._skill_registry is not None:
             listing_attachment = self._build_skill_listing_attachment()
             if listing_attachment is not None:
                 working.insert(0, listing_attachment)
 
-        # 0a. invoked_skills attachment（compact 后 LLM 仍能看到已激活 skill 指令）
-        # 插在 [0]，把 skill_listing 推到 [1]
-        _remove_by_source(working, _INVOKED_SKILLS_SOURCE)
-        if self._invoked_skill_store is not None:
-            invoked_attachment = self._build_invoked_skills_attachment()
-            if invoked_attachment is not None:
-                working.insert(0, invoked_attachment)
-
-        # 1. Context injection（AGENTS.md + MEMORY.md → prepend to [0]）
+        # 2. Context injection（AGENTS.md + MEMORY.md → prepend to [0]）
         inject_context(working, self._context_messages)
 
-        # 1.5 System prompt injection → 始终在 [0]，确保 system prompt 在所有消息之前
+        # 1b. System prompt injection → 始终在 [0]，确保 system prompt 在所有消息之前
         _remove_by_source(working, _SYSTEM_PROMPT_SOURCE)
         if self._system_prompt:
             working.insert(0, ModelRequest(
@@ -150,15 +149,21 @@ class PreModelCallMessageService:
                 metadata={"is_meta": True, "source": _SYSTEM_PROMPT_SOURCE},
             ))
 
-        # 2. Attachment injection（changed_files → append，compact 之前）
+        # 3. Attachment injection（changed_files → append，compact 之前）
         self._attachment_collector.inject(working, CompactResult())
 
-        # 3. Compact check（可能 microcompact 或 full compact）
+        # 4. Compact check（可能 microcompact 或 full compact）
         compact_result: CompactResult = await self._compactor.check(working)
 
-        # 4. 若 full compact 产出了 attachments（最近文件恢复等），重新注入
+        # 5. 若 full compact 产出了 attachments（最近文件恢复等），重新注入
         if compact_result.compacted and compact_result.attachments:
             self._attachment_collector.inject(working, compact_result)
+
+        # 6. invoked_skills_tail：仅 compact 触发那一轮注入（正常 tool result 里已带
+        #    SKILL.md，靠对话历史自然可见；compact 压掉后才需要兜底）
+        invoked_skills_tail: str = ""
+        if compact_result.compacted:
+            invoked_skills_tail = self._format_invoked_skills_text()
 
         # 提取动态 context 文本，交给 loop 注入到最后一条消息
         dynamic_text: str = extract_dynamic_text(self._context_messages)
@@ -168,6 +173,7 @@ class PreModelCallMessageService:
             working_messages=list(working),
             compacted=compact_result.compacted,
             dynamic_text=dynamic_text,
+            invoked_skills_tail=invoked_skills_tail,
         )
 
     def _rerender_request_context(self, deps: Any | None) -> None:
@@ -208,10 +214,12 @@ class PreModelCallMessageService:
         )
         return _make_meta_request(content, _SKILL_LISTING_SOURCE)
 
-    def _build_invoked_skills_attachment(self) -> ModelRequest | None:
-        """构建 invoked_skills 的 system-reminder 附件（Decision 3）。
+    def _format_invoked_skills_text(self) -> str:
+        """返回 invoked skills 的纯文本（不含 <system-reminder> 包裹，由 loop 的
+        build_invoked_skills_part() 包）。
 
-        compact 后消息历史截断，此 attachment 确保 LLM 仍然遵守已激活的 skill 指令。
+        compact 后消息历史截断，tool result 里的 SKILL.md 会被压掉，此文本追加到最后
+        一条 user message 的 parts 作为 compact 兜底，确保 LLM 仍遵守已激活的 skill 指令。
 
         格式：
           The following skills were invoked in this session.
@@ -224,25 +232,24 @@ class PreModelCallMessageService:
           ...
         """
         if self._invoked_skill_store is None:
-            return None
+            return ""
         invoked = self._invoked_skill_store.get_all()
         if not invoked:
-            return None
+            return ""
 
         # 只注入当前场景允许的 skills，避免跨场景干扰
         if self.allowed_skills is not None:
             allowed_set = set(self.allowed_skills)
             invoked = {k: v for k, v in invoked.items() if v.name in allowed_set}
             if not invoked:
-                return None
+                return ""
 
         sections = [
             f"### Skill: {skill.name}\n\n{skill.content}"
             for skill in sorted(invoked.values(), key=lambda s: s.invoked_at)
         ]
-        content = (
+        return (
             "The following skills were invoked in this session. "
             "Continue to follow these guidelines:\n\n"
             + "\n\n---\n\n".join(sections)
         )
-        return _make_meta_request(content, _INVOKED_SKILLS_SOURCE)

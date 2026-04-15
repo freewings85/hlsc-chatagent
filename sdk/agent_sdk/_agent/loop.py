@@ -482,10 +482,22 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
 
                     run._graph_run.state.message_history[:] = pre_result.model_messages
 
-                    # 注入 dynamic-context 到发给 LLM 的最后一条消息
+                    # 注入 tail reminders（dynamic-context / invoked-skills）到最后一条
+                    # user message 的 parts。append → LLM call → strip 成对出现，确保
+                    # 同轮内多次 LLM 调用 context 热切换不会叠加，持久化时也干净。
+                    from agent_sdk._agent.message.context_injector import (
+                        build_dynamic_context_part,
+                        build_invoked_skills_part,
+                        strip_tail_reminders,
+                    )
                     if pre_result.dynamic_text:
-                        from agent_sdk._agent.message.context_injector import build_dynamic_context_part
-                        node.request.parts.append(build_dynamic_context_part(pre_result.dynamic_text))
+                        node.request.parts.append(
+                            build_dynamic_context_part(pre_result.dynamic_text)
+                        )
+                    if pre_result.invoked_skills_tail:
+                        node.request.parts.append(
+                            build_invoked_skills_part(pre_result.invoked_skills_tail)
+                        )
 
                     if _first_llm_call:
                         pending_user: str | None = task.message
@@ -502,13 +514,18 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                             f"(iteration={iteration}): {alt_errors}"
                         )
 
-                    await _emit_model_stream(
-                        node, run.ctx, emitter, task,
-                        agent_name=agent_name,
-                        parent_tool_call_id=ctx.parent_tool_call_id,
-                    )
-                    _first_llm_call = False
-                    node = await run.next(node)
+                    try:
+                        await _emit_model_stream(
+                            node, run.ctx, emitter, task,
+                            agent_name=agent_name,
+                            parent_tool_call_id=ctx.parent_tool_call_id,
+                        )
+                        _first_llm_call = False
+                        node = await run.next(node)
+                    finally:
+                        # LLM call 完成/异常 → 清掉刚 append 的 tail reminders，让
+                        # 下轮 handle() 和持久化都看到干净的 history
+                        strip_tail_reminders(run._graph_run.state.message_history)
 
                 elif isinstance(node, CallToolsNode):
                     await _emit_tool_events(node, run.ctx, emitter, task, agent_name=agent_name, parent_tool_call_id=ctx.parent_tool_call_id)

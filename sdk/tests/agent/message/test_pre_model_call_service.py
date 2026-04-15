@@ -16,7 +16,6 @@ from agent_sdk._agent.message.attachment_collector import AttachmentCollector, _
 from agent_sdk._agent.message.context_injector import _MERGED_META_SOURCE
 from agent_sdk._agent.message.pre_model_call_service import (
     PreModelCallMessageService,
-    _INVOKED_SKILLS_SOURCE,
     _SKILL_LISTING_SOURCE,
 )
 from agent_sdk._agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
@@ -449,9 +448,13 @@ class TestSkillListingInjection:
         assert listing_count == 1
 
 
-class TestInvokedSkillsInjection:
-    async def test_invoked_skills_injected_when_store_has_records(self) -> None:
-        """store 有记录时注入 invoked_skills attachment"""
+class TestInvokedSkillsTail:
+    """invoked_skills 不再 prepend 为独立 meta ModelRequest，改为仅 compact 触发那一轮
+    通过 `PreModelCallResult.invoked_skills_tail` 返回，由 loop 注入到最后一条 user
+    message 的 parts（compact 兜底）。"""
+
+    async def test_no_compact_no_tail_even_with_records(self) -> None:
+        """不 compact 时，即使 store 有记录，也不产出 invoked_skills_tail（tool result 已带 SKILL.md）。"""
         store = make_invoked_store_with({"commit": "# Commit\nStep 1."})
         tracker = FileStateTracker()
         collector = AttachmentCollector(tracker)
@@ -466,22 +469,28 @@ class TestInvokedSkillsInjection:
 
         result = await service.handle([make_user_msg("hello")])
 
+        assert result.compacted is False
+        assert result.invoked_skills_tail == ""
+        # 也不应再以独立 meta ModelRequest 形式出现
         sources = [
             m.metadata.get("source")
             for m in result.model_messages
             if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
         ]
-        assert _INVOKED_SKILLS_SOURCE in sources
+        assert "invoked_skills" not in sources
 
-    async def test_invoked_skills_not_injected_when_store_empty(self) -> None:
-        """store 为空时不注入 invoked_skills attachment"""
+    async def test_no_tail_when_store_empty(self) -> None:
+        """store 为空时不产出 tail，即使 compact 触发。"""
         store = make_invoked_store_with({})
         tracker = FileStateTracker()
         collector = AttachmentCollector(tracker)
-        compactor = make_no_compact_compactor()
+
+        # Mock compactor to force compacted=True
+        mock_compactor = MagicMock(spec=Compactor)
+        mock_compactor.check = AsyncMock(return_value=CompactResult(compacted=True, layer="full"))
 
         service = PreModelCallMessageService(
-            compactor=compactor,
+            compactor=mock_compactor,
             context_messages=[],
             attachment_collector=collector,
             invoked_skill_store=store,
@@ -489,43 +498,37 @@ class TestInvokedSkillsInjection:
 
         result = await service.handle([make_user_msg("hello")])
 
-        sources = [
-            m.metadata.get("source")
-            for m in result.model_messages
-            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
-        ]
-        assert _INVOKED_SKILLS_SOURCE not in sources
+        assert result.compacted is True
+        assert result.invoked_skills_tail == ""
 
-    async def test_invoked_skills_not_injected_when_store_none(self) -> None:
-        """store 为 None 时不注入"""
+    async def test_no_tail_when_store_none(self) -> None:
+        """store 为 None 时不产出 tail。"""
         tracker = FileStateTracker()
         collector = AttachmentCollector(tracker)
-        compactor = make_no_compact_compactor()
+        mock_compactor = MagicMock(spec=Compactor)
+        mock_compactor.check = AsyncMock(return_value=CompactResult(compacted=True, layer="full"))
 
         service = PreModelCallMessageService(
-            compactor=compactor,
+            compactor=mock_compactor,
             context_messages=[],
             attachment_collector=collector,
         )
 
         result = await service.handle([make_user_msg("hello")])
 
-        sources = [
-            m.metadata.get("source")
-            for m in result.model_messages
-            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict)
-        ]
-        assert _INVOKED_SKILLS_SOURCE not in sources
+        assert result.invoked_skills_tail == ""
 
-    async def test_invoked_skills_content_contains_skill_content(self) -> None:
-        """invoked_skills attachment 内容包含 SKILL.md 正文"""
+    async def test_tail_populated_only_when_compact_triggers(self) -> None:
+        """compact=True 且 store 非空 → tail 包含 SKILL.md 正文。"""
         store = make_invoked_store_with({"commit": "# Commit\nDo the commit."})
         tracker = FileStateTracker()
         collector = AttachmentCollector(tracker)
-        compactor = make_no_compact_compactor()
+
+        mock_compactor = MagicMock(spec=Compactor)
+        mock_compactor.check = AsyncMock(return_value=CompactResult(compacted=True, layer="full"))
 
         service = PreModelCallMessageService(
-            compactor=compactor,
+            compactor=mock_compactor,
             context_messages=[],
             attachment_collector=collector,
             invoked_skill_store=store,
@@ -533,43 +536,31 @@ class TestInvokedSkillsInjection:
 
         result = await service.handle([make_user_msg("hello")])
 
-        invoked_msgs = [
-            m for m in result.model_messages
-            if isinstance(m, ModelRequest)
-            and isinstance(m.metadata, dict)
-            and m.metadata.get("source") == _INVOKED_SKILLS_SOURCE
-        ]
-        assert len(invoked_msgs) == 1
-        content = str(invoked_msgs[0].parts[0].content)  # type: ignore[union-attr]
-        assert "# Commit" in content
-        assert "Do the commit." in content
+        assert result.compacted is True
+        assert "# Commit" in result.invoked_skills_tail
+        assert "Do the commit." in result.invoked_skills_tail
+        assert "Skill: commit" in result.invoked_skills_tail
 
-
-class TestSkillInjectionOrder:
-    async def test_invoked_skills_before_skill_listing(self) -> None:
-        """invoked_skills attachment 在 skill_listing 之前（更靠近消息开头）"""
-        registry = make_skill_registry("commit")
-        store = make_invoked_store_with({"commit": "# Commit"})
+    async def test_allowed_skills_filters_tail(self) -> None:
+        """allowed_skills 不包含的 skill 会被过滤掉。"""
+        store = make_invoked_store_with({
+            "commit": "# Commit content",
+            "review-pr": "# Review content",
+        })
         tracker = FileStateTracker()
         collector = AttachmentCollector(tracker)
-        compactor = make_no_compact_compactor()
+        mock_compactor = MagicMock(spec=Compactor)
+        mock_compactor.check = AsyncMock(return_value=CompactResult(compacted=True, layer="full"))
 
         service = PreModelCallMessageService(
-            compactor=compactor,
+            compactor=mock_compactor,
             context_messages=[],
             attachment_collector=collector,
-            skill_registry=registry,
             invoked_skill_store=store,
         )
+        service.allowed_skills = ["commit"]  # 只允许 commit
 
         result = await service.handle([make_user_msg("hello")])
 
-        positions: dict[str, int] = {}
-        for i, m in enumerate(result.model_messages):
-            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict):
-                src = m.metadata.get("source")
-                if src in (_INVOKED_SKILLS_SOURCE, _SKILL_LISTING_SOURCE):
-                    positions[str(src)] = i
-
-        # invoked_skills（0a）应比 skill_listing（0b）更靠前
-        assert positions.get(_INVOKED_SKILLS_SOURCE, 999) < positions.get(_SKILL_LISTING_SOURCE, 999)
+        assert "# Commit content" in result.invoked_skills_tail
+        assert "# Review content" not in result.invoked_skills_tail

@@ -99,9 +99,10 @@ def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
 
     - SystemPromptPart 被跳过（由 Pydantic AI 自动注入，不属于对话内容）
     - 如果一个 ModelRequest 只包含 SystemPromptPart，则整个消息被跳过
-    - <dynamic-context> 标记的内容被剥离（不进审计日志）
+    - tail reminder（<system-reminder> 包裹的 meta part）被跳过，不进审计日志；
+      正常流程下 loop.py 已经在 LLM call 后 strip，这里是防御性兜底
     """
-    from agent_sdk._agent.message.context_injector import strip_dynamic_context
+    from agent_sdk._agent.message.context_injector import is_tail_reminder_part
 
     result: list[AgentMessage] = []
 
@@ -114,8 +115,10 @@ def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
                 if isinstance(part, SystemPromptPart):
                     continue
                 elif isinstance(part, UserPromptPart):
+                    # 防御性兜底：loop.py 应该已经在 LLM call 后 strip 过，这里只是保险
+                    if is_tail_reminder_part(part):
+                        continue
                     text = part.content if isinstance(part.content, str) else str(part.content)
-                    text = strip_dynamic_context(text)
                     if text:
                         content_parts.append(text)
                 elif isinstance(part, ToolReturnPart):

@@ -1,16 +1,28 @@
-"""ContextInjector：将 is_meta 上下文消息注入到消息列表中。
+"""ContextInjector：管理 is_meta 上下文和 tail reminder 的生命周期。
 
-分为两类：
-- **静态 context**（AGENT.md、MEMORY.md）：合并为一条消息 prepend 到 [0]，利于 prompt cache
-- **动态 context**（request_context、session_state）：由 loop 在发给 LLM 前注入到最后一条消息末尾，
-  用 <system-reminder><dynamic-context> 标记包裹，持久化时剥离
+**两类 context**：
+- **静态 context**（AGENT.md、MEMORY.md）：合并为一条 ModelRequest prepend 到 [0]，
+  利于 prompt cache；`metadata.is_meta=True`
+- **动态 tail reminder**（dynamic-context / invoked-skills 等）：作为 UserPromptPart
+  追加到"最后一条真实 user message"的 parts 列表末尾，用 `<system-reminder>` 包裹
+
+**Tail reminder 生命周期**（由 loop.py 驱动）：
+  LLM 调用前：loop.py 用 `build_*_part()` 构建 part 并 append 到 node.request.parts
+  LLM 调用后：loop.py 调 `strip_tail_reminders()` 从整个 message_history 剥离所有 tail reminder
+  持久化时：`from_model_messages()` 同样用 `is_tail_reminder_part()` 跳过残留
+
+**关键不变式**：
+- 任何 UserPromptPart 内容是完整 `<system-reminder>\\n...\\n</system-reminder>` 包裹 =
+  临时 meta tail injection
+- 独立的 meta ModelRequest（`metadata.is_meta=True`，如 skill_listing / system_prompt）
+  走 `_remove_by_source` 管，不在 strip_tail_reminders 范围内
 
 参考 Claude Code 的注入机制 + prompt caching 优化。
 """
 
 from __future__ import annotations
 
-import re
+from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 
@@ -20,22 +32,78 @@ _MERGED_META_SOURCE = "merged_context"
 # 动态 context 的 source 标识（request_context、session_state）
 _DYNAMIC_SOURCES: frozenset[str] = frozenset({"request_context", "session_state"})
 
-# 动态 context 检测用的标记（用于测试断言）
+# 测试/调试用：tail reminder 的 markdown section 标题
 DYNAMIC_CONTEXT_TAG = "## dynamic-context"
+INVOKED_SKILLS_TAG = "## invoked-skills"
 
-# strip 用的正则：匹配新格式（## dynamic-context）和旧格式（<dynamic-context>）
-_STRIP_DYNAMIC_RE: re.Pattern[str] = re.compile(
-    r"\n?<system-reminder>\n## dynamic-context\n.*?\n</system-reminder>"  # 新格式
-    r"|"
-    r"\n?(?:<system-reminder>\n?)?<dynamic-context>.*?</dynamic-context>\n?(?:</system-reminder>)?",  # 旧格式
-    re.DOTALL,
-)
 
+# ── system-reminder 包裹 ──────────────────────────────────
 
 def wrap_system_reminder(content: str) -> str:
     """包裹 <system-reminder> 标签。在发送给 LLM 前的最后一步调用。"""
     return f"<system-reminder>\n{content}\n</system-reminder>"
 
+
+# ── tail reminder 识别与清理 ──────────────────────────────
+
+def is_tail_reminder_part(part: Any) -> bool:
+    """判断 part 是否是 tail reminder（追加到真实 user message 的临时 meta part）。
+
+    识别规则：UserPromptPart 且内容完整包裹在 `<system-reminder>\\n...\\n</system-reminder>`
+    里。所有 `build_*_part()` 产出的 part 都满足；真实用户输入不会匹配。
+    """
+    if not isinstance(part, UserPromptPart):
+        return False
+    content: Any = part.content
+    if not isinstance(content, str):
+        return False
+    return (
+        content.startswith("<system-reminder>\n")
+        and content.rstrip().endswith("</system-reminder>")
+    )
+
+
+def strip_tail_reminders(messages: list[ModelMessage]) -> None:
+    """从所有真实 user message 的 parts 列表里剥离 tail reminder parts。
+
+    - 独立 meta ModelRequest（`metadata.is_meta=True`，如 skill_listing / system_prompt
+      / merged_context）**整条跳过**，不动；这类靠 `_remove_by_source` 管理
+    - 普通 user message 的 parts 按 `is_tail_reminder_part` 过滤
+
+    典型调用点：
+    - loop.py 每次 LLM call 后（对称：append → LLM → strip）
+    - 持久化相关路径也可作为防御性兜底
+    """
+    for msg in messages:
+        if not isinstance(msg, ModelRequest):
+            continue
+        if isinstance(msg.metadata, dict) and msg.metadata.get("is_meta"):
+            continue
+        msg.parts[:] = [p for p in msg.parts if not is_tail_reminder_part(p)]
+
+
+# ── tail reminder 构造 ────────────────────────────────────
+
+def build_dynamic_context_part(dynamic_text: str) -> UserPromptPart:
+    """构建 dynamic-context 的 UserPromptPart（追加到最后一条 user message）。
+
+    包含每轮可能变的上下文：orchestrator instruction、session_state 摘要等。
+    """
+    content: str = wrap_system_reminder(f"{DYNAMIC_CONTEXT_TAG}\n\n{dynamic_text}")
+    return UserPromptPart(content=content)
+
+
+def build_invoked_skills_part(skills_text: str) -> UserPromptPart:
+    """构建 invoked-skills 的 UserPromptPart（追加到最后一条 user message）。
+
+    仅在 compact 触发的那一轮注入一次 —— 正常情况下 skill tool result 里已带
+    SKILL.md 全文，靠对话历史自然可见；compact 把 tool result 压掉后要兜底。
+    """
+    content: str = wrap_system_reminder(f"{INVOKED_SKILLS_TAG}\n\n{skills_text}")
+    return UserPromptPart(content=content)
+
+
+# ── context_messages（meta 占位）操作 ────────────────────
 
 def _is_dynamic(msg: ModelRequest) -> bool:
     """判断 context_message 是否是动态内容。"""
@@ -95,18 +163,6 @@ def extract_dynamic_text(context_messages: list[ModelRequest]) -> str:
     return "\n\n".join(parts) if parts else ""
 
 
-def build_dynamic_context_part(dynamic_text: str) -> UserPromptPart:
-    """构建包含动态 context 的 UserPromptPart。
-
-    格式：<system-reminder> + markdown ## dynamic-context 标题 + 内容
-    作为最后一条消息的最后一个 part 追加，确保 LLM 始终能看到最新上下文。
-    """
-    content: str = wrap_system_reminder(
-        f"## dynamic-context\n\n{dynamic_text}"
-    )
-    return UserPromptPart(content=content)
-
-
 def inject_context(
     messages: list[ModelMessage],
     context_messages: list[ModelRequest],
@@ -114,11 +170,13 @@ def inject_context(
     """将静态上下文注入到消息列表中（prompt cache 友好）。
 
     - 静态 context（AGENT.md、MEMORY.md）→ 合并为一条 prepend 到 [0]
-    - 动态 context 不在此处注入（由 loop 在发给 LLM 前注入到 node.request）
+    - 动态 context（dynamic-context / invoked-skills）不在此处注入；由 loop 在发给
+      LLM 前用 `build_*_part()` append 到 node.request.parts，LLM 返回后再
+      `strip_tail_reminders()` 清理
 
     直接修改 messages 列表（in-place）。
     """
-    # 移除旧的 merged context 和旧的 dynamic_context_fallback
+    # 移除旧的 merged context（要用最新 static_msgs 重建）
     messages[:] = [
         msg for msg in messages
         if not (
@@ -128,33 +186,9 @@ def inject_context(
         )
     ]
 
-    # 清理所有消息上残留的旧 dynamic-context，移除 strip 后变空的 part
-    for msg in messages:
-        if not isinstance(msg, ModelRequest):
-            continue
-        for part in msg.parts:
-            if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                part.content = strip_dynamic_context(part.content)
-        msg.parts[:] = [
-            p for p in msg.parts
-            if not (isinstance(p, UserPromptPart) and isinstance(p.content, str) and not p.content)
-        ]
-
     static_msgs, _ = _split_context(context_messages)
 
     # 静态 context → prepend [0]（prompt cache 友好）
     merged: ModelRequest | None = merge_context_messages(static_msgs)
     if merged is not None:
         messages.insert(0, merged)
-
-
-def strip_dynamic_context(text: str) -> str:
-    """从文本中剥离 <dynamic-context> 块及其 <system-reminder> 外层包裹。
-
-    兼容两种格式：
-    - 旧格式：\\n<dynamic-context>...内容...</dynamic-context>
-    - 新格式：<system-reminder>\\n<dynamic-context>...内容...</dynamic-context>\\n</system-reminder>
-
-    用于持久化前清理，确保动态 context 不进审计日志。
-    """
-    return _STRIP_DYNAMIC_RE.sub("", text)
