@@ -81,13 +81,13 @@ async def update_workflow_state(
         if result.new_session_state:
             ctx.deps.session_state.update(result.new_session_state)
 
-        # ── 热切换下一轮 agent 的 deps（如果 workflow 指定了新 AICall）──
+        # ── 热切换下一轮 agent 的 instruction（tail dynamic-context，每轮变）──
+        # 注意：不再 mutate available_tools / allowed_skills（cache 稳定考虑，
+        # 工具集由 stage_config.yaml 的 scene 级配置在 PreRunHook 里定死）。
+        # AICall.next_tools / next_skills 降级为软提醒——业务如需引导 LLM，
+        # 在 result.next_instruction 文字里写明即可。
         if result.next_instruction:
             ctx.deps.instruction = result.next_instruction
-            ctx.deps.available_tools = list(result.next_tools)
-            ctx.deps.allowed_skills = list(result.next_skills)
-            if result.next_skills and "Skill" not in ctx.deps.available_tools:
-                ctx.deps.available_tools.append("Skill")
 
         log_tool_end("update_workflow_state", sid, rid, {
             "activity": result.current_activity,
