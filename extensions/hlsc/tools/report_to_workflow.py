@@ -48,7 +48,11 @@ async def report_to_workflow(
 
     if temporal_client is None or workflow_id is None:
         log_tool_end("report_to_workflow", sid, rid, exc=RuntimeError("not in orchestrator mode"))
-        return "error: 当前不在编排模式下，无法更新 workflow 状态"
+        return (
+            "FATAL: 后端工作流连接不可用（系统配置问题，不是调用参数问题）。"
+            "**不要重试本工具**，也不要改参数再调。"
+            "直接用自然语言告诉用户系统暂时不可用，请稍后再试，然后结束本轮。"
+        )
 
     try:
         from orchestrator_protocol import StateChangeRequest, StateChangeResult
@@ -68,8 +72,8 @@ async def report_to_workflow(
         except asyncio.TimeoutError:
             log_tool_end("report_to_workflow", sid, rid, exc=TimeoutError(f">{_CALL_WORKFLOW_TIMEOUT}s"))
             return (
-                f"error: workflow update 超时（>{_CALL_WORKFLOW_TIMEOUT}s）。"
-                f"请告知用户系统繁忙，稍后再试。"
+                f"FATAL: 工作流响应超时（>{_CALL_WORKFLOW_TIMEOUT}s，后端可能繁忙或卡住）。"
+                f"**不要重试本工具**，直接用自然语言告诉用户系统繁忙、请稍后再试，然后结束本轮。"
             )
 
         # 同步刷新本地 session_state（给本轮后续工具调用看）
@@ -97,7 +101,12 @@ async def report_to_workflow(
 
     except Exception as e:
         log_tool_end("report_to_workflow", sid, rid, exc=e)
-        return f"error: report_to_workflow failed - {e}"
+        # 其它异常（网络抖动、序列化问题等）也先让 LLM 不要死循环重试；
+        # 交给用户看完再决定要不要继续
+        return (
+            f"FATAL: 工作流调用出错（{type(e).__name__}: {e}）。"
+            f"**不要重试本工具**，用自然语言向用户说明系统异常、稍后再试，然后结束本轮。"
+        )
 
 
 report_to_workflow.__doc__ = _DESCRIPTION

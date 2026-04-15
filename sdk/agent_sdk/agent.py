@@ -414,6 +414,27 @@ class Agent:
                     error=str(init_exc),
                     request_id=request_id,
                 )
+                # 子 agent 不管理 emitter；主 agent 要发 ERROR + CHAT_REQUEST_END
+                # 并关闭 emitter，否则前端 SSE 一直挂着等事件
+                if not is_sub_agent:
+                    from agent_sdk._event.event_model import EventModel
+                    from agent_sdk._event.event_type import EventType
+                    await emitter.emit(EventModel(
+                        session_id=session_id,
+                        request_id=request_id,
+                        type=EventType.ERROR,
+                        data={"message": str(init_exc)},
+                        agent_name=self._agent_name or "main",
+                    ))
+                    await emitter.emit(EventModel(
+                        session_id=session_id,
+                        request_id=request_id,
+                        type=EventType.CHAT_REQUEST_END,
+                        data={"user_id": user_id},
+                        finish_reason="error",
+                        agent_name=self._agent_name or "main",
+                    ))
+                    await emitter.close()
                 raise
 
             # 7. 跑循环（run_agent_loop 内部自己 log_request_end）
