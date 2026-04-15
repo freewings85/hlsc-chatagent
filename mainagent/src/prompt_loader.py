@@ -1,7 +1,7 @@
 """HLSC 主 Agent 的 PromptLoader 实现
 
 按 stage_config.yaml 里的声明加载场景 prompt。
-orchestrator 通过 request_context.orchestrator.scenario 指定场景，
+调用方在 request_context.scene 指定场景（orchestrator 和直连两种模式都一样），
 PreRunHook 解包到 deps.current_scene，本模块据此查 stage_config 加载 prompt_parts + agent_md。
 
 场景未指定或未在 stage_config.yaml 中声明 → 报错（不在服务范围）。

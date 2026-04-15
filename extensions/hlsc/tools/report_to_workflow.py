@@ -1,12 +1,12 @@
-"""update_workflow_state 工具：把收集到的业务字段写入 Workflow 状态。
+"""report_to_workflow 工具：把用户给出的业务字段上报给 workflow（记账）。
 
 调用链路：
-    LLM → update_workflow_state(fields)
+    LLM → report_to_workflow(fields)
     → Temporal execute_update("on_state_changed", StateChangeRequest)
     → Workflow: 写 MySQL → on_session_state_change（业务逻辑）
     → 返回 StateChangeResult：
-        - tool_result_message       → 本轮 LLM 看到的 tool result 文本
-        - next_instruction/tools/…  → 下一轮 agent 的 deps 热切换
+        - tool_result_message  → 本轮 LLM 看到的 tool result 文本
+        - next_instruction     → 下一轮 agent 的 instruction 热切换（tail dynamic-context）
     → Tool 返回给 LLM：tool_result_message
 """
 
@@ -23,7 +23,7 @@ from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.logging import log_tool_start, log_tool_end
 from hlsc.tools.prompt_loader import load_tool_prompt
 
-_DESCRIPTION: str = load_tool_prompt("update_workflow_state")
+_DESCRIPTION: str = load_tool_prompt("report_to_workflow")
 
 # Agent 等 workflow update 返回的墙钟超时（秒）
 # Temporal 的 rpc_timeout 只管单次 poll，execute_update 会一直循环 poll 直到 handler 返回。
@@ -31,7 +31,7 @@ _DESCRIPTION: str = load_tool_prompt("update_workflow_state")
 _CALL_WORKFLOW_TIMEOUT: float = float(os.getenv("CALL_WORKFLOW_TIMEOUT", "120"))
 
 
-async def update_workflow_state(
+async def report_to_workflow(
     ctx: RunContext[AgentDeps],
     fields: Annotated[dict[str, Any], Field(
         description="本次收集到的业务字段。key 是字段名，value 是字段值。"
@@ -41,13 +41,13 @@ async def update_workflow_state(
     """把收集到的信息写入流程状态。"""
     sid: str = ctx.deps.session_id
     rid: str = ctx.deps.request_id
-    log_tool_start("update_workflow_state", sid, rid, {"fields": list(fields.keys())})
+    log_tool_start("report_to_workflow", sid, rid, {"fields": list(fields.keys())})
 
     temporal_client = ctx.deps.temporal_client
     workflow_id: str | None = ctx.deps.workflow_id
 
     if temporal_client is None or workflow_id is None:
-        log_tool_end("update_workflow_state", sid, rid, exc=RuntimeError("not in orchestrator mode"))
+        log_tool_end("report_to_workflow", sid, rid, exc=RuntimeError("not in orchestrator mode"))
         return "error: 当前不在编排模式下，无法更新 workflow 状态"
 
     try:
@@ -66,7 +66,7 @@ async def update_workflow_state(
                     result_type=StateChangeResult,
                 )
         except asyncio.TimeoutError:
-            log_tool_end("update_workflow_state", sid, rid, exc=TimeoutError(f">{_CALL_WORKFLOW_TIMEOUT}s"))
+            log_tool_end("report_to_workflow", sid, rid, exc=TimeoutError(f">{_CALL_WORKFLOW_TIMEOUT}s"))
             return (
                 f"error: workflow update 超时（>{_CALL_WORKFLOW_TIMEOUT}s）。"
                 f"请告知用户系统繁忙，稍后再试。"
@@ -89,15 +89,15 @@ async def update_workflow_state(
         if result.next_instruction:
             ctx.deps.instruction = result.next_instruction
 
-        log_tool_end("update_workflow_state", sid, rid, {
+        log_tool_end("report_to_workflow", sid, rid, {
             "activity": result.current_activity,
             "has_next_instruction": bool(result.next_instruction),
         })
         return result.tool_result_message
 
     except Exception as e:
-        log_tool_end("update_workflow_state", sid, rid, exc=e)
-        return f"error: update_workflow_state failed - {e}"
+        log_tool_end("report_to_workflow", sid, rid, exc=e)
+        return f"error: report_to_workflow failed - {e}"
 
 
-update_workflow_state.__doc__ = _DESCRIPTION
+report_to_workflow.__doc__ = _DESCRIPTION

@@ -69,11 +69,11 @@ class AgentDeps:
     memory_service: MemoryMessageService | None = None
 
     # ── Orchestrator 编排字段（可选，降级模式全部为 None/空）──
-    # update_workflow_state 工具检测 workflow_id 非空 → 进入 orchestrator 模式
+    # report_to_workflow 工具检测 workflow_id 非空 → 进入 orchestrator 模式
     workflow_id: str | None = None
     orchestrator_url: str | None = None
     # 当前 AICall 的 instruction 文本（业务方在 activity 里组织好，框架不解析）
-    # PreRunHook 从 orchestrator context 解包，update_workflow_state 工具热切换
+    # PreRunHook 从 orchestrator context 解包，report_to_workflow 工具热切换
     instruction: str = ""
     # 场景中文名（如"保险竞价"），仅用于日志/观测
     scenario_label: str = ""

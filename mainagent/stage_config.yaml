@@ -4,8 +4,9 @@
 # 每个场景声明：
 #   prompt_parts — 通用前置 + 输出规范（SYSTEM / SOUL / {scene}/OUTPUT.md），按顺序拼成 system_prompt
 #   agent_md     — 按顺序拼接成 agent_md 正文的文件列表（场景角色 + 编排说明）
-#   tools        — 旧直连路径使用（编排模式下由 orchestrator 的 AICall 指定）
-#   skills       — 旧直连路径使用（同上）
+#   tools        — 该场景允许 LLM 调用的工具（session 内静态，cache 友好）
+#                  orchestrated 场景都要带 report_to_workflow（向工作流上报用户信息的系统级工具）
+#   skills       — 该场景可激活的 skill
 #
 # 场景从 request_context.orchestrator.scenario 驱动：
 #   - orchestrator 模式：workflow 的 scenario 决定加载哪个场景
@@ -19,7 +20,7 @@ scenes:
       - debug/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - update_workflow_state
+      - report_to_workflow
     skills: []
 
   guide:
@@ -29,6 +30,7 @@ scenes:
       - orchestrated/AGENT.md
     tools:
       - list_user_cars
+      - report_to_workflow
     skills:
       - saving-methods
       - platform-intro
@@ -46,6 +48,7 @@ scenes:
       - collect_user_location
       - list_user_cars
       - confirm_booking
+      - report_to_workflow
     skills:
       - saving-playbook
 
@@ -61,6 +64,7 @@ scenes:
       - classify_project
       - call_query_codingagent
       - bash
+      - report_to_workflow
     skills:
       - saving-playbook
       - contact-order
@@ -76,6 +80,7 @@ scenes:
       - claim_coupon
       - collect_user_location
       - classify_project
+      - report_to_workflow
     skills:
       - saving-methods
 
@@ -90,6 +95,7 @@ scenes:
       - collect_user_location
       - list_user_cars
       - bash
+      - report_to_workflow
     skills:
       - insurance-bidding
 

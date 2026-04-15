@@ -297,7 +297,7 @@ class Agent:
             context_messages: list[ModelRequest] = list(prompt_result.context_messages)
 
             # 11. 请求上下文（占位 ModelRequest；每次 PreModelCall 重渲，读 deps 最新值）
-            # 工具（如 update_workflow_state）改 deps.instruction 后，下次 LLM 迭代就能看到新文本
+            # 工具（如 report_to_workflow）改 deps.instruction 后，下次 LLM 迭代就能看到新文本
             if self._context_formatter is not None:
                 context_messages.append(ModelRequest(
                     parts=[],
