@@ -5,6 +5,10 @@
 **/node_modules
 **/dist
 **/.git
+# 例外：保留 Jenkins clone 的 base 仓库的 .git，Dockerfile 里
+# `uv lock --upgrade-package hlsc-orchestrator-protocol` 要在本地仓库 git fetch HEAD
+!com.celiang.hlsc.service.ai.base/.git
+!com.celiang.hlsc.service.ai.base/.git/**
 **/logs
 **/data
 **/*.pyc
