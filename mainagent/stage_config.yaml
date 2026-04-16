@@ -5,7 +5,7 @@
 #   prompt_parts — 通用前置 + 输出规范（SYSTEM / SOUL / {scene}/OUTPUT.md），按顺序拼成 system_prompt
 #   agent_md     — 按顺序拼接成 agent_md 正文的文件列表（场景角色 + 编排说明）
 #   tools        — 该场景允许 LLM 调用的工具（session 内静态，cache 友好）
-#                  orchestrated 场景都要带 report_to_workflow（向工作流上报用户信息的系统级工具）
+#                  orchestrated 场景都要带 update_workflow_state（把用户事实登记进会话状态的系统级工具）
 #   skills       — 该场景可激活的 skill
 #
 # 场景从 request_context.orchestrator.scenario 驱动：
@@ -20,17 +20,14 @@ scenes:
       - debug/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - report_to_workflow
+      - update_workflow_state
     skills: []
 
   guide:
     prompt_parts: [SYSTEM.md, SOUL.md, guide/OUTPUT.md]
     agent_md:
       - guide/AGENT.md
-      - orchestrated/AGENT.md
-    tools:
-      - list_user_cars
-      - report_to_workflow
+    tools: []
     skills:
       - saving-methods
       - platform-intro
@@ -40,17 +37,8 @@ scenes:
     agent_md:
       - platform/AGENT.md
       - orchestrated/AGENT.md
-    tools:
-      - match_project
-      - search_shops
-      - search_coupon
-      - collect_user_car_info
-      - collect_user_location
-      - list_user_cars
-      - confirm_booking
-      - report_to_workflow
-    skills:
-      - saving-playbook
+    tools: []
+    skills: []
 
   searchshops:
     prompt_parts: [SYSTEM.md, SOUL.md, searchshops/OUTPUT.md]
@@ -58,17 +46,9 @@ scenes:
       - searchshops/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - search_shops
-      - collect_user_location
-      - collect_user_car_info
-      - classify_project
-      - call_query_codingagent
       - bash
-      - report_to_workflow
-    skills:
-      - saving-playbook
-      - contact-order
-      - searchshops-coding
+      - update_workflow_state
+    skills: []
 
   searchcoupons:
     prompt_parts: [SYSTEM.md, SOUL.md, searchcoupons/OUTPUT.md]
@@ -80,7 +60,7 @@ scenes:
       - claim_coupon
       - collect_user_location
       - classify_project
-      - report_to_workflow
+      - update_workflow_state
     skills:
       - saving-methods
 
@@ -95,7 +75,7 @@ scenes:
       - collect_user_location
       - list_user_cars
       - bash
-      - report_to_workflow
+      - update_workflow_state
     skills:
       - insurance-bidding
 

@@ -100,7 +100,7 @@ class HlscContextFormatter(ContextFormatter):
         parts.append(self._format_request_info(context))
 
         # ── Part 2：Orchestrator 编排上下文（activity instruction）──
-        # 优先用 deps.instruction（report_to_workflow 热切换后是最新的），
+        # 优先用 deps.instruction（update_workflow_state 热切换后是最新的），
         # 否则回落到 context.orchestrator.instruction。
         instruction: str = ""
         if deps is not None and getattr(deps, "instruction", ""):

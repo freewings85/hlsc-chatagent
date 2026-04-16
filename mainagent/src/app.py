@@ -17,7 +17,7 @@ from hlsc.tools.list_user_cars import list_user_cars
 from hlsc.tools.collect_user_car_info import collect_user_car_info
 from hlsc.tools.collect_user_location import collect_user_location
 from hlsc.tools.delegate import delegate
-from hlsc.tools.report_to_workflow import report_to_workflow
+from hlsc.tools.update_workflow_state import update_workflow_state
 
 # 分类与匹配
 from hlsc.tools.classify_project import classify_project
@@ -57,8 +57,8 @@ def create_agent_app() -> AgentApp:
         "claim_coupon": claim_coupon,
         # 下单
         "confirm_booking": confirm_booking,
-        # 编排模式下的 workflow 状态上报（Agent 直接调 Temporal，不经过 orchestrator）
-        "report_to_workflow": report_to_workflow,
+        # 编排模式下把用户事实登记进 workflow 状态（Agent 直接调 Temporal，不经过 orchestrator）
+        "update_workflow_state": update_workflow_state,
         # 复杂查询
         "call_query_codingagent": call_query_codingagent,
         # 商户联系单

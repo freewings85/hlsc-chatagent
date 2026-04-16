@@ -18,7 +18,7 @@ class WorkflowUnavailableError(AgentLoopError):
     """工作流后端不可用，本轮 agent loop 不应继续。
 
     典型场景：
-    - report_to_workflow 调 Temporal update 报 timeout / connection / 其它错
+    - update_workflow_state 调 Temporal update 报 timeout / connection / 其它错
     - 同一工具反复失败说明环境问题，继续重试只会浪费 LLM 调用
 
     Raise 后 agent loop 立刻终止，前端会收到 ERROR + CHAT_REQUEST_END 事件，

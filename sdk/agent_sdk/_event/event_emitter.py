@@ -13,7 +13,7 @@ class EventEmitter:
     使用 asyncio.Lock 序列化 emit/close，保证 sentinel 永远最后入队。
 
     suppress_output：设为 True 后所有事件静默丢弃。
-    用于 workflow 跃迁场景——agent 调 report_to_workflow 触发 step 推进后，
+    用于 workflow 跃迁场景——agent 调 update_workflow_state 触发 step 推进后，
     该轮 agent 的文字输出不应到达用户，由 workflow 再调一次 agent 输出最终结果。
     """
 
