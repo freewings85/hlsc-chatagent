@@ -190,5 +190,7 @@ async def _run_delegate_agent(
         transcript_session_id=f"{parent_deps.session_id}/delegates/{agent_id}",
         session_state=parent_deps.session_state,
         parent_tool_call_id=delegate_tool_call_id,
+        request_id=parent_deps.request_id,
+        parent_request_id=parent_deps.request_id,
     )
     return result or ""
