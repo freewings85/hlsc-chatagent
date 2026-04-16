@@ -86,16 +86,31 @@ async def report_to_workflow(
             ctx.deps.session_state.update(result.new_session_state)
 
         # ── 热切换下一轮 agent 的 instruction（tail dynamic-context，每轮变）──
-        # 注意：不再 mutate available_tools / allowed_skills（cache 稳定考虑，
-        # 工具集由 stage_config.yaml 的 scene 级配置在 PreRunHook 里定死）。
-        # AICall.next_tools / next_skills 降级为软提醒——业务如需引导 LLM，
-        # 在 result.next_instruction 文字里写明即可。
         if result.next_instruction:
             ctx.deps.instruction = result.next_instruction
+
+        # ── 结构化数据推给前端（TOOL_RESULT_DETAIL 事件）──
+        # LLM 看不到 tool_result_raw（只看 tool_result_message）；
+        # 前端通过 SSE/Kafka 拿到这个事件后可以直接渲染卡片/列表。
+        if result.tool_result_raw is not None and ctx.deps.emitter is not None:
+            from agent_sdk._event.event_model import EventModel
+            from agent_sdk._event.event_type import EventType
+            await ctx.deps.emitter.emit(EventModel(
+                session_id=sid,
+                request_id=rid,
+                type=EventType.TOOL_RESULT_DETAIL,
+                data={
+                    "tool_name": ctx.tool_name or "report_to_workflow",
+                    "tool_call_id": ctx.tool_call_id or "",
+                    "detail_type": "workflow_result",
+                    "data": result.tool_result_raw,
+                },
+            ))
 
         log_tool_end("report_to_workflow", sid, rid, {
             "activity": result.current_activity,
             "has_next_instruction": bool(result.next_instruction),
+            "has_tool_result_raw": result.tool_result_raw is not None,
         })
         return result.tool_result_message
 
