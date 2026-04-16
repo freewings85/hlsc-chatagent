@@ -312,7 +312,7 @@ export default function ChatPage() {
           break
         }
         case 'error': {
-          const msg = (d.error as string) ?? 'Unknown error'
+          const msg = (d.message as string) ?? 'Unknown error'
           copy[copy.length - 1] = { ...last, text: last.text + `\n[Error: ${msg}]` }
           break
         }

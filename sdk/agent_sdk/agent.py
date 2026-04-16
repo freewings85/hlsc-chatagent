@@ -423,7 +423,7 @@ class Agent:
                         session_id=session_id,
                         request_id=request_id,
                         type=EventType.ERROR,
-                        data={"error": str(init_exc), "message": str(init_exc)},
+                        data={"message": str(init_exc)},
                         agent_name=self._agent_name or "main",
                     ))
                     await emitter.emit(EventModel(

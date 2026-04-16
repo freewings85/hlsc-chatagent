@@ -571,8 +571,6 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
             request_id=task.request_id,
             type=EventType.ERROR,
             data={
-                # error / message 都塞，前端不同消费方读哪个都能拿到
-                "error": str(exc),
                 "message": str(exc),
                 "error_type": exc_type,
                 "fatal": True,
@@ -593,7 +591,7 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
             session_id=task.session_id,
             request_id=task.request_id,
             type=EventType.ERROR,
-            data={"error": str(exc), "message": str(exc)},
+            data={"message": str(exc)},
             agent_name=agent_name,
         ))
         raise
