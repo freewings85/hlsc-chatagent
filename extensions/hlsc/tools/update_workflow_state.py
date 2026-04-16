@@ -121,11 +121,12 @@ async def update_workflow_state(
         # 内部 try 已经 log_tool_end 过了，往外抛
         raise
     except Exception as e:
-        log_tool_end("update_workflow_state", sid, rid, exc=e)
-        # 任何其它异常一律转 WorkflowUnavailableError，让 agent loop 终止本轮
-        raise WorkflowUnavailableError(
-            f"工作流调用出错（{type(e).__name__}: {e}）"
-        ) from e
+        # log_tool_end("update_workflow_state", sid, rid, exc=e)
+        # # 任何其它异常一律转 WorkflowUnavailableError，让 agent loop 终止本轮
+        # raise WorkflowUnavailableError(
+        #     f"工作流调用出错（{type(e).__name__}: {e}）"
+        # ) from e
+        return f"工作流当前不可用，请告知用户，不要重试!"
 
 
 update_workflow_state.__doc__ = _DESCRIPTION
