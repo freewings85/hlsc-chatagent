@@ -8,6 +8,11 @@
         - tool_result_message  → 本轮 LLM 看到的 tool result 文本
         - next_instruction     → 下一轮 agent 的 instruction 热切换（tail dynamic-context）
     → Tool 返回给 LLM：tool_result_message
+
+**失败处理**：任何失败（无 client、超时、Temporal 异常）直接 raise
+WorkflowUnavailableError，sdk loop 会专门 catch，终止本轮 agent。
+不再返回错误字符串给 LLM——LLM 看到错误字符串依旧会反复重试同一工具
+（已知 LLM 行为：retry path 不重读 conversation 上的"不要重试"指令）。
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from pydantic import Field
 from pydantic_ai import RunContext
 
 from agent_sdk._agent.deps import AgentDeps
+from agent_sdk.exceptions import WorkflowUnavailableError
 from agent_sdk.logging import log_tool_start, log_tool_end
 from hlsc.tools.prompt_loader import load_tool_prompt
 
@@ -48,10 +54,8 @@ async def report_to_workflow(
 
     if temporal_client is None or workflow_id is None:
         log_tool_end("report_to_workflow", sid, rid, exc=RuntimeError("not in orchestrator mode"))
-        return (
-            "FATAL: 后端工作流连接不可用（系统配置问题，不是调用参数问题）。"
-            "**不要重试本工具**，也不要改参数再调。"
-            "直接用自然语言告诉用户系统暂时不可用，请稍后再试，然后结束本轮。"
+        raise WorkflowUnavailableError(
+            "后端工作流连接不可用（temporal_client 或 workflow_id 缺失）"
         )
 
     try:
@@ -71,9 +75,8 @@ async def report_to_workflow(
                 )
         except asyncio.TimeoutError:
             log_tool_end("report_to_workflow", sid, rid, exc=TimeoutError(f">{_CALL_WORKFLOW_TIMEOUT}s"))
-            return (
-                f"FATAL: 工作流响应超时（>{_CALL_WORKFLOW_TIMEOUT}s，后端可能繁忙或卡住）。"
-                f"**不要重试本工具**，直接用自然语言告诉用户系统繁忙、请稍后再试，然后结束本轮。"
+            raise WorkflowUnavailableError(
+                f"工作流响应超时（>{_CALL_WORKFLOW_TIMEOUT}s）"
             )
 
         # 同步刷新本地 session_state（给本轮后续工具调用看）
@@ -114,14 +117,15 @@ async def report_to_workflow(
         })
         return result.tool_result_message
 
+    except WorkflowUnavailableError:
+        # 内部 try 已经 log_tool_end 过了，往外抛
+        raise
     except Exception as e:
         log_tool_end("report_to_workflow", sid, rid, exc=e)
-        # 其它异常（网络抖动、序列化问题等）也先让 LLM 不要死循环重试；
-        # 交给用户看完再决定要不要继续
-        return (
-            f"FATAL: 工作流调用出错（{type(e).__name__}: {e}）。"
-            f"**不要重试本工具**，用自然语言向用户说明系统异常、稍后再试，然后结束本轮。"
-        )
+        # 任何其它异常一律转 WorkflowUnavailableError，让 agent loop 终止本轮
+        raise WorkflowUnavailableError(
+            f"工作流调用出错（{type(e).__name__}: {e}）"
+        ) from e
 
 
 report_to_workflow.__doc__ = _DESCRIPTION

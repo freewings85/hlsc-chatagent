@@ -32,6 +32,7 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
+from agent_sdk.exceptions import AgentLoopError
 from agent_sdk._utils.request_context import clear_request_context, set_request_context
 from agent_sdk._utils.session_logger import (
     log_error,
@@ -550,6 +551,33 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
             if not is_sub_agent:
                 await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
 
+    except AgentLoopError as exc:
+        # 业务工具主动 raise 的"应当结束本轮"信号（如 WorkflowUnavailableError）。
+        # 走有标识的日志，前端收到 ERROR + CHAT_REQUEST_END 后正常关流。
+        result.finish_reason = "error"
+        exc_type: str = type(exc).__name__
+        log_error(
+            f"[{exc_type}] agent loop 主动终止 (agent={agent_name}): {exc}",
+            exc=exc,
+        )
+        log_request_end(
+            session_id=task.session_id,
+            success=False,
+            error=f"{exc_type}: {exc}",
+            request_id=task.request_id,
+        )
+        await emitter.emit(EventModel(
+            session_id=task.session_id,
+            request_id=task.request_id,
+            type=EventType.ERROR,
+            data={
+                "message": str(exc),
+                "error_type": exc_type,
+                "fatal": True,
+            },
+            agent_name=agent_name,
+        ))
+        # 不再向上 raise——业务可预期的终止，避免 HTTP 500
     except Exception as exc:
         result.finish_reason = "error"
         log_error(f"Agent loop 异常 (agent={agent_name}): {exc}", exc=exc)
