@@ -113,7 +113,7 @@ class TemplatePromptLoader:
         if agent_md:
             context_messages.append(ModelRequest(
                 parts=[UserPromptPart(
-                    content=f"Contents of AGENT.md (project instructions):\n\n{agent_md}",
+                    content=f"\n{agent_md}",
                 )],
                 metadata={"is_meta": True, "source": "agent_md"},
             ))
