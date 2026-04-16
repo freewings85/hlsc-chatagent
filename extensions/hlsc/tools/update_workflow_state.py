@@ -18,7 +18,6 @@ WorkflowUnavailableError，sdk loop 会专门 catch，终止本轮 agent。
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from typing import Annotated, Any
 
@@ -29,8 +28,6 @@ from agent_sdk._agent.deps import AgentDeps
 from agent_sdk.exceptions import WorkflowUnavailableError
 from agent_sdk.logging import log_tool_start, log_tool_end
 from hlsc.tools.prompt_loader import load_tool_prompt
-
-logger: logging.Logger = logging.getLogger(__name__)
 
 _DESCRIPTION: str = load_tool_prompt("update_workflow_state")
 
@@ -124,10 +121,11 @@ async def update_workflow_state(
         # 内部 try 已经 log_tool_end 过了，往外抛
         raise
     except Exception as e:
-        # 异常只记 session log，不扩散给 LLM（LLM 看到会反复重试）
         log_tool_end("update_workflow_state", sid, rid, exc=e)
-        logger.exception("update_workflow_state 执行异常")
-        return "工作流当前不可用，请告知用户，不要重试!"
+        # 任何其它异常一律转 WorkflowUnavailableError，让 agent loop 终止本轮
+        raise WorkflowUnavailableError(
+            f"工作流调用出错（{type(e).__name__}: {e}）"
+        ) from e
 
 
 update_workflow_state.__doc__ = _DESCRIPTION
