@@ -79,15 +79,6 @@ async def update_workflow_state(
                 f"工作流响应超时（>{_CALL_WORKFLOW_TIMEOUT}s）"
             )
 
-        # 同步刷新本地 session_state（给本轮后续工具调用看）
-        for k, v in fields.items():
-            if v is None:
-                ctx.deps.session_state.pop(k, None)
-            else:
-                ctx.deps.session_state[k] = v
-        if result.new_session_state:
-            ctx.deps.session_state.update(result.new_session_state)
-
         # ── 热切换下一轮 agent 的 instruction（tail dynamic-context，每轮变）──
         if result.next_instruction:
             ctx.deps.instruction = result.next_instruction
@@ -111,7 +102,6 @@ async def update_workflow_state(
             ))
 
         log_tool_end("update_workflow_state", sid, rid, {
-            "activity": result.current_activity,
             "has_next_instruction": bool(result.next_instruction),
             "has_tool_result_raw": result.tool_result_raw is not None,
         })
