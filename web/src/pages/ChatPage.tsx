@@ -76,15 +76,15 @@ const STORAGE_KEY_SID = 'chat_session_id'
 const STORAGE_KEY_MSG = 'chat_messages'
 const STORAGE_KEY_CTX = 'chat_context'
 
-const SCENES = ['guide', 'debug', 'searchshops', 'searchcoupons', 'insurance', 'platform', 'orchestrator'] as const
-
 interface ChatContext {
-  scene: string
   current_car: { car_model_id: string; car_model_name: string; vin_code: string } | null
   current_location: { address: string; latitude: number | null; longitude: number | null } | null
 }
 
-const DEFAULT_CONTEXT: ChatContext = { scene: 'guide', current_car: null, current_location: null }
+const DEFAULT_CONTEXT: ChatContext = {
+  current_car: null,
+  current_location: { address: '闵行区', latitude: 31.10, longitude: 121.35 },
+}
 
 function loadContext(): ChatContext {
   try {
@@ -150,48 +150,11 @@ export default function ChatPage() {
     setMessages(prev => [...prev, userMsg, asstMsg])
 
     try {
-      // 1. 先订阅 SSE 事件流（先订阅后触发，保证不丢事件）
+      // 1. 订阅 SSE 事件流 + 立刻装 listener（避免 fetch 等待时丢失事件）
       const evtUrl = `${BASE}/chat/events?session_id=${encodeURIComponent(sessionId)}`
       const evtSource = new EventSource(evtUrl)
 
-      await new Promise<void>((resolve, reject) => {
-        evtSource.onopen = () => resolve()
-        evtSource.onerror = () => reject(new Error('SSE 连接失败'))
-        // 5s 超时
-        setTimeout(() => reject(new Error('SSE 连接超时')), 5000)
-      })
-
-      // 2. 触发 /chat/async（和小程序完全一致的路径）
-      const resp = await fetch(`${BASE}/chat/async`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          message: text,
-          user_id: '307',
-          context: {
-            scene: ctx.scene || undefined,
-            current_car: ctx.current_car?.car_model_id ? ctx.current_car : undefined,
-            current_location: ctx.current_location?.address ? ctx.current_location : undefined,
-          },
-        }),
-      })
-      if (!resp.ok) {
-        evtSource.close()
-        const detail = await resp.json().catch(() => ({}))
-        throw new Error((detail as Record<string, string>).detail ?? `HTTP ${resp.status}`)
-      }
-      const { task_id } = await resp.json() as { task_id: string }
-      taskIdRef.current = task_id
-
-      // 3. 从 EventSource 消费事件
-      await new Promise<void>((resolve) => {
-        let buffer = ''
-        evtSource.onmessage = (e) => {
-          // EventSource onmessage 只拿 type=message 的事件
-          // 用 addEventListener 接所有事件类型
-        }
-        // 监听所有 named event types
+      const donePromise = new Promise<void>((resolve) => {
         const eventTypes = [
           'text', 'tool_call_start', 'tool_call_args', 'tool_result',
           'tool_result_detail', 'error', 'interrupt', 'chat_request_end',
@@ -214,6 +177,35 @@ export default function ChatPage() {
           resolve()
         }
       })
+
+      // 2. 触发 /chat/async
+      const resp = await fetch(`${BASE}/chat/async`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: text,
+          user_id: '307',
+          context: {
+            current_car: ctx.current_car?.car_model_id
+              ? { car_model_id: ctx.current_car.car_model_id, car_model_name: ctx.current_car.car_model_name }
+              : undefined,
+            current_location: ctx.current_location?.address
+              ? { lat: ctx.current_location.latitude ?? 0, lng: ctx.current_location.longitude ?? 0, address: ctx.current_location.address }
+              : undefined,
+          },
+        }),
+      })
+      if (!resp.ok) {
+        evtSource.close()
+        const detail = await resp.json().catch(() => ({}))
+        throw new Error((detail as Record<string, string>).detail ?? `HTTP ${resp.status}`)
+      }
+      const { task_id } = await resp.json() as { task_id: string }
+      taskIdRef.current = task_id
+
+      // 3. 等事件流跑完（listener 已在 step 1 装好）
+      await donePromise
     } catch (err) {
       // Append error to assistant text
       setMessages(prev => {
@@ -439,16 +431,7 @@ export default function ChatPage() {
           <span className="session-label">session:</span>
           <span className="session-id">{sessionId}</span>
           <button className="btn-sm" onClick={newSession} disabled={streaming}>新会话</button>
-          <span style={{ margin: '0 8px', color: '#888' }}>|</span>
-          <span className="session-label">scene:</span>
-          <select
-            value={ctx.scene}
-            onChange={e => setCtx(prev => ({ ...prev, scene: e.target.value }))}
-            style={{ fontSize: 12, padding: '1px 4px', marginRight: 8 }}
-          >
-            {SCENES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <button className="btn-sm" onClick={() => setCtxOpen(!ctxOpen)}>
+          <button className="btn-sm" onClick={() => setCtxOpen(!ctxOpen)} style={{ marginLeft: 8 }}>
             {ctxOpen ? '收起 ▴' : '上下文 ▾'}
           </button>
         </div>
