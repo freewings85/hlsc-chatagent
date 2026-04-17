@@ -8,16 +8,53 @@
 /* Chat header */
 .chat-header {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  flex-direction: column;
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.session-bar {
+.chat-header .session-bar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+}
+
+/* Context panel */
+.context-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--bg-secondary, #f7f7f8);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.ctx-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctx-label {
+  color: var(--muted, #888);
+  min-width: 32px;
+  flex-shrink: 0;
+}
+
+.ctx-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 3px;
+  background: var(--bg, #fff);
+}
+
+.session-bar {
   gap: 8px;
   font-size: 12px;
   color: var(--muted);
