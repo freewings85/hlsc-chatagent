@@ -149,10 +149,20 @@ export default function ChatPage() {
     const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [], cards: {} }
     setMessages(prev => [...prev, userMsg, asstMsg])
 
-    let buffer = ''
-
     try {
-      const resp = await fetch(`${BASE}/chat/stream`, {
+      // 1. 先订阅 SSE 事件流（先订阅后触发，保证不丢事件）
+      const evtUrl = `${BASE}/chat/events?session_id=${encodeURIComponent(sessionId)}`
+      const evtSource = new EventSource(evtUrl)
+
+      await new Promise<void>((resolve, reject) => {
+        evtSource.onopen = () => resolve()
+        evtSource.onerror = () => reject(new Error('SSE 连接失败'))
+        // 5s 超时
+        setTimeout(() => reject(new Error('SSE 连接超时')), 5000)
+      })
+
+      // 2. 触发 /chat/async（和小程序完全一致的路径）
+      const resp = await fetch(`${BASE}/chat/async`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -166,29 +176,44 @@ export default function ChatPage() {
           },
         }),
       })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-
-      const reader = resp.body!.getReader()
-      const decoder = new TextDecoder()
-
-      let streamEnded = false
-      while (!streamEnded) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const idx = buffer.lastIndexOf('\n\n')
-        if (idx === -1) continue
-        const toProcess = buffer.slice(0, idx + 2)
-        buffer = buffer.slice(idx + 2)
-
-        for (const { type, data } of parseSseChunk(toProcess)) {
-          if (type === 'chat_request_end') {
-            streamEnded = true
-            break
-          }
-          handleEvent(type, data)
-        }
+      if (!resp.ok) {
+        evtSource.close()
+        const detail = await resp.json().catch(() => ({}))
+        throw new Error((detail as Record<string, string>).detail ?? `HTTP ${resp.status}`)
       }
+      const { task_id } = await resp.json() as { task_id: string }
+      taskIdRef.current = task_id
+
+      // 3. 从 EventSource 消费事件
+      await new Promise<void>((resolve) => {
+        let buffer = ''
+        evtSource.onmessage = (e) => {
+          // EventSource onmessage 只拿 type=message 的事件
+          // 用 addEventListener 接所有事件类型
+        }
+        // 监听所有 named event types
+        const eventTypes = [
+          'text', 'tool_call_start', 'tool_call_args', 'tool_result',
+          'tool_result_detail', 'error', 'interrupt', 'chat_request_end',
+        ]
+        for (const et of eventTypes) {
+          evtSource.addEventListener(et, (e: MessageEvent) => {
+            try {
+              const data = JSON.parse(e.data)
+              if (et === 'chat_request_end') {
+                evtSource.close()
+                resolve()
+                return
+              }
+              handleEvent(et, data)
+            } catch { /* skip */ }
+          })
+        }
+        evtSource.onerror = () => {
+          evtSource.close()
+          resolve()
+        }
+      })
     } catch (err) {
       // Append error to assistant text
       setMessages(prev => {
