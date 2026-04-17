@@ -46,7 +46,6 @@ scenes:
       - searchshops/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - bash
       - update_workflow_state
     skills: []
 
