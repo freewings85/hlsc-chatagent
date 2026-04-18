@@ -72,14 +72,11 @@ scenes:
       - insurance/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - search_shops
+      - collect_vehicle_info
+      - collect_insurance_info
       - collect_user_car_info
-      - collect_user_location
-      - list_user_cars
-      - bash
       - update_workflow_state
-    skills:
-      - insurance-bidding
+    skills: []
 
   orchestrator:
     prompt_parts: [SYSTEM.md, SOUL.md, orchestrator/OUTPUT.md]
