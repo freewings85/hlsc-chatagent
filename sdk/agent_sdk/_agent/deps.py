@@ -37,6 +37,9 @@ class AgentDeps:
     # tool 执行过程中可修改的状态
     tool_call_count: int = 0
     last_tool_result: str = ""
+    # 同 turn 内相同 (tool_name, args_hash) 的调用计数——防 LLM 陷入重复调用死循环
+    # 第 2 次短路返回陈述式合成 result；第 3 次及以上抛 AgentLoopError 终止本轮
+    tool_call_dedup: dict[str, int] = field(default_factory=dict)
     # SDK 内部存储（消息、transcript、memory、skill store）
     # root: data/inner/{user}/sessions/{session}/
     inner_storage_backend: BackendProtocol | None = None
