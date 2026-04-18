@@ -5,7 +5,10 @@
 #   prompt_parts — 通用前置 + 输出规范（SYSTEM / SOUL / {scene}/OUTPUT.md），按顺序拼成 system_prompt
 #   agent_md     — 按顺序拼接成 agent_md 正文的文件列表（场景角色 + 编排说明）
 #   tools        — 该场景允许 LLM 调用的工具（session 内静态，cache 友好）
-#                  orchestrated 场景都要带 update_workflow_state（把用户事实登记进会话状态的系统级工具）
+#                  orchestrated 场景必须带一个「把用户事实登记进会话状态」的工具：
+#                    · 场景级（推荐）：submit_shop_search_criteria 等，名字自带业务锚点
+#                    · 通用兜底：update_workflow_state（Validate-Loop 未迁的旧场景在用）
+#                  二选一，不要同时挂（会让 LLM 选工具时分神）
 #   skills       — 该场景可激活的 skill
 #
 # 场景从 request_context.orchestrator.scenario 驱动：

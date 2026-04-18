@@ -102,7 +102,8 @@ async def submit_workflow_fields(
             "has_next_instruction": bool(result.next_instruction),
             "has_tool_result_raw": result.tool_result_raw is not None,
         })
-        return result.tool_result_message
+        # activity 显式传空串时兜底，避免 LLM 拿到 "" 不知所措
+        return result.tool_result_message or "已记录。"
 
     except WorkflowUnavailableError:
         raise

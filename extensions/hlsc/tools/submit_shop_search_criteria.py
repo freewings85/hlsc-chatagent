@@ -33,22 +33,14 @@ async def submit_shop_search_criteria(
     ctx: RunContext[AgentDeps],
     shop_search_info: Annotated[dict[str, Any], Field(
         description=(
-            "找店条件整包 JSON：\n"
-            "- orderBy: 可选排序，取值 distance / rating / tradingCount\n"
-            "- limit: 可选返回数量上限（整数）\n"
-            "- query: 查询树（必填）。三种 op：\n"
-            "    LEAF  params 放叶子条件，可用字段：\n"
-            "      shop_type(str) / shop_name(str) / address(str) / city(str)\n"
-            "      min_rating(1-5) / has_activity(bool) / radius(米，整数)\n"
-            "      project_keywords(list[str]) / equipment_keywords(list[str])\n"
-            "      fuzzy_keywords(list[str]，不放城市/地址/商户名/项目名)\n"
-            "    AND   children 全部命中\n"
-            "    OR    children 任一命中\n"
-            "示例：{\"query\": {\"op\": \"LEAF\", \"params\": {\"shop_type\": \"4S店\", \"city\": \"上海\"}}}"
+            "找店条件整包 JSON（orderBy / limit / query 三根字段，结构规范见当前步骤 "
+            "instruction 里的 SHOP_SEARCH_FIELDS——以那里为准，不要从这里推测）。"
         )
     )],
 ) -> str:
     """登记找店条件。"""
+    if not shop_search_info:
+        return "本次未提交任何字段，已忽略。"
     return await submit_workflow_fields(
         ctx,
         {"shop_search_info": shop_search_info},
