@@ -1,11 +1,13 @@
 """submit_coupon_search_criteria：搜优惠场景专用的"登记找优惠条件"工具。
 
-两个 typed 参数：
+两个 typed 参数（LLM 接口层）：
 - activity_search_info: 活动本身维度（项目关键词、优惠类型、品牌等）
 - shop_search_info: 商户维度（位置、商户类型、评分等——和 searchshops 完全一致）
 
-workflow 侧两个字段各自独立 resolve，拼成 datamanager combinedQuery 的
-activityQuery + shopQuery。LLM 只需按用户表达的维度填 1 个或 2 个。
+**只写一个 ai_inputs 字段 `coupon_search_info`**，把两维度作为子对象装进去。
+对 workflow 侧 validate_base 只需监听这一个字段（和 searchshops 的
+shop_search_info 对称）。workflow 读 state 时用 `info.get("activity")` /
+`info.get("shop")` 取各维度。
 """
 
 from __future__ import annotations
@@ -28,14 +30,14 @@ async def submit_coupon_search_criteria(
         description=(
             "活动本身维度的找优惠条件整包 JSON。结构（limit / query 根字段 + "
             "LEAF.params 可用字段）以当前步骤 instruction 里的 ACTIVITY_SEARCH_FIELDS "
-            "为准。用户只提到商户维度时传 null。"
+            "为准，不要从这里推测。用户只提到商户维度时传 null。"
         )
     )] = None,
     shop_search_info: Annotated[dict[str, Any] | None, Field(
         description=(
             "商户维度的找店条件整包 JSON（orderBy / limit / query 三根字段）。"
-            "结构和搜商户场景一致，以 instruction 里的 SHOP_SEARCH_FIELDS 为准。"
-            "用户只提到活动维度时传 null。"
+            "结构和搜商户场景一致，以 instruction 里的 SHOP_SEARCH_FIELDS 为准，"
+            "不要从这里推测。用户只提到活动维度时传 null。"
         )
     )] = None,
 ) -> str:
@@ -43,15 +45,16 @@ async def submit_coupon_search_criteria(
     if not activity_search_info and not shop_search_info:
         return "本次未提交任何字段，已忽略。"
 
-    fields: dict[str, Any] = {}
+    # 两个维度合并成单个 ai_inputs 字段，对称 shop_search_info 的设计
+    coupon_search_info: dict[str, Any] = {}
     if activity_search_info:
-        fields["activity_search_info"] = activity_search_info
+        coupon_search_info["activity"] = activity_search_info
     if shop_search_info:
-        fields["shop_search_info"] = shop_search_info
+        coupon_search_info["shop"] = shop_search_info
 
     return await submit_workflow_fields(
         ctx,
-        fields,
+        {"coupon_search_info": coupon_search_info},
         tool_name="submit_coupon_search_criteria",
         detail_type="search_coupons",
     )
