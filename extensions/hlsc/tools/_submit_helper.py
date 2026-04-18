@@ -31,6 +31,7 @@ async def submit_workflow_fields(
     ctx: RunContext[AgentDeps],
     fields: dict[str, Any],
     tool_name: str,
+    detail_type: str = "workflow_result",
 ) -> str:
     """把 fields 提交给 workflow 的 on_state_changed，返回 tool_result_message。
 
@@ -38,6 +39,14 @@ async def submit_workflow_fields(
         ctx: Pydantic AI RunContext
         fields: 要登记到 workflow 状态的字段字典
         tool_name: 调用方工具名（日志 / TOOL_RESULT_DETAIL 事件用）
+        detail_type: TOOL_RESULT_DETAIL 事件的 detail_type 字段，前端按这个值挑
+            卡片组件。和 uniapp / web 约定的常量：
+              · search_repair_shops  修理厂 / 4S 店卡片
+              · diagnose             故障诊断
+              · parts_price          零部件价格
+              · projects_price       门店项目报价
+              · place_bidding_order  竞价下单结果
+              · workflow_result      通用兜底（无专用卡片时）
 
     Raises:
         WorkflowUnavailableError: temporal_client 缺失、超时、任何异常
@@ -93,7 +102,7 @@ async def submit_workflow_fields(
                 data={
                     "tool_name": ctx.tool_name or tool_name,
                     "tool_call_id": ctx.tool_call_id or "",
-                    "detail_type": "workflow_result",
+                    "detail_type": detail_type,
                     "data": result.tool_result_raw,
                 },
             ))

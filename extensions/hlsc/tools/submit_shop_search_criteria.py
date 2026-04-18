@@ -45,6 +45,7 @@ async def submit_shop_search_criteria(
         ctx,
         {"shop_search_info": shop_search_info},
         tool_name="submit_shop_search_criteria",
+        detail_type="search_repair_shops",
     )
 
 
