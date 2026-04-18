@@ -520,7 +520,7 @@ export default function ChatPage() {
               ) : (
                 <>
                   {msg.tools.map((tool, j) => (
-                    <ToolBlock key={tool.id || j} tool={tool} onReplyInterrupt={replyToInterrupt} streaming={streaming} />
+                    <ToolBlock key={tool.id || j} tool={tool} card={msg.cards[tool.id]} onReplyInterrupt={replyToInterrupt} streaming={streaming} />
                   ))}
                   {msg.interrupts.map((card, j) => (
                     <InterruptBlock key={`int-${j}`} card={card} onReply={(reply) => replyToInterrupt(card.interruptKey, reply)} disabled={card.interruptKey ? false : streaming} />
@@ -908,8 +908,9 @@ function InterruptBlock({ card, onReply, disabled }: {
 // ToolBlock sub-component
 // --------------------------------------------------------------------------
 
-function ToolBlock({ tool, onReplyInterrupt, streaming }: {
+function ToolBlock({ tool, card, onReplyInterrupt, streaming }: {
   tool: ToolCall
+  card?: CardData
   onReplyInterrupt?: (interruptKey: string | undefined, reply: string) => void
   streaming?: boolean
 }) {
@@ -953,6 +954,7 @@ function ToolBlock({ tool, onReplyInterrupt, streaming }: {
           )}
         </div>
       )}
+      {card && <DetailCardBlock card={card} />}
       {expanded && (
         <div className="tool-details">
           <div className="tool-section">
@@ -967,6 +969,85 @@ function ToolBlock({ tool, onReplyInterrupt, streaming }: {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// DetailCardBlock: 渲染 tool_result_detail（跟 uniapp 共用同一份 detail_type 约定）
+// --------------------------------------------------------------------------
+
+function DetailCardBlock({ card }: { card: CardData }) {
+  const inner = (card.data?.data && typeof card.data.data === 'object') ? card.data.data : card.data
+  switch (card.detail_type) {
+    case 'search_repair_shops':
+      return <ShopListCard data={inner as Record<string, unknown>} />
+    default:
+      return (
+        <div className="detail-card detail-card-raw">
+          <div className="detail-card-header">{card.detail_type}</div>
+          <pre className="detail-card-json">{JSON.stringify(inner, null, 2)}</pre>
+        </div>
+      )
+  }
+}
+
+interface ShopItem {
+  shopId?: string; shop_id?: string
+  name?: string; shopName?: string; shop_name?: string
+  address?: string
+  distance?: number
+  rating?: number | string
+  reviewCount?: number; review_count?: number
+  phone?: string
+  tags?: string[]
+}
+
+function ShopListCard({ data }: { data: Record<string, unknown> }) {
+  const items = Array.isArray(data.items) ? (data.items as ShopItem[]) : []
+  const total = typeof data.total === 'number' ? data.total : items.length
+  if (!items.length) {
+    return (
+      <div className="detail-card">
+        <div className="detail-card-header">附近门店</div>
+        <div className="detail-card-empty">未找到匹配的商户</div>
+      </div>
+    )
+  }
+  const fmtDist = (m?: number) => {
+    if (m == null) return ''
+    return m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.round(m)}m`
+  }
+  return (
+    <div className="detail-card shop-list-card">
+      <div className="detail-card-header">
+        附近门店 <span className="detail-card-count">找到 {total} 家</span>
+      </div>
+      <div className="shop-list">
+        {items.map((s, i) => {
+          const name = s.name || s.shopName || s.shop_name || '未命名'
+          const distTxt = fmtDist(s.distance)
+          const reviewCount = s.reviewCount ?? s.review_count
+          return (
+            <div className="shop-item" key={s.shopId || s.shop_id || i}>
+              <div className="shop-row-top">
+                <span className="shop-name">{name}</span>
+                {s.rating != null && <span className="shop-rating">★ {s.rating}{reviewCount != null && <span className="shop-review"> ({reviewCount})</span>}</span>}
+              </div>
+              <div className="shop-row-mid">
+                {distTxt && <span className="shop-dist">{distTxt}</span>}
+                {distTxt && s.address && <span className="shop-sep">·</span>}
+                {s.address && <span className="shop-addr">{s.address}</span>}
+              </div>
+              {s.tags && s.tags.length > 0 && (
+                <div className="shop-tags">
+                  {s.tags.map((t, ti) => <span className="shop-tag" key={ti}>{t}</span>)}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
