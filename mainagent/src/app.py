@@ -18,6 +18,7 @@ from hlsc.tools.collect_user_car_info import collect_user_car_info
 from hlsc.tools.collect_user_location import collect_user_location
 from hlsc.tools.delegate import delegate
 from hlsc.tools.update_workflow_state import update_workflow_state
+from hlsc.tools.submit_shop_search_criteria import submit_shop_search_criteria
 
 # 分类与匹配
 from hlsc.tools.classify_project import classify_project
@@ -57,8 +58,10 @@ def create_agent_app() -> AgentApp:
         "claim_coupon": claim_coupon,
         # 下单
         "confirm_booking": confirm_booking,
-        # 编排模式下把用户事实登记进 workflow 状态（Agent 直接调 Temporal，不经过 orchestrator）
+        # 编排模式通用登记工具（旧 scene 兜底，仍没迁到 Validate-Loop 的 insurance/searchcoupons 在用）
         "update_workflow_state": update_workflow_state,
+        # 搜商户场景专用：登记 shop_search_info，系统自动搜并回结果
+        "submit_shop_search_criteria": submit_shop_search_criteria,
         # 复杂查询
         "call_query_codingagent": call_query_codingagent,
         # 商户联系单

@@ -20,7 +20,7 @@ scenes:
       - debug/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - update_workflow_state
+      - submit_shop_search_criteria
     skills: []
 
   guide:
@@ -46,7 +46,7 @@ scenes:
       - searchshops/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - update_workflow_state
+      - submit_shop_search_criteria
     skills: []
 
   searchcoupons:
