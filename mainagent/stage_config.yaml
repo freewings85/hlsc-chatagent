@@ -58,11 +58,7 @@ scenes:
       - searchcoupons/AGENT.md
       - orchestrated/AGENT.md
     tools:
-      - search_coupon
-      - claim_coupon
-      - collect_user_location
-      - classify_project
-      - update_workflow_state
+      - submit_coupon_search_criteria
     skills:
       - saving-methods
 
