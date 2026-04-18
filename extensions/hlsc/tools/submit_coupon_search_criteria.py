@@ -1,7 +1,7 @@
-"""submit_coupon_search_criteria：搜优惠场景专用的"登记找优惠条件"工具。
+"""submit_coupon_search_criteria：搜优惠活动场景专用的"登记找优惠活动条件"工具。
 
 两个 typed 参数（LLM 接口层）：
-- activity_search_info: 活动本身维度（项目关键词、优惠类型、品牌等）
+- activity_search_info: 活动本身维度（项目关键词、优惠活动类型、品牌等）
 - shop_search_info: 商户维度（位置、商户类型、评分等——和 searchshops 完全一致）
 
 **只写一个 ai_inputs 字段 `coupon_search_info`**，把两维度作为子对象装进去。
@@ -28,7 +28,7 @@ async def submit_coupon_search_criteria(
     ctx: RunContext[AgentDeps],
     activity_search_info: Annotated[dict[str, Any] | None, Field(
         description=(
-            "活动本身维度的找优惠条件整包 JSON。结构（limit / query 根字段 + "
+            "活动本身维度的找优惠活动条件整包 JSON。结构（limit / query 根字段 + "
             "LEAF.params 可用字段）以当前步骤 instruction 里的 ACTIVITY_SEARCH_FIELDS "
             "为准，不要从这里推测。用户只提到商户维度时传 null。"
         )
@@ -41,7 +41,7 @@ async def submit_coupon_search_criteria(
         )
     )] = None,
 ) -> str:
-    """登记找优惠条件。"""
+    """登记找优惠活动条件。"""
     if not activity_search_info and not shop_search_info:
         return "本次未提交任何字段，已忽略。"
 
