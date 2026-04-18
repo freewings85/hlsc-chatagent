@@ -46,6 +46,10 @@ async def submit_workflow_fields(
     rid: str = ctx.deps.request_id
     log_tool_start(tool_name, sid, rid, {"fields": list(fields.keys())})
 
+    if not fields:
+        log_tool_end(tool_name, sid, rid, {"skipped": "empty_fields"})
+        return "本次未提交任何字段，已忽略。"
+
     temporal_client = ctx.deps.temporal_client
     workflow_id: str | None = ctx.deps.workflow_id
 
