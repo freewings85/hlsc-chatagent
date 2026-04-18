@@ -470,12 +470,23 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
             _running_tasks.pop(task_id, None)
             if _callback_url:
                 import httpx as _httpx
+                # 从 context.orchestrator 取 workflow_id + activity_task_token
+                _ctx: dict[str, Any] = (
+                    request.context if isinstance(request.context, dict) else {}
+                )
+                _orch: dict[str, Any] = (
+                    _ctx.get("orchestrator", {}) if isinstance(_ctx.get("orchestrator"), dict) else {}
+                )
+                _wf_id: str = _orch.get("workflow_id", "")
+                _act_token: str = _orch.get("activity_task_token", "")
                 try:
                     async with _httpx.AsyncClient(timeout=5.0) as cli:
                         await asyncio.shield(cli.post(
                             _callback_url,
                             json={
                                 "request_id": request_id,
+                                "workflow_id": _wf_id,
+                                "activity_task_token": _act_token,
                                 "status": status,
                                 "error_message": err_msg,
                                 "completed_at": int(_time.time()),
