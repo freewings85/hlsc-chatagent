@@ -89,6 +89,14 @@ async def submit_workflow_fields(
                 f"工作流响应超时（>{_CALL_WORKFLOW_TIMEOUT}s）"
             )
 
+        # workflow 标 is_error → 计入 tool_error_count，累计超阈值 SDK loop 会硬停
+        if getattr(result, "is_error", False):
+            ctx.deps.tool_error_count += 1
+            log_tool_end(
+                tool_name, sid, rid,
+                {"backend_error": True, "error_count": ctx.deps.tool_error_count},
+            )
+
         if result.next_instruction:
             ctx.deps.instruction = result.next_instruction
 

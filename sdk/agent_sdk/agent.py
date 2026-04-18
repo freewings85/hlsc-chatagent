@@ -78,6 +78,7 @@ class Agent:
         compact_config: SdkCompactConfig | None = None,
         # ── 运行参数 ──
         max_iterations: int = 25,
+        max_tool_errors_per_turn: int = 2,
         agent_name: str | None = None,
         before_agent_run_hook: BeforeAgentRunHook | None = None,
         after_run_hooks: list[AfterRunHook] | None = None,
@@ -90,6 +91,7 @@ class Agent:
         self._transcript_config = transcript_config or TranscriptConfig()
         self._compact_config = compact_config or SdkCompactConfig()
         self._max_iterations = max_iterations
+        self._max_tool_errors = max_tool_errors_per_turn
         self._agent_name = agent_name or get_agent_name()
         self._before_agent_run_hook = before_agent_run_hook
         self._after_run_hooks: list[AfterRunHook] = after_run_hooks or []
@@ -245,6 +247,7 @@ class Agent:
             temporal_client=temporal_client,
             request_context=request_context,
             session_state=dict(session_state) if session_state else {},
+            max_tool_errors=self._max_tool_errors,
             # orchestrator 编排字段由 StageHook 从 request_context.orchestrator 解包到 deps，
             # 不在 Agent.run() 层面传参（见 mainagent/src/business_map_hook.py）
         )

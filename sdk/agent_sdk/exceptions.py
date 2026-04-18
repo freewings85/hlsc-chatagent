@@ -24,3 +24,15 @@ class WorkflowUnavailableError(AgentLoopError):
     Raise 后 agent loop 立刻终止，前端会收到 ERROR + CHAT_REQUEST_END 事件，
     日志里会标识为 "workflow unavailable" 而不是普通"agent loop 异常"。
     """
+
+
+class TooManyToolErrorsError(AgentLoopError):
+    """本轮累计 tool 错误超阈值，触发硬停。
+
+    工具在自己判断后端失败的地方 `ctx.deps.tool_error_count += 1`；
+    loop 在每轮 tool 执行完后检查 count >= deps.max_tool_errors，超阈值时
+    raise 此异常。
+
+    loop 的 outer catch 专门识别这个异常，**不走 LLM 生成最终回复**，直接
+    emit 一段固定文本 "系统异常，请稍后重试" 给用户，止血用户体验。
+    """

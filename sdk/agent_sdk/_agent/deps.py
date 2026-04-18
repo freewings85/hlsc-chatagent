@@ -40,6 +40,10 @@ class AgentDeps:
     # 同 turn 内相同 (tool_name, args_hash) 的调用计数——防 LLM 陷入重复调用死循环
     # 第 2 次短路返回陈述式合成 result；第 3 次及以上抛 AgentLoopError 终止本轮
     tool_call_dedup: dict[str, int] = field(default_factory=dict)
+    # 本轮累计 tool 错误次数（由各工具在自己判断为失败时 += 1）+ 阈值
+    # loop 每轮 tool node 结束后检查 count >= max_tool_errors → 硬停
+    tool_error_count: int = 0
+    max_tool_errors: int = 2
     # SDK 内部存储（消息、transcript、memory、skill store）
     # root: data/inner/{user}/sessions/{session}/
     inner_storage_backend: BackendProtocol | None = None

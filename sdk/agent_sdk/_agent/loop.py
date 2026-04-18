@@ -32,7 +32,7 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
-from agent_sdk.exceptions import AgentLoopError
+from agent_sdk.exceptions import AgentLoopError, TooManyToolErrorsError
 from agent_sdk._utils.request_context import clear_request_context, set_request_context
 from agent_sdk._utils.session_logger import (
     log_error,
@@ -519,6 +519,12 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
 
                 elif isinstance(node, CallToolsNode):
                     await _emit_tool_events(node, run.ctx, emitter, task, agent_name=agent_name, parent_tool_call_id=ctx.parent_tool_call_id)
+                    # 本轮累计 tool 错误超阈值 → 硬停（工具自己 ctx.deps.tool_error_count += 1）
+                    if deps.tool_error_count >= deps.max_tool_errors:
+                        raise TooManyToolErrorsError(
+                            f"本轮累计 tool 错误 {deps.tool_error_count} 次 "
+                            f"(阈值 {deps.max_tool_errors})，终止"
+                        )
                     node = await run.next(node)
 
                 else:
@@ -566,6 +572,18 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
             error=f"{exc_type}: {exc}",
             request_id=task.request_id,
         )
+        # TooManyToolErrorsError 专属：跳过 LLM 生成，emit 固定 TEXT 给用户
+        if isinstance(exc, TooManyToolErrorsError):
+            fallback_text: str = "系统异常，请稍后重试"
+            await emitter.emit(EventModel(
+                session_id=task.session_id,
+                request_id=task.request_id,
+                type=EventType.TEXT,
+                data={"content": fallback_text},
+                agent_name=agent_name,
+                parent_tool_call_id=ctx.parent_tool_call_id,
+            ))
+            result.final_response = fallback_text
         await emitter.emit(EventModel(
             session_id=task.session_id,
             request_id=task.request_id,
