@@ -38,7 +38,8 @@ class PlanContext(BaseModel):
 
     model_config = {"extra": "allow"}
 
-    scene: str
+    scenes: list[str]
+    """BMA 返回的场景列表；单场景就是长度 1，复合场景长度 >= 2。"""
     available_activities: list[ActivityDef] = []
 
 
@@ -57,16 +58,21 @@ async def plan_endpoint(req: PlanRequest) -> JSONResponse:
     """同步生成 DSL 规划。
 
     成功：HTTP 200 + Plan JSON
-    场景 prompts 不存在：HTTP 400
+    scenes 为空 / 场景 prompts 不存在：HTTP 400
     LLM 多次 retry 仍校验失败：HTTP 500
     其他未预期异常：HTTP 500
     """
+    if not req.context.scenes:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "scenes_empty", "detail": "context.scenes 不能为空"},
+        )
     try:
         plan: Plan = await generate_plan(
             user_id=req.user_id,
             session_id=req.session_id,
             message=req.message,
-            scene=req.context.scene,
+            scenes=req.context.scenes,
             available_activities=req.context.available_activities,
             memory_service_factory=_memory_service_factory,
         )
