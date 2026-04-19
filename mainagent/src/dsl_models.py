@@ -1,7 +1,13 @@
 """DSL 数据模型：planagent（/plan 端点）的输出 schema。
 
 一个 Plan 就是一个 DAG，节点声明依赖关系。变量传递走「共享 context bag」——
-DSL 只管拓扑，不管数据流；activity 自己从累积的 context 里取需要的字段。
+DSL 只管拓扑，不管数据流；每个 action 自己从累积的 context 里取需要的字段。
+
+**术语约定**：
+- 对 LLM 和调用方（orchestrator）暴露的概念叫 **action**（中文「动作」）
+- 后端 workflows 侧的 Temporal activity 是 action 的具体实现，但 planagent
+  侧完全不感知这一点。action 的值就是一个字符串名，由 orchestrator 负责
+  把它映射到具体的 Temporal activity
 
 初版约束（刻意放宽，跑通闭环优先）：
 - initial_inputs 是自由 dict，不强 schema
@@ -17,13 +23,13 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class Node(BaseModel):
-    """DAG 中的一个节点 —— 对应 workflows 侧一个 @activity.defn。"""
+    """DAG 中的一个节点 —— 一次待执行的 action。"""
 
     id: str
     """节点唯一 id（DSL 内唯一，用来在 depends_on 里引用）。"""
 
-    activity: str
-    """activity 名字，必须在请求传入的 available_activities 白名单内。"""
+    action: str
+    """动作名，必须在请求传入的 available_actions 白名单内。"""
 
     depends_on: list[str] = Field(default_factory=list)
     """前驱节点 id 列表。为空 = 可作为根节点并行执行。"""
@@ -57,10 +63,10 @@ class Plan(BaseModel):
         return self
 
 
-class ActivityDef(BaseModel):
-    """请求侧传入的一条 activity 描述。
+class ActionDef(BaseModel):
+    """请求侧传入的一条 action 描述。
 
-    orchestrator 在 `/plan` 请求的 context.available_activities 里传入整列。
+    orchestrator 在 `/plan` 请求的 context.available_actions 里传入整列。
     planagent 把它们渲染成 markdown 表格拼进 system prompt，让 LLM 看到白名单。
     """
 

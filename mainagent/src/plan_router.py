@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 
-from src.dsl_models import ActivityDef, Plan
+from src.dsl_models import ActionDef, Plan
 from src.plan import generate_plan
 from src.plan_loader import PlanSceneNotFoundError
 
@@ -40,7 +40,7 @@ class PlanContext(BaseModel):
 
     scenes: list[str]
     """BMA 返回的场景列表；单场景就是长度 1，复合场景长度 >= 2。"""
-    available_activities: list[ActivityDef] = []
+    available_actions: list[ActionDef] = []
 
 
 class PlanRequest(BaseModel):
@@ -73,7 +73,7 @@ async def plan_endpoint(req: PlanRequest) -> JSONResponse:
             session_id=req.session_id,
             message=req.message,
             scenes=req.context.scenes,
-            available_activities=req.context.available_activities,
+            available_actions=req.context.available_actions,
             memory_service_factory=_memory_service_factory,
         )
     except PlanSceneNotFoundError as exc:

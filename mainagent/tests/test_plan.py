@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from src.dsl_models import ActivityDef, Plan
+from src.dsl_models import ActionDef, Plan
 from src.plan_loader import PlanSceneNotFoundError, build_plan_system_prompt
 
 
@@ -25,9 +25,9 @@ def test_plan_accepts_valid_dag() -> None:
     payload: dict[str, Any] = {
         "plan_id": "p-1",
         "nodes": [
-            {"id": "a", "activity": "fetch_user_profile", "depends_on": []},
-            {"id": "b", "activity": "search_shops_by_geo", "depends_on": ["a"]},
-            {"id": "c", "activity": "render_reply", "depends_on": ["b"]},
+            {"id": "a", "action": "fetch_user_profile", "depends_on": []},
+            {"id": "b", "action": "search_shops_by_geo", "depends_on": ["a"]},
+            {"id": "c", "action": "render_reply", "depends_on": ["b"]},
         ],
         "initial_inputs": {"user_query": "找店"},
     }
@@ -41,8 +41,8 @@ def test_plan_rejects_duplicate_ids() -> None:
     payload: dict[str, Any] = {
         "plan_id": "p-1",
         "nodes": [
-            {"id": "a", "activity": "x", "depends_on": []},
-            {"id": "a", "activity": "y", "depends_on": []},
+            {"id": "a", "action": "x", "depends_on": []},
+            {"id": "a", "action": "y", "depends_on": []},
         ],
     }
     with pytest.raises(Exception) as exc:
@@ -54,7 +54,7 @@ def test_plan_rejects_dangling_dependency() -> None:
     payload: dict[str, Any] = {
         "plan_id": "p-1",
         "nodes": [
-            {"id": "a", "activity": "x", "depends_on": ["ghost"]},
+            {"id": "a", "action": "x", "depends_on": ["ghost"]},
         ],
     }
     with pytest.raises(Exception) as exc:
@@ -66,12 +66,12 @@ def test_plan_rejects_dangling_dependency() -> None:
 
 
 def test_plan_loader_single_scene_assembles_prompt() -> None:
-    activities: list[ActivityDef] = [
-        ActivityDef(name="fetch_user_profile", desc="拉画像"),
-        ActivityDef(name="search_shops_by_geo", desc="按位置搜"),
-        ActivityDef(name="render_reply", desc="出用户回复"),
+    actions: list[ActionDef] = [
+        ActionDef(name="fetch_user_profile", desc="拉画像"),
+        ActionDef(name="search_shops_by_geo", desc="按位置搜"),
+        ActionDef(name="render_reply", desc="出用户回复"),
     ]
-    prompt: str = build_plan_system_prompt(["searchshops"], activities)
+    prompt: str = build_plan_system_prompt(["searchshops"], actions)
 
     # 四大块都在
     assert "话痨规划器" in prompt           # SYSTEM.md
@@ -82,7 +82,7 @@ def test_plan_loader_single_scene_assembles_prompt() -> None:
     assert "单场景" in prompt
     # 白名单渲染
     assert "fetch_user_profile" in prompt
-    assert "本次请求可用的 activity" in prompt
+    assert "本次请求可用的动作" in prompt
 
 
 def test_plan_loader_raises_on_unknown_scene() -> None:
@@ -90,10 +90,10 @@ def test_plan_loader_raises_on_unknown_scene() -> None:
         build_plan_system_prompt(["this_scene_definitely_not_exists"], [])
 
 
-def test_plan_loader_without_activities_still_builds() -> None:
+def test_plan_loader_without_actions_still_builds() -> None:
     prompt: str = build_plan_system_prompt(["searchshops"], [])
     assert "话痨规划器" in prompt
-    assert "本次请求可用的 activity" not in prompt  # 空时不渲染表格
+    assert "本次请求可用的动作" not in prompt  # 空时不渲染表格
 
 
 def test_plan_loader_rejects_empty_scenes() -> None:
@@ -106,23 +106,22 @@ def test_plan_loader_rejects_empty_scenes() -> None:
 
 def test_plan_loader_composite_scenes_stack_agent_md() -> None:
     """复合场景：两个 PLAN_AGENT.md 顺序堆叠，PLAN_OUTPUT.md 只出现一次。"""
-    activities: list[ActivityDef] = [
-        ActivityDef(name="fetch_user_profile"),
-        ActivityDef(name="search_shops_by_geo"),
-        ActivityDef(name="search_coupons"),
-        ActivityDef(name="render_reply"),
+    actions: list[ActionDef] = [
+        ActionDef(name="fetch_user_profile"),
+        ActionDef(name="search_shops_by_geo"),
+        ActionDef(name="search_coupons"),
+        ActionDef(name="render_reply"),
     ]
-    prompt: str = build_plan_system_prompt(["searchshops", "searchcoupons"], activities)
+    prompt: str = build_plan_system_prompt(["searchshops", "searchcoupons"], actions)
 
     # 两个场景的业务说明都在（按请求顺序）
     assert "场景 `searchshops` 业务说明" in prompt
     assert "场景 `searchcoupons` 业务说明" in prompt
-    # 并且 searchshops 的内容在 searchcoupons 之前
     assert prompt.index("searchshops` 业务说明") < prompt.index("searchcoupons` 业务说明")
 
     # 复合场景 header
     assert "复合" in prompt
-    assert "处理复合场景" in prompt    # PLAN_SOUL 里那一节
+    assert "处理复合场景" in prompt
 
     # 输出规范只出现一次（没按场景重复）
     assert prompt.count("输出规范") == 1

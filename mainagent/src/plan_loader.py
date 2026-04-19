@@ -5,7 +5,7 @@
 - 场景特化：plan/{scene}/PLAN_AGENT.md（只讲"本场景业务语义"）
 - 复合场景 = 多个 scene 的 PLAN_AGENT.md 顺序堆叠；输出规范和方法论文件全局只有一份
 
-available_activities 清单由调用方传入（orchestrator 已对多场景做 union），
+available_actions 清单由调用方传入（orchestrator 已对多场景做 union），
 渲染成 markdown 表格拼到 prompt 末尾。
 """
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.dsl_models import ActivityDef
+from src.dsl_models import ActionDef
 
 
 # plan 专用 prompt 根目录
@@ -33,23 +33,23 @@ def _read_file(relative_path: str) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
-def _format_activities_block(activities: list[ActivityDef]) -> str:
-    """把 available_activities 渲染成 markdown 表格拼到 prompt 尾部。
+def _format_actions_block(actions: list[ActionDef]) -> str:
+    """把 available_actions 渲染成 markdown 表格拼到 prompt 尾部。
 
     规划器 LLM 必须看到这个清单才能生成合法 DSL。orchestrator 侧多场景 union
     的动作已经在请求里完成，本模块只做渲染。
     """
-    if not activities:
+    if not actions:
         return ""
 
     lines: list[str] = [
         "",
-        "## 本次请求可用的 activity（白名单，严格，不可臆造）",
+        "## 本次请求可用的动作（白名单，严格，不可臆造）",
         "",
-        "| activity | 说明 |",
+        "| action | 说明 |",
         "|---|---|",
     ]
-    for a in activities:
+    for a in actions:
         desc: str = a.desc.replace("|", "\\|")
         lines.append(f"| `{a.name}` | {desc} |")
     return "\n".join(lines)
@@ -69,7 +69,7 @@ def _format_scenes_header(scenes: list[str]) -> str:
 
 def build_plan_system_prompt(
     scenes: list[str],
-    activities: list[ActivityDef],
+    actions: list[ActionDef],
 ) -> str:
     """拼装 plan LLM 的 system prompt。
 
@@ -85,7 +85,7 @@ def build_plan_system_prompt(
 
     Args:
         scenes: 场景 id 列表；长度 >=1，单场景时长度 1
-        activities: 白名单（orchestrator 侧已做 union）
+        actions: 动作白名单（orchestrator 侧已做 union）
 
     Raises:
         PlanSceneNotFoundError: 任一 scene 在 plan/ 下没有对应目录
@@ -124,9 +124,9 @@ def build_plan_system_prompt(
     if output_spec:
         parts.append(output_spec)
 
-    # 动态 activity 白名单
-    activities_block: str = _format_activities_block(activities)
-    if activities_block:
-        parts.append(activities_block)
+    # 动态 action 白名单
+    actions_block: str = _format_actions_block(actions)
+    if actions_block:
+        parts.append(actions_block)
 
     return "\n\n".join(parts)

@@ -19,7 +19,7 @@ from pydantic_ai import Agent as PydanticAgent
 from agent_sdk._agent.deps import AgentDeps
 from agent_sdk._agent.model import create_model
 
-from src.dsl_models import ActivityDef, Plan
+from src.dsl_models import ActionDef, Plan
 from src.plan_loader import build_plan_system_prompt
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ async def generate_plan(
     session_id: str,
     message: str,
     scenes: list[str],
-    available_activities: list[ActivityDef],
+    available_actions: list[ActionDef],
     memory_service_factory: Any,
 ) -> Plan:
     """生成一个 Plan。
@@ -120,7 +120,7 @@ async def generate_plan(
         user_id / session_id: mainagent session 标识，用于查 memory service 拿历史
         message: 本轮用户原始 query
         scenes: BMA 返回的场景列表；长度 1 为单场景，>=2 为复合场景
-        available_activities: orchestrator 传入的 activity 白名单（复合场景时已 union）
+        available_actions: orchestrator 传入的 action 白名单（复合场景时已 union）
         memory_service_factory: mainagent app.py 注入的 memory_service 工厂
 
     Returns:
@@ -133,7 +133,7 @@ async def generate_plan(
     history: list[dict[str, str]] = await _extract_recent_turns(deps, _PLAN_HISTORY_MAX_TURNS)
 
     # 2. 拼 prompts
-    system_prompt: str = build_plan_system_prompt(scenes, available_activities)
+    system_prompt: str = build_plan_system_prompt(scenes, available_actions)
     user_msg: str = _render_user_message(message, history)
 
     # 3. 跑 pydantic-ai（output_type=Plan，校验失败自动 retry）
@@ -145,8 +145,8 @@ async def generate_plan(
     )
 
     logger.info(
-        "[PLAN] user=%s session=%s scenes=%s history=%d activities=%d",
-        user_id, session_id, scenes, len(history), len(available_activities),
+        "[PLAN] user=%s session=%s scenes=%s history=%d actions=%d",
+        user_id, session_id, scenes, len(history), len(available_actions),
     )
 
     result: Any = await plan_agent.run(user_msg)
