@@ -97,8 +97,11 @@ async def submit_workflow_fields(
                 {"backend_error": True, "error_count": ctx.deps.tool_error_count},
             )
 
-        if result.next_instruction:
-            ctx.deps.instruction = result.next_instruction
+        # workflow 返回的 next_instruction 是权威：
+        #   非空 → 下一步要 LLM 继续采集／澄清（AICall）
+        #   空串 → workflow 走到 END，不再需要采集，必须清掉旧指令，
+        #          否则 LLM 下轮还会看到上一步的 "立即提交 xxx" 又调工具触发 dedup 死循环
+        ctx.deps.instruction = result.next_instruction
 
         if result.tool_result_raw is not None and ctx.deps.emitter is not None:
             from agent_sdk._event.event_model import EventModel

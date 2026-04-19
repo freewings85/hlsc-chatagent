@@ -100,10 +100,14 @@ class HlscContextFormatter(ContextFormatter):
         parts.append(self._format_request_info(context))
 
         # ── Part 2：Orchestrator 编排上下文（activity instruction）──
-        # 优先用 deps.instruction（update_workflow_state 热切换后是最新的），
-        # 否则回落到 context.orchestrator.instruction。
+        # 进入 orchestrator 模式后（PreRunHook 给 deps.instruction 赋过值），
+        # deps.instruction 就是权威来源——空串表示 workflow 已到 END_SENTINEL，
+        # 本轮不再需要指令。必须用 `is not None` 而非 truthy 判断，
+        # 否则空串会 fallback 回 context.orchestrator.instruction（初始 HTTP
+        # 入参，整轮不变），下一轮 LLM 还会看到上一步的 "立即提交 xxx"
+        # 触发同参数反复调用 → dedup 死循环。
         instruction: str = ""
-        if deps is not None and getattr(deps, "instruction", ""):
+        if deps is not None and getattr(deps, "instruction", None) is not None:
             instruction = deps.instruction
         elif context.orchestrator is not None:
             instruction = context.orchestrator.instruction
