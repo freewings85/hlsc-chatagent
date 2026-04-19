@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import uuid
 from typing import Any
 
 from pydantic_ai import Agent as PydanticAgent
@@ -26,7 +25,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 _PLAN_RETRIES: int = int(os.getenv("PLAN_LLM_RETRIES", "2"))
-_PLAN_HISTORY_MAX_TURNS: int = int(os.getenv("PLAN_HISTORY_MAX_TURNS", "20"))
+_PLAN_HISTORY_MAX_TURNS: int = int(os.getenv("PLAN_HISTORY_MAX_TURNS", "8"))
 
 
 async def _extract_recent_turns(
@@ -151,8 +150,4 @@ async def generate_plan(
 
     result: Any = await plan_agent.run(user_msg)
     plan: Plan = result.output
-
-    # plan_id 兜底：如果 LLM 忘了给，这里补一个
-    if not plan.plan_id:
-        plan.plan_id = f"p-{uuid.uuid4().hex[:8]}"
     return plan
