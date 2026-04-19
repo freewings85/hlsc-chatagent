@@ -98,4 +98,9 @@ def create_agent_app() -> AgentApp:
     set_memory_factory(agent._build_memory_service)
     agent_app.app.include_router(classify_router)
 
+    # ── 注册 /plan 端点（同 /classify 模式：同步 HTTP，复用 agent 的 memory service 拿历史）──
+    from src.plan_router import router as plan_router, set_memory_factory as set_plan_memory_factory
+    set_plan_memory_factory(agent._build_memory_service)
+    agent_app.app.include_router(plan_router)
+
     return agent_app
