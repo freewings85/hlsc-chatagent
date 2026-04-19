@@ -5,6 +5,7 @@
       "name": "MainAgent",
       "type": "debugpy",
       "request": "launch",
+      "preLaunchTask": "sync-base",
       "program": "server.py",
       "python": "${workspaceFolder}/mainagent/.venv/bin/python",
       "cwd": "${workspaceFolder}/mainagent",
