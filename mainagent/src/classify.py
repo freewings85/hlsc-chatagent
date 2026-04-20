@@ -115,6 +115,9 @@ class ClassifyRequest(BaseModel):
 
 class ClassifyResponse(BaseModel):
     scenario: str | None = None
+    scenes: list[str] = []
+    """BMA 返回的全部场景列表（按 BMA 输出顺序）。单场景就是长度 1，
+    复合场景 >=2。orchestrator 用它判断是否走多场景 plan。"""
 
 
 async def classify_scenario(
@@ -122,8 +125,12 @@ async def classify_scenario(
     session_id: str,
     message: str,
     memory_service_factory: Any,
-) -> str | None:
+) -> tuple[str | None, list[str]]:
     """核心分类逻辑（可复用，不依赖 HTTP 层）。
+
+    返回 (primary_scenario, scenes_list)：
+    - primary_scenario：用于 workflow_id 前缀和单场景路由（按 _SCENARIO_PRIORITY 选）
+    - scenes_list：BMA 原始返回（含复合场景），交给下游 /plan 作 planAgent 候选集
 
     Args:
         memory_service_factory: 能构建 MemoryMessageService 的工厂
@@ -148,12 +155,14 @@ async def classify_scenario(
     scenes: list[str] = await _call_bma_classify(message, recent_turns=recent_turns)
 
     if not scenes:
-        return None
+        return None, []
     if len(scenes) == 1:
-        return scenes[0]
+        return scenes[0], scenes
 
-    # 多场景：按优先级取
+    # 多场景：按优先级挑 primary，但 scenes 全 list 一起返回
+    primary: str = scenes[0]
     for prio in _SCENARIO_PRIORITY:
         if prio in scenes:
-            return prio
-    return scenes[0]
+            primary = prio
+            break
+    return primary, scenes
