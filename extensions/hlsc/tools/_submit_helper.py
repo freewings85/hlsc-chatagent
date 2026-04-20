@@ -97,6 +97,15 @@ async def submit_workflow_fields(
                 {"backend_error": True, "error_count": ctx.deps.tool_error_count},
             )
 
+        # interrupt 分支：activity 显式要求阻塞问用户（如询价单已创建等用户确认）
+        # 这里不设 next_instruction / 不 emit TOOL_RESULT_DETAIL，全部信息走 INTERRUPT 事件。
+        # call_interrupt 会挂起本 tool，前端 resume 回来后把 reply 作为 tool_result 返回 LLM。
+        interrupt_data = getattr(result, "interrupt", None)
+        if interrupt_data is not None:
+            from agent_sdk._agent.tools.call_interrupt import call_interrupt
+            log_tool_end(tool_name, sid, rid, {"routed_to": "call_interrupt"})
+            return await call_interrupt(ctx, interrupt_data)
+
         # workflow 返回的 next_instruction 是权威：
         #   非空 → 下一步要 LLM 继续采集／澄清（AICall）
         #   空串 → workflow 走到 END，不再需要采集，必须清掉旧指令，
