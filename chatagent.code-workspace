@@ -1,0 +1,13 @@
+{
+  "folders": [
+    { "path": "mainagent", "name": "mainagent" },
+    { "path": "sdk", "name": "sdk" },
+    { "path": "extensions", "name": "extensions" },
+    { "path": ".", "name": "chatagent (root)" }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:mainagent}/.venv/bin/python",
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.useLibraryCodeForTypes": true
+  }
+}

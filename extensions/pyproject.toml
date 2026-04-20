@@ -5,6 +5,7 @@ description = "业务共享扩展（skills + tools），各 agent 按需引用"
 requires-python = ">=3.12"
 dependencies = [
     "agent-sdk",
+    "hlsc-orchestrator-protocol",
     "httpx>=0.27",
     "jinja2>=3.1",
     "pyyaml>=6.0",
@@ -31,3 +32,4 @@ packages = ["hlsc"]
 
 [tool.uv.sources]
 agent-sdk = { path = "../sdk", editable = true }
+hlsc-orchestrator-protocol = { git = "ssh://git@git.51cjml.com:8022/ai-hlsc/com.celiang.hlsc.service.ai.base.git", branch = "plan-executor" }

@@ -74,6 +74,24 @@ function parseSseChunk(raw: string): SseEvent[] {
 
 const STORAGE_KEY_SID = 'chat_session_id'
 const STORAGE_KEY_MSG = 'chat_messages'
+const STORAGE_KEY_CTX = 'chat_context'
+
+interface ChatContext {
+  current_car: { car_model_id: string; car_model_name: string; vin_code: string } | null
+  current_location: { address: string; latitude: number | null; longitude: number | null } | null
+}
+
+const DEFAULT_CONTEXT: ChatContext = {
+  current_car: null,
+  current_location: { address: '闵行区', latitude: 31.10, longitude: 121.35 },
+}
+
+function loadContext(): ChatContext {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CTX)
+    return raw ? { ...DEFAULT_CONTEXT, ...JSON.parse(raw) } : DEFAULT_CONTEXT
+  } catch { return DEFAULT_CONTEXT }
+}
 
 function loadSessionId(): string {
   return sessionStorage.getItem(STORAGE_KEY_SID) || 'sess-' + Math.random().toString(36).slice(2, 10)
@@ -91,12 +109,17 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(loadMessages)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [ctx, setCtx] = useState<ChatContext>(loadContext)
+  const [ctxOpen, setCtxOpen] = useState(false)
   const taskIdRef = useRef<string | null>(null)
   const chatAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   // Refs for streaming updates (avoid stale closures)
   const messagesRef = useRef(messages)
   messagesRef.current = messages
+
+  // 持久化 context
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_CTX, JSON.stringify(ctx)) }, [ctx])
 
   const scrollToBottom = useCallback(() => {
     const el = chatAreaRef.current
@@ -126,37 +149,63 @@ export default function ChatPage() {
     const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [], cards: {} }
     setMessages(prev => [...prev, userMsg, asstMsg])
 
-    let buffer = ''
-
     try {
-      const resp = await fetch(`${BASE}/chat/stream`, {
+      // 1. 订阅 SSE 事件流 + 立刻装 listener（避免 fetch 等待时丢失事件）
+      const evtUrl = `${BASE}/chat/events?session_id=${encodeURIComponent(sessionId)}`
+      const evtSource = new EventSource(evtUrl)
+
+      const donePromise = new Promise<void>((resolve) => {
+        const eventTypes = [
+          'text', 'tool_call_start', 'tool_call_args', 'tool_result',
+          'tool_result_detail', 'error', 'interrupt', 'chat_request_end',
+        ]
+        for (const et of eventTypes) {
+          evtSource.addEventListener(et, (e: MessageEvent) => {
+            try {
+              const data = JSON.parse(e.data)
+              if (et === 'chat_request_end') {
+                evtSource.close()
+                resolve()
+                return
+              }
+              handleEvent(et, data)
+            } catch { /* skip */ }
+          })
+        }
+        evtSource.onerror = () => {
+          evtSource.close()
+          resolve()
+        }
+      })
+
+      // 2. 触发 /chat/async
+      const resp = await fetch(`${BASE}/chat/async`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message: text, user_id: '307' }),
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: text,
+          user_id: '307',
+          context: {
+            current_car: ctx.current_car?.car_model_id
+              ? { car_model_id: ctx.current_car.car_model_id, car_model_name: ctx.current_car.car_model_name }
+              : undefined,
+            current_location: ctx.current_location?.address
+              ? { lat: ctx.current_location.latitude ?? 0, lng: ctx.current_location.longitude ?? 0, address: ctx.current_location.address }
+              : undefined,
+          },
+        }),
       })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-
-      const reader = resp.body!.getReader()
-      const decoder = new TextDecoder()
-
-      let streamEnded = false
-      while (!streamEnded) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const idx = buffer.lastIndexOf('\n\n')
-        if (idx === -1) continue
-        const toProcess = buffer.slice(0, idx + 2)
-        buffer = buffer.slice(idx + 2)
-
-        for (const { type, data } of parseSseChunk(toProcess)) {
-          if (type === 'chat_request_end') {
-            streamEnded = true
-            break
-          }
-          handleEvent(type, data)
-        }
+      if (!resp.ok) {
+        evtSource.close()
+        const detail = await resp.json().catch(() => ({}))
+        throw new Error((detail as Record<string, string>).detail ?? `HTTP ${resp.status}`)
       }
+      const { task_id } = await resp.json() as { task_id: string }
+      taskIdRef.current = task_id
+
+      // 3. 等事件流跑完（listener 已在 step 1 装好）
+      await donePromise
     } catch (err) {
       // Append error to assistant text
       setMessages(prev => {
@@ -312,7 +361,7 @@ export default function ChatPage() {
           break
         }
         case 'error': {
-          const msg = (d.error as string) ?? 'Unknown error'
+          const msg = (d.message as string) ?? 'Unknown error'
           copy[copy.length - 1] = { ...last, text: last.text + `\n[Error: ${msg}]` }
           break
         }
@@ -382,7 +431,76 @@ export default function ChatPage() {
           <span className="session-label">session:</span>
           <span className="session-id">{sessionId}</span>
           <button className="btn-sm" onClick={newSession} disabled={streaming}>新会话</button>
+          <button className="btn-sm" onClick={() => setCtxOpen(!ctxOpen)} style={{ marginLeft: 8 }}>
+            {ctxOpen ? '收起 ▴' : '上下文 ▾'}
+          </button>
         </div>
+        {ctxOpen && (
+          <div className="context-panel">
+            <div className="ctx-row">
+              <span className="ctx-label">位置</span>
+              <input
+                placeholder="address（如：闵行区七宝）"
+                value={ctx.current_location?.address ?? ''}
+                onChange={e => setCtx(prev => ({
+                  ...prev,
+                  current_location: { address: e.target.value, latitude: prev.current_location?.latitude ?? null, longitude: prev.current_location?.longitude ?? null },
+                }))}
+              />
+              <input
+                placeholder="lat"
+                type="number"
+                step="any"
+                style={{ width: 80 }}
+                value={ctx.current_location?.latitude ?? ''}
+                onChange={e => setCtx(prev => ({
+                  ...prev,
+                  current_location: { address: prev.current_location?.address ?? '', latitude: e.target.value ? Number(e.target.value) : null, longitude: prev.current_location?.longitude ?? null },
+                }))}
+              />
+              <input
+                placeholder="lng"
+                type="number"
+                step="any"
+                style={{ width: 80 }}
+                value={ctx.current_location?.longitude ?? ''}
+                onChange={e => setCtx(prev => ({
+                  ...prev,
+                  current_location: { address: prev.current_location?.address ?? '', latitude: prev.current_location?.latitude ?? null, longitude: e.target.value ? Number(e.target.value) : null },
+                }))}
+              />
+            </div>
+            <div className="ctx-row">
+              <span className="ctx-label">车辆</span>
+              <input
+                placeholder="car_model_id"
+                style={{ width: 100 }}
+                value={ctx.current_car?.car_model_id ?? ''}
+                onChange={e => setCtx(prev => ({
+                  ...prev,
+                  current_car: { car_model_id: e.target.value, car_model_name: prev.current_car?.car_model_name ?? '', vin_code: prev.current_car?.vin_code ?? '' },
+                }))}
+              />
+              <input
+                placeholder="car_model_name"
+                value={ctx.current_car?.car_model_name ?? ''}
+                onChange={e => setCtx(prev => ({
+                  ...prev,
+                  current_car: { car_model_id: prev.current_car?.car_model_id ?? '', car_model_name: e.target.value, vin_code: prev.current_car?.vin_code ?? '' },
+                }))}
+              />
+              <input
+                placeholder="vin_code"
+                style={{ width: 160 }}
+                value={ctx.current_car?.vin_code ?? ''}
+                onChange={e => setCtx(prev => ({
+                  ...prev,
+                  current_car: { car_model_id: prev.current_car?.car_model_id ?? '', car_model_name: prev.current_car?.car_model_name ?? '', vin_code: e.target.value },
+                }))}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="chat-area" ref={chatAreaRef}>
@@ -402,7 +520,7 @@ export default function ChatPage() {
               ) : (
                 <>
                   {msg.tools.map((tool, j) => (
-                    <ToolBlock key={tool.id || j} tool={tool} onReplyInterrupt={replyToInterrupt} streaming={streaming} />
+                    <ToolBlock key={tool.id || j} tool={tool} card={msg.cards[tool.id]} onReplyInterrupt={replyToInterrupt} streaming={streaming} />
                   ))}
                   {msg.interrupts.map((card, j) => (
                     <InterruptBlock key={`int-${j}`} card={card} onReply={(reply) => replyToInterrupt(card.interruptKey, reply)} disabled={card.interruptKey ? false : streaming} />
@@ -790,8 +908,9 @@ function InterruptBlock({ card, onReply, disabled }: {
 // ToolBlock sub-component
 // --------------------------------------------------------------------------
 
-function ToolBlock({ tool, onReplyInterrupt, streaming }: {
+function ToolBlock({ tool, card, onReplyInterrupt, streaming }: {
   tool: ToolCall
+  card?: CardData
   onReplyInterrupt?: (interruptKey: string | undefined, reply: string) => void
   streaming?: boolean
 }) {
@@ -835,6 +954,7 @@ function ToolBlock({ tool, onReplyInterrupt, streaming }: {
           )}
         </div>
       )}
+      {card && <DetailCardBlock card={card} />}
       {expanded && (
         <div className="tool-details">
           <div className="tool-section">
@@ -849,6 +969,20 @@ function ToolBlock({ tool, onReplyInterrupt, streaming }: {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// --------------------------------------------------------------------------
+// DetailCardBlock: 渲染 tool_result_detail —— 纯文本显示（debug 友好）
+// --------------------------------------------------------------------------
+
+function DetailCardBlock({ card }: { card: CardData }) {
+  const inner = (card.data?.data && typeof card.data.data === 'object') ? card.data.data : card.data
+  return (
+    <div className="detail-card detail-card-raw">
+      <div className="detail-card-header">{card.detail_type}</div>
+      <pre className="detail-card-json">{JSON.stringify(inner, null, 2)}</pre>
     </div>
   )
 }

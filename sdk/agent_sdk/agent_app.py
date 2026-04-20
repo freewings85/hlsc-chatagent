@@ -256,7 +256,9 @@ class AgentApp:
             user_id: str = request.get("user_id", "anonymous")
             message: str = request.get("message", "")
             context: Any = request.get("context")
-            request_id, parent_otel_context = _resolve_trace_context(raw_request)
+            # 优先用 body 传来的 request_id（orchestrator 需要用它匹配 Kafka 事件）
+            _trace_id, parent_otel_context = _resolve_trace_context(raw_request)
+            request_id: str = request.get("request_id") or _trace_id
 
             producer = await get_kafka_producer()
             sinker = KafkaSinker(producer, kafka_config.topic)
@@ -285,6 +287,8 @@ class AgentApp:
             self._running_tasks[task_id] = loop_task
 
             # 后台转发：从 emitter queue 读事件，通过 KafkaSinker 发到 Kafka
+            callback_url: str = request.get("callback_url", "")
+
             async def _forward_to_kafka() -> None:
                 try:
                     while True:
@@ -296,6 +300,31 @@ class AgentApp:
                     logger.exception("Kafka 转发异常")
                 finally:
                     self._running_tasks.pop(task_id, None)
+                    # callback 通知 orchestrator turn 结束
+                    logger.info(f"[KAFKA_FWD] done, callback_url={callback_url or '(empty)'}")
+                    if callback_url:
+                        import time as _time
+                        # 从 context.orchestrator 取 workflow_id + activity_task_token
+                        _orch_ctx: dict[str, Any] = (
+                            (context or {}).get("orchestrator", {}) if isinstance(context, dict) else {}
+                        )
+                        _wf_id: str = _orch_ctx.get("workflow_id", "") if isinstance(_orch_ctx, dict) else ""
+                        _act_token: str = (
+                            _orch_ctx.get("activity_task_token", "") if isinstance(_orch_ctx, dict) else ""
+                        )
+                        try:
+                            import httpx as _httpx
+                            async with _httpx.AsyncClient(timeout=5.0) as _cli:
+                                await _cli.post(callback_url, json={
+                                    "request_id": request_id,
+                                    "workflow_id": _wf_id,
+                                    "activity_task_token": _act_token,
+                                    "status": "success",
+                                    "error_message": None,
+                                    "completed_at": int(_time.time()),
+                                })
+                        except Exception:
+                            logger.exception(f"callback failed: {callback_url}")
 
             asyncio.create_task(
                 _forward_to_kafka(),

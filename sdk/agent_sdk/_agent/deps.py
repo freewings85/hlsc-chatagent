@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from temporalio.client import Client as TemporalClient
 
     from agent_sdk._agent.memory.memory_message_service import MemoryMessageService
-    from agent_sdk._agent.session_state_service import SessionStateService
     from agent_sdk._agent.skills.invoked_store import InvokedSkillStore
     from agent_sdk._agent.skills.registry import SkillRegistry
     from agent_sdk._common.request_context import RequestContext
@@ -38,6 +37,13 @@ class AgentDeps:
     # tool 执行过程中可修改的状态
     tool_call_count: int = 0
     last_tool_result: str = ""
+    # 同 turn 内相同 (tool_name, args_hash) 的调用计数——防 LLM 陷入重复调用死循环
+    # 第 2 次短路返回陈述式合成 result；第 3 次及以上抛 AgentLoopError 终止本轮
+    tool_call_dedup: dict[str, int] = field(default_factory=dict)
+    # 本轮累计 tool 错误次数（由各工具在自己判断为失败时 += 1）+ 阈值
+    # loop 每轮 tool node 结束后检查 count >= max_tool_errors → 硬停
+    tool_error_count: int = 0
+    max_tool_errors: int = 2
     # SDK 内部存储（消息、transcript、memory、skill store）
     # root: data/inner/{user}/sessions/{session}/
     inner_storage_backend: BackendProtocol | None = None
@@ -58,8 +64,6 @@ class AgentDeps:
     request_context: RequestContext | None = None
     # Temporal client（call_interrupt 机制用，必须配置）
     temporal_client: TemporalClient | None = None
-    # 即时切换：工具执行后设置，下次 ModelRequestNode 前替换 system prompt
-    system_prompt_override: str | None = None
     # 场景级 agent_md 文件名（由 hook 设置，prompt_loader 优先使用）
     current_scene_agent_md: str | None = None
     # 当前场景标识（hook 设置，prompt_loader 按场景加载 prompt）
@@ -70,8 +74,16 @@ class AgentDeps:
     _session_state_msg: ModelRequest | None = None
     # memory_service（由 agent.run 构建，供 hook 读取历史消息）
     memory_service: MemoryMessageService | None = None
-    # session_state 持久化服务（由 agent.run 构建，供 update_session_state 工具保存）
-    _session_state_service: SessionStateService | None = None
+
+    # ── Orchestrator 编排字段（可选，降级模式全部为 None/空）──
+    # update_workflow_state 工具检测 workflow_id 非空 → 进入 orchestrator 模式
+    workflow_id: str | None = None
+    orchestrator_url: str | None = None
+    # 当前 AICall 的 instruction 文本（业务方在 activity 里组织好，框架不解析）
+    # PreRunHook 从 orchestrator context 解包，update_workflow_state 工具热切换
+    instruction: str = ""
+    # 场景中文名（如"保险竞价"），仅用于日志/观测
+    scenario_label: str = ""
 
 
 # ── session_state 辅助函数 ──
@@ -80,11 +92,11 @@ class AgentDeps:
 def format_session_state(state: dict[str, Any]) -> str:
     """将 session_state 格式化为注入 LLM 的文本。"""
     if not state:
-        return "[session_state]: (空)"
+        return "### session_state\n\n(空)"
     pairs: list[str] = [f"{k}={v}" for k, v in state.items() if v is not None]
     if not pairs:
-        return "[session_state]: (空)"
-    return "[session_state]: " + ", ".join(pairs)
+        return "### session_state\n\n(空)"
+    return "### session_state\n\n" + ", ".join(pairs)
 
 
 def create_session_state_message(state: dict[str, Any]) -> ModelRequest:

@@ -32,6 +32,7 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.toolsets._dynamic import DynamicToolset
 from pydantic_graph import End
 
+from agent_sdk.exceptions import AgentLoopError, TooManyToolErrorsError
 from agent_sdk._utils.request_context import clear_request_context, set_request_context
 from agent_sdk._utils.session_logger import (
     log_error,
@@ -39,7 +40,6 @@ from agent_sdk._utils.session_logger import (
     log_llm_end,
     log_llm_start,
     log_request_end,
-    log_request_start,
     log_tool_end,
     log_tool_start,
 )
@@ -227,27 +227,26 @@ async def _emit_model_stream(
     ctx: Any,
     emitter: EventEmitter,
     task: SessionRequestTask,
-    messages_count: int = 0,
-    messages: list[ModelMessage] | None = None,
-    user_prompt: str | None = None,
     agent_name: str = "main",
     parent_tool_call_id: str | None = None,
 ) -> None:
     """流式消费 ModelRequestNode，逐 token 发出 TEXT / TOOL_CALL 事件。
 
     stream 结束后 node._result 已设置，后续 run.next(node) 不会重复调 LLM。
+    日志在 node.stream(ctx) 进入后打印，此时 _prepare_request 已执行，
+    ctx.state.message_history 是发给 LLM 的真实完整消息列表。
     """
-    log_llm_start(
-        "ModelRequestNode",
-        messages_count=messages_count,
-        messages=messages,
-        user_prompt=user_prompt,
-    )
-
     _text_parts: list[str] = []
     _tool_call_names: list[str] = []
 
     async with node.stream(ctx) as agent_stream:
+        # _prepare_request 已执行，ctx.state.message_history 是真实发给 LLM 的消息
+        actual_messages: list[ModelMessage] = ctx.state.message_history
+        log_llm_start(
+            "ModelRequestNode",
+            messages_count=len(actual_messages),
+            messages=actual_messages,
+        )
         async for event in agent_stream:
             if isinstance(event, PartStartEvent):
                 part = event.part
@@ -409,13 +408,8 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
     # 请求上下文：子 agent 不管理（父 agent 已设置）
     if not is_sub_agent:
         set_request_context(task.session_id, task.request_id)
-    log_request_start(
-        session_id=task.session_id,
-        user_query=task.message,
-        user_id=task.user_id,
-        request_id=task.request_id,
-        request_context=task.context,
-    )
+    # 注意：log_request_start 已由 Agent._run_request 在 PreRunHook 之前调用，
+    # 这样 PreRunHook / prompt_loader 阶段的失败也能落到 session 日志。这里不再重复
 
     try:
         iteration: int = 0
@@ -463,12 +457,7 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                     # 同步场景允许的 skill 列表到 pre_call_service
                     pre_call_service.allowed_skills = deps.allowed_skills
 
-                    # 即时切换：工具设置了 system_prompt_override 时，替换 system prompt
-                    if deps.system_prompt_override is not None:
-                        pre_call_service._system_prompt = deps.system_prompt_override
-                        deps.system_prompt_override = None
-
-                    pre_result = await pre_call_service.handle(history)
+                    pre_result = await pre_call_service.handle(history, deps=deps)
 
                     if pre_result.compacted:
                         log_info(f"[COMPACT] iteration={iteration}")
@@ -482,6 +471,23 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                         _base_len = len(pre_result.model_messages)
 
                     run._graph_run.state.message_history[:] = pre_result.model_messages
+
+                    # 注入 tail reminders（dynamic-context / invoked-skills）到最后一条
+                    # user message 的 parts。append → LLM call → strip 成对出现，确保
+                    # 同轮内多次 LLM 调用 context 热切换不会叠加，持久化时也干净。
+                    from agent_sdk._agent.message.context_injector import (
+                        build_dynamic_context_part,
+                        build_invoked_skills_part,
+                        strip_tail_reminders,
+                    )
+                    if pre_result.dynamic_text:
+                        node.request.parts.append(
+                            build_dynamic_context_part(pre_result.dynamic_text)
+                        )
+                    if pre_result.invoked_skills_tail:
+                        node.request.parts.append(
+                            build_invoked_skills_part(pre_result.invoked_skills_tail)
+                        )
 
                     if _first_llm_call:
                         pending_user: str | None = task.message
@@ -498,19 +504,27 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                             f"(iteration={iteration}): {alt_errors}"
                         )
 
-                    await _emit_model_stream(
-                        node, run.ctx, emitter, task,
-                        messages_count=len(pre_result.model_messages),
-                        messages=pre_result.model_messages,
-                        user_prompt=task.message if _first_llm_call else None,
-                        agent_name=agent_name,
-                        parent_tool_call_id=ctx.parent_tool_call_id,
-                    )
-                    _first_llm_call = False
-                    node = await run.next(node)
+                    try:
+                        await _emit_model_stream(
+                            node, run.ctx, emitter, task,
+                            agent_name=agent_name,
+                            parent_tool_call_id=ctx.parent_tool_call_id,
+                        )
+                        _first_llm_call = False
+                        node = await run.next(node)
+                    finally:
+                        # LLM call 完成/异常 → 清掉刚 append 的 tail reminders，让
+                        # 下轮 handle() 和持久化都看到干净的 history
+                        strip_tail_reminders(run._graph_run.state.message_history)
 
                 elif isinstance(node, CallToolsNode):
                     await _emit_tool_events(node, run.ctx, emitter, task, agent_name=agent_name, parent_tool_call_id=ctx.parent_tool_call_id)
+                    # 本轮累计 tool 错误超阈值 → 硬停（工具自己 ctx.deps.tool_error_count += 1）
+                    if deps.tool_error_count >= deps.max_tool_errors:
+                        raise TooManyToolErrorsError(
+                            f"本轮累计 tool 错误 {deps.tool_error_count} 次 "
+                            f"(阈值 {deps.max_tool_errors})，终止"
+                        )
                     node = await run.next(node)
 
                 else:
@@ -543,6 +557,45 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
             if not is_sub_agent:
                 await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
 
+    except AgentLoopError as exc:
+        # 业务工具主动 raise 的"应当结束本轮"信号（如 WorkflowUnavailableError）。
+        # 走有标识的日志，前端收到 ERROR + CHAT_REQUEST_END 后正常关流。
+        result.finish_reason = "error"
+        exc_type: str = type(exc).__name__
+        log_error(
+            f"[{exc_type}] agent loop 主动终止 (agent={agent_name}): {exc}",
+            exc=exc,
+        )
+        log_request_end(
+            session_id=task.session_id,
+            success=False,
+            error=f"{exc_type}: {exc}",
+            request_id=task.request_id,
+        )
+        # TooManyToolErrorsError 专属：跳过 LLM 生成，emit 固定 TEXT 给用户
+        if isinstance(exc, TooManyToolErrorsError):
+            fallback_text: str = "系统异常，请稍后重试"
+            await emitter.emit(EventModel(
+                session_id=task.session_id,
+                request_id=task.request_id,
+                type=EventType.TEXT,
+                data={"content": fallback_text},
+                agent_name=agent_name,
+                parent_tool_call_id=ctx.parent_tool_call_id,
+            ))
+            result.final_response = fallback_text
+        await emitter.emit(EventModel(
+            session_id=task.session_id,
+            request_id=task.request_id,
+            type=EventType.ERROR,
+            data={
+                "message": str(exc),
+                "error_type": exc_type,
+                "fatal": True,
+            },
+            agent_name=agent_name,
+        ))
+        # 不再向上 raise——业务可预期的终止，避免 HTTP 500
     except Exception as exc:
         result.finish_reason = "error"
         log_error(f"Agent loop 异常 (agent={agent_name}): {exc}", exc=exc)

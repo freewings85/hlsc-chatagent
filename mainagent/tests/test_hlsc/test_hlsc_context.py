@@ -31,7 +31,7 @@ class TestHlscContextFormatter:
             current_location=LocationInfo(address="浦东新区张江", lat=31.2, lng=121.5),
         )
         result = formatter.format(ctx)
-        assert "[request_context]" in result
+        assert "### request_context" in result
         assert "current_car(car_model_id=123, car_model_name=宝马3系" in result
         assert "current_location(address=浦东新区张江" in result
 

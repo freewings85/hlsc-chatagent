@@ -33,7 +33,6 @@ from agent_sdk._agent.message.attachment_collector import AttachmentCollector
 from agent_sdk._agent.message.context_injector import wrap_system_reminder
 from agent_sdk._agent.message.pre_model_call_service import (
     PreModelCallMessageService,
-    _INVOKED_SKILLS_SOURCE,
     _SKILL_LISTING_SOURCE,
 )
 from agent_sdk._agent.skills.invoked_store import InvokedSkill, InvokedSkillStore
@@ -83,20 +82,30 @@ def make_working_messages(n: int = 2) -> list[ModelMessage]:
 def make_pre_call_service(
     registry: SkillRegistry | None = None,
     store: InvokedSkillStore | None = None,
+    force_compact: bool = False,
 ) -> PreModelCallMessageService:
-    """创建一个最简化的 PreModelCallMessageService（无 context、无 attachment、无 compact）。"""
+    """创建一个最简化的 PreModelCallMessageService（无 context、无 attachment）。
+
+    :param force_compact: True 时用 MagicMock Compactor 强制 compacted=True，
+                          用来测试 invoked_skills_tail 的注入条件
+    """
     from agent_sdk._agent.compact.compactor import Compactor, CompactConfig
     from agent_sdk._agent.file_state import FileStateTracker
 
-    compactor = Compactor(
-        config=CompactConfig(
-            context_window=1_000_000,  # 不触发 compact
-            output_reserve=0,
-            min_savings_threshold=0,
-        ),
-        user_id="u1",
-        session_id="s1",
-    )
+    if force_compact:
+        from unittest.mock import AsyncMock, MagicMock
+        compactor = MagicMock(spec=Compactor)
+        compactor.check = AsyncMock(return_value=CompactResult(compacted=True, layer="full"))
+    else:
+        compactor = Compactor(
+            config=CompactConfig(
+                context_window=1_000_000,  # 不触发 compact
+                output_reserve=0,
+                min_savings_threshold=0,
+            ),
+            user_id="u1",
+            session_id="s1",
+        )
     attachment_collector = AttachmentCollector(FileStateTracker())
     return PreModelCallMessageService(
         compactor=compactor,
@@ -226,10 +235,15 @@ class TestSkillInjectionPipeline:
         ]
         assert len(listing_msgs) == 0
 
-    async def test_invoked_skills_injected_after_skill_recorded(
+    async def test_invoked_skills_tail_populated_on_compact(
         self, tmp_path: Path
     ) -> None:
-        """invoked_skill_store 有记录时，invoked_skills 被注入。"""
+        """compact 触发 + store 有记录时，invoked_skills_tail 含 SKILL.md 正文。
+
+        新设计：invoked_skills 不再 prepend 为独立 meta ModelRequest，改为仅 compact
+        那一轮通过 PreModelCallResult.invoked_skills_tail 返回，由 loop 追加到最后一条
+        user message 的 parts（作为 compact 兜底；正常对话 tool result 已带 SKILL.md）。
+        """
         backend = make_backend(tmp_path)
         store = InvokedSkillStore(backend, "u1", "s1")
 
@@ -240,51 +254,42 @@ class TestSkillInjectionPipeline:
         )
         await store.record(skill)
 
-        service = make_pre_call_service(store=store)
+        service = make_pre_call_service(store=store, force_compact=True)
         msgs = make_working_messages(1)
 
         result = await service.handle(msgs)
 
-        invoked_msgs = [
-            m for m in result.model_messages
-            if isinstance(m, ModelRequest)
-            and isinstance(m.metadata, dict)
-            and m.metadata.get("source") == _INVOKED_SKILLS_SOURCE
-        ]
-        assert len(invoked_msgs) == 1
-        content = invoked_msgs[0].parts[0].content  # type: ignore
-        assert "commit" in content.lower()
-        assert "# Commit Instructions" in content
+        assert result.compacted is True
+        assert "# Commit Instructions" in result.invoked_skills_tail
+        assert "Skill: commit" in result.invoked_skills_tail
 
-    async def test_injection_order_invoked_first_then_listing(
+    async def test_invoked_skills_tail_empty_without_compact(
         self, tmp_path: Path
     ) -> None:
-        """消息顺序：invoked_skills [0], skill_listing [1], 其余消息之后。"""
+        """不 compact 时，即使 store 有记录，invoked_skills_tail 也为空
+        （tool result 已经带了 SKILL.md，对话历史自然可见）。"""
         backend = make_backend(tmp_path)
         store = InvokedSkillStore(backend, "u1", "s1")
         await store.record(InvokedSkill(
             name="commit", content="# Commit",
             invoked_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
         ))
-        registry = make_registry_with_skills(
-            make_skill_entry("review", "Review code")
-        )
 
-        service = make_pre_call_service(registry=registry, store=store)
-        msgs = make_working_messages(2)  # 4 条消息
+        service = make_pre_call_service(store=store, force_compact=False)
+        msgs = make_working_messages(1)
 
         result = await service.handle(msgs)
 
-        meta_msgs = [
-            (i, m) for i, m in enumerate(result.model_messages)
-            if isinstance(m, ModelRequest) and isinstance(m.metadata, dict) and m.metadata.get("is_meta")
-        ]
-        sources = [m.metadata["source"] for _, m in meta_msgs]  # type: ignore
-
-        # invoked_skills 必须在 skill_listing 之前
-        assert _INVOKED_SKILLS_SOURCE in sources
-        assert _SKILL_LISTING_SOURCE in sources
-        assert sources.index(_INVOKED_SKILLS_SOURCE) < sources.index(_SKILL_LISTING_SOURCE)
+        assert result.compacted is False
+        assert result.invoked_skills_tail == ""
+        # 也不存在以 source=invoked_skills 的独立 meta ModelRequest
+        invoked_meta_count = sum(
+            1 for m in result.model_messages
+            if isinstance(m, ModelRequest)
+            and isinstance(m.metadata, dict)
+            and m.metadata.get("source") == "invoked_skills"
+        )
+        assert invoked_meta_count == 0
 
     async def test_dedup_on_repeated_handle_calls(self, tmp_path: Path) -> None:
         """多次调用 handle()，skill 消息不重复（旧的被移除后重新注入）。"""
@@ -365,10 +370,11 @@ class TestInvokeSkillCompleteFlow:
         assert "review" in loaded
         assert "# Review" in loaded["review"].content
 
-    async def test_invoked_skill_appears_in_pre_call_after_invoke(
+    async def test_invoked_skill_appears_in_tail_after_compact(
         self, tmp_path: Path
     ) -> None:
-        """invoke_skill 执行后，下一次 pre_call_service.handle() 注入 invoked_skills。"""
+        """invoke_skill 执行后 → 正常轮次 tail 为空（靠对话历史带）→ compact 后
+        tail 含 SKILL.md（兜底）。"""
         from unittest.mock import MagicMock
 
         backend = make_backend(tmp_path)
@@ -383,21 +389,17 @@ class TestInvokeSkillCompleteFlow:
         ctx.deps = deps
         await invoke_skill(ctx, "commit")
 
-        # 2. 下一轮 pre_call 注入
-        service = make_pre_call_service(registry=registry, store=store)
+        # 2a. 普通一轮：无 compact → tail 为空
+        service = make_pre_call_service(registry=registry, store=store, force_compact=False)
         msgs = make_working_messages(1)
-        result = await service.handle(msgs)
+        result_normal = await service.handle(msgs)
+        assert result_normal.invoked_skills_tail == ""
 
-        invoked_msgs = [
-            m for m in result.model_messages
-            if isinstance(m, ModelRequest)
-            and isinstance(m.metadata, dict)
-            and m.metadata.get("source") == _INVOKED_SKILLS_SOURCE
-        ]
-        assert len(invoked_msgs) == 1
-        content = invoked_msgs[0].parts[0].content  # type: ignore
-        assert "# Commit" in content
-        assert "Run git commit." in content
+        # 2b. compact 触发那一轮 → tail 含 SKILL.md
+        service_compact = make_pre_call_service(registry=registry, store=store, force_compact=True)
+        result_compact = await service_compact.handle(msgs)
+        assert "# Commit" in result_compact.invoked_skills_tail
+        assert "Run git commit." in result_compact.invoked_skills_tail
 
 
 # --------------------------------------------------------------------------- #
@@ -426,10 +428,11 @@ class TestSkillPersistenceAcrossCompact:
         assert "commit" in store_reloaded.get_all()
         assert "# Commit" in store_reloaded.get_all()["commit"].content
 
-    async def test_empty_message_history_still_gets_invoked_skills(
+    async def test_compact_produces_invoked_skills_tail(
         self, tmp_path: Path
     ) -> None:
-        """compact 后消息历史清空，只有一条 UserPromptPart，invoked_skills 仍然注入。"""
+        """compact 触发那一轮 → invoked_skills_tail 含 SKILL.md 兜底（消息历史被压缩
+        后 tool result 里的 SKILL.md 就没了，靠这个 tail 补回）。"""
         backend = make_backend(tmp_path)
         store = InvokedSkillStore(backend, "u1", "s1")
         await store.record(InvokedSkill(
@@ -438,21 +441,16 @@ class TestSkillPersistenceAcrossCompact:
             invoked_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
         ))
 
-        service = make_pre_call_service(store=store)
-        # compact 后消息历史可能只剩一条
+        service = make_pre_call_service(store=store, force_compact=True)
         minimal_msgs = [ModelRequest(parts=[UserPromptPart(content="继续")])]
         result = await service.handle(minimal_msgs)
 
-        invoked_msgs = [
-            m for m in result.model_messages
-            if isinstance(m, ModelRequest)
-            and isinstance(m.metadata, dict)
-            and m.metadata.get("source") == _INVOKED_SKILLS_SOURCE
-        ]
-        assert len(invoked_msgs) == 1
+        assert result.compacted is True
+        assert "# Review" in result.invoked_skills_tail
+        assert "Skill: review" in result.invoked_skills_tail
 
-    async def test_multiple_invoked_skills_all_included(self, tmp_path: Path) -> None:
-        """多个 invoked skills 全部包含在同一个 attachment 中。"""
+    async def test_multiple_invoked_skills_all_in_tail(self, tmp_path: Path) -> None:
+        """多个 invoked skills 全部包含在 invoked_skills_tail（用 ### Skill: 分节）。"""
         backend = make_backend(tmp_path)
         store = InvokedSkillStore(backend, "u1", "s1")
 
@@ -461,7 +459,6 @@ class TestSkillPersistenceAcrossCompact:
             ("review", "# Review\nRead the diff."),
             ("deploy", "# Deploy\nRun deploy.sh."),
         ]
-        base_time = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
         for i, (name, content) in enumerate(skills_data):
             await store.record(InvokedSkill(
                 name=name,
@@ -469,20 +466,12 @@ class TestSkillPersistenceAcrossCompact:
                 invoked_at=datetime(2026, 3, 1, i, 0, 0, tzinfo=timezone.utc),
             ))
 
-        service = make_pre_call_service(store=store)
+        service = make_pre_call_service(store=store, force_compact=True)
         msgs = make_working_messages(1)
         result = await service.handle(msgs)
 
-        invoked_msgs = [
-            m for m in result.model_messages
-            if isinstance(m, ModelRequest)
-            and isinstance(m.metadata, dict)
-            and m.metadata.get("source") == _INVOKED_SKILLS_SOURCE
-        ]
-        assert len(invoked_msgs) == 1
-        content = invoked_msgs[0].parts[0].content  # type: ignore
         for name, _ in skills_data:
-            assert f"### Skill: {name}" in content
+            assert f"### Skill: {name}" in result.invoked_skills_tail
 
 
 # --------------------------------------------------------------------------- #

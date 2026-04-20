@@ -8,16 +8,57 @@
 /* Chat header */
 .chat-header {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  flex-direction: column;
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.session-bar {
+.chat-header .session-bar {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+}
+
+/* Context panel */
+.context-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.ctx-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctx-label {
+  color: var(--muted, #888);
+  min-width: 32px;
+  flex-shrink: 0;
+}
+
+.ctx-row input, .context-panel select {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  color: #333;
+}
+
+.context-panel {
+  background: #f5f5f5;
+}
+
+.session-bar {
   gap: 8px;
   font-size: 12px;
   color: var(--muted);
@@ -208,6 +249,90 @@
 }
 .tool-result-section { background: var(--result-bg); border-top: 1px solid var(--result-border); }
 .tool-result-section .tool-code { color: var(--green); }
+
+/* DetailCard: tool_result_detail 单独渲染区（tool 块下方） */
+.detail-card {
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.12);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.detail-card-header {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-card-count {
+  color: var(--blue);
+  font-size: 11px;
+}
+.detail-card-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 12px;
+}
+.detail-card-json {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  line-height: 1.4;
+}
+.shop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.shop-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--bg);
+}
+.shop-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.shop-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.shop-rating {
+  color: var(--yellow);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.shop-review { color: var(--muted); font-size: 11px; }
+.shop-row-mid {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.shop-dist { color: var(--green); }
+.shop-sep { margin: 0 6px; }
+.shop-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.shop-tag {
+  background: var(--tool-bg);
+  color: var(--blue);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
 
 /* Footer */
 .chat-footer {
