@@ -32,8 +32,7 @@ COPY subagents/business_map_agent/pyproject.toml subagents/business_map_agent/uv
 
 # 安装依赖
 RUN --mount=type=cache,target=/root/.cache/uv \
-    cd subagents/business_map_agent && uv sync --no-dev --frozen \
-    --index-url https://pypi.tuna.tsinghua.edu.cn/simple
+    cd subagents/business_map_agent && uv sync --no-dev --frozen
 
 # ---------- 应用层 ----------
 COPY subagents/business_map_agent/server.py subagents/business_map_agent/
