@@ -66,6 +66,7 @@ COPY mainagent/stage_config.yaml mainagent/
 # 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
 COPY mainagent/.env.test mainagent/.env.test.nacos mainagent/
 COPY mainagent/.env.uat mainagent/.env.uat.nacos mainagent/
+COPY mainagent/.env.prod mainagent/.env.prod.nacos mainagent/
 
 # 运行时目录（生产环境挂载为 volume）
 RUN mkdir -p mainagent/.chatagent/fstools/skills mainagent/logs mainagent/data/inner
