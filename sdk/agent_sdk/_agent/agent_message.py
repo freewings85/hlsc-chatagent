@@ -130,7 +130,18 @@ def from_model_messages(messages: list[ModelMessage]) -> list[AgentMessage]:
                     ))
                 elif isinstance(part, RetryPromptPart):
                     retry_content = part.content if isinstance(part.content, str) else str(part.content)
-                    content_parts.append(f"[retry] {retry_content}")
+                    # 针对具体 tool_call 的 retry（tool_name 非空）：必须序列化成
+                    # ToolResult 与上一条 ToolCallPart 配对，否则 tool_call_id 丢失，
+                    # 下一轮 load 时会被判为孤儿，message_repair 追加虚拟 result 到末尾，
+                    # 转 OpenAI 消息后 role=tool 前没 assistant-with-tool_calls → 400。
+                    if part.tool_name:
+                        tool_results.append(ToolResult(
+                            tool_name=part.tool_name,
+                            tool_call_id=part.tool_call_id or "",
+                            content=f"[retry] {retry_content}",
+                        ))
+                    else:
+                        content_parts.append(f"[retry] {retry_content}")
 
             # 跳过 SystemPromptPart-only 的消息
             if not content_parts and not tool_results:

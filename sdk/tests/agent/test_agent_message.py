@@ -114,10 +114,60 @@ class TestFromModelMessages:
         assert result[0].content == "hello"
 
     def test_retry_prompt(self) -> None:
-        msgs = [ModelRequest(parts=[RetryPromptPart(content="请重试")])]
+        """非工具相关的 retry（tool_name=None）才允许降级成文本。"""
+        msgs = [ModelRequest(parts=[RetryPromptPart(content="请重试", tool_name=None)])]
         result = from_model_messages(msgs)
         assert len(result) == 1
         assert "[retry]" in result[0].content
+        assert result[0].tool_results == []
+
+    def test_retry_prompt_for_unknown_tool_preserves_pairing(self) -> None:
+        """带 tool_name 的 RetryPromptPart（针对具体 tool_call 的反馈）必须
+        序列化成 ToolResult 与上一条 ToolCallPart 配对，不能降级成纯文本。
+
+        UAT 实录复现：LLM 在 guide 场景下调了 searchshops 的
+        submit_shop_search_criteria（当前 toolset 已切换不含此工具）→
+        pydantic-ai 生成 RetryPromptPart(tool_name=..., tool_call_id=call_X,
+        content="Unknown tool name: ...")。
+        旧实现把它塞到 UserMessage.content="[retry] ..."，tool_results=[] →
+        call_X 变成孤儿 → 下一轮 load 时 message_repair 虚拟补齐追加到末尾 →
+        发 DeepSeek 时 role=tool 前面没 assistant-with-tool_calls →
+        400 "No tool calls but found tool output"。
+        """
+        msgs = [
+            ModelResponse(parts=[
+                ToolCallPart(
+                    tool_name="submit_shop_search_criteria",
+                    tool_call_id="call_hpppp",
+                    args='{"shop_search_info": {}}',
+                ),
+            ]),
+            ModelRequest(parts=[
+                RetryPromptPart(
+                    tool_name="submit_shop_search_criteria",
+                    tool_call_id="call_hpppp",
+                    content="Unknown tool name: 'submit_shop_search_criteria'. Available tools: 'Skill'",
+                ),
+            ]),
+        ]
+        result = from_model_messages(msgs)
+
+        assert len(result) == 2
+        assistant = result[0]
+        retry_msg = result[1]
+        assert isinstance(assistant, AssistantMessage)
+        assert isinstance(retry_msg, UserMessage)
+        assert len(assistant.tool_calls) == 1
+        assert assistant.tool_calls[0].tool_call_id == "call_hpppp"
+
+        assert len(retry_msg.tool_results) == 1, (
+            "带 tool_name 的 RetryPromptPart 必须产出 ToolResult 与 tool_call 配对，"
+            "否则 tool_call_id 丢失导致下一轮 load 时 call_hpppp 变孤儿"
+        )
+        tr = retry_msg.tool_results[0]
+        assert tr.tool_call_id == "call_hpppp"
+        assert tr.tool_name == "submit_shop_search_criteria"
+        assert "Unknown tool name" in tr.content
 
     def test_metadata_preserved(self) -> None:
         msgs = [ModelRequest(
@@ -286,6 +336,54 @@ class TestRoundTrip:
         recovered = from_model_messages(model_msgs)
         assert recovered[0].metadata["is_meta"] is True
         assert recovered[0].metadata["source"] == "agent_md"
+
+    def test_unknown_tool_retry_roundtrip_no_orphan(self) -> None:
+        """UAT 400 bug 完整复现：
+        assistant(tool_call) → retry(Unknown tool) → assistant(降级文本)
+        序列化后再转回 ModelMessage，必须通过 validate_message_alternation，
+        也不能被 find_missing_tool_call_ids 判为孤儿。
+        """
+        from agent_sdk._agent.agent_message import validate_message_alternation
+        from agent_sdk._agent.message.message_repair import (
+            find_missing_tool_call_ids,
+        )
+
+        original_model_msgs = [
+            ModelResponse(parts=[
+                ToolCallPart(
+                    tool_name="submit_shop_search_criteria",
+                    tool_call_id="call_X",
+                    args="{}",
+                ),
+            ]),
+            ModelRequest(parts=[
+                RetryPromptPart(
+                    tool_name="submit_shop_search_criteria",
+                    tool_call_id="call_X",
+                    content="Unknown tool name: 'submit_shop_search_criteria'",
+                ),
+            ]),
+            ModelResponse(parts=[TextPart(content="降级纯文本回复")]),
+        ]
+
+        # 模拟持久化：ModelMessage → AgentMessage
+        agent_msgs = from_model_messages(original_model_msgs)
+
+        # 下一轮 load 时的孤儿检测：不应有孤儿
+        missing = find_missing_tool_call_ids(agent_msgs)
+        assert missing == {}, (
+            f"retry 持久化后不应产生孤儿 tool_call，实际: {missing}。"
+            f"这正是 UAT 400 错误的根因。"
+        )
+
+        # 模拟下一轮发模型：AgentMessage → ModelMessage + 追加新用户输入
+        roundtrip = to_model_messages(agent_msgs)
+        roundtrip.append(ModelRequest(parts=[UserPromptPart(content="下一条用户消息")]))
+
+        errors = validate_message_alternation(roundtrip)
+        assert errors == [], (
+            f"转回的消息序列应合法（tool_call/tool_result 配对完整），实际: {errors}"
+        )
 
 
 # --------------------------------------------------------------------------- #
