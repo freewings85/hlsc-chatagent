@@ -38,7 +38,9 @@ scenes:
   platform:
     prompt_parts: [SYSTEM.md, SOUL.md, platform/OUTPUT.md]
     agent_md:
-      - platform/AGENT.md
+      # 平台预订未上线，暂时不加载业务引导（避免 LLM 按 5W1H 收集预订信息）；
+      # 上线时取消下一行注释即可。
+      # - platform/AGENT.md
       - orchestrated/AGENT.md
     tools: []
     skills: []
