@@ -2,7 +2,7 @@
 
 - 0 辆 → 自动写 car_id=""，返回 no_cars
 - 1 辆 → 自动写 car_id，返回 auto_selected
-- 多辆 → 返回候选列表，LLM 判断后调 update_workflow_state 写入
+- 多辆 → 不写 car_id，返回候选列表，LLM 判断后调 update_workflow_state 写入
 """
 
 from __future__ import annotations
@@ -66,8 +66,7 @@ async def collect_vehicle_info(
         await update_workflow_state(ctx, {"car_id": picked_id})
         result = {"status": "auto_selected", "car_id": picked_id, "car_name": candidates[0]["car_name"]}
     else:
-        # 多辆 → 先写空 car_id（不卡 workflow），返回列表让 LLM 反问用户
-        await update_workflow_state(ctx, {"car_id": ""})
+        # 多辆 → 不写 car_id，返回列表让 LLM 判断后调 update_workflow_state 写入选中的 car_id
         result = {"status": "need_selection", "cars": candidates}
 
     log_tool_end("collect_vehicle_info", sid, rid, result)

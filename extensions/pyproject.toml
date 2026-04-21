@@ -32,4 +32,4 @@ packages = ["hlsc"]
 
 [tool.uv.sources]
 agent-sdk = { path = "../sdk", editable = true }
-hlsc-orchestrator-protocol = { git = "ssh://git@git.51cjml.com:8022/ai-hlsc/com.celiang.hlsc.service.ai.base.git", branch = "plan-executor" }
+hlsc-orchestrator-protocol = { git = "ssh://git@git.51cjml.com:8022/ai-hlsc/com.celiang.hlsc.service.ai.base.git", branch = "agent-graph" }
