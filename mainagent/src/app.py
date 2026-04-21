@@ -5,6 +5,8 @@ server.py 调用 create_agent_app() 获取 AgentApp，直接启动。
 
 from __future__ import annotations
 
+from typing import Any
+
 from agent_sdk import Agent, AgentApp, AgentAppConfig, ProfileTriggerHook, ToolConfig
 from agent_sdk._agent.tools import create_default_tool_map
 from src.pre_run_hook import PreRunHook
@@ -102,5 +104,35 @@ def create_agent_app() -> AgentApp:
     from src.plan_router import router as plan_router, set_memory_factory as set_plan_memory_factory
     set_plan_memory_factory(agent._build_memory_service)
     agent_app.app.include_router(plan_router)
+
+    # ── 按 agents.yaml 预构建 per-agent-type Agent 实例，注册 /chat/stream2 ──
+    from pathlib import Path
+    from src.agent_registry import AGENT_REGISTRY, load_default_registry
+    from src.chat_stream2_router import router as chat_stream2_router, set_agent_instances
+    from src.spec_prompt_loader import SpecPromptLoader
+
+    load_default_registry()
+    templates_root: Path = Path(__file__).resolve().parent.parent / "prompts" / "templates"
+
+    agent_instances: dict[str, Agent] = {}
+    for name, spec in AGENT_REGISTRY.items():
+        missing: list[str] = [t for t in spec.tools if t not in tool_map]
+        if missing:
+            raise ValueError(
+                f"agents.yaml {name!r} 的 tools 里有未注册的 tool: {missing}"
+            )
+        spec_tool_map: dict[str, Any] = {t: tool_map[t] for t in spec.tools}
+
+        agent_instances[name] = Agent(
+            prompt_loader=SpecPromptLoader(spec, templates_root),
+            tools=ToolConfig(manual=spec_tool_map) if spec_tool_map else None,
+            context_formatter=formatter,
+            before_agent_run_hook=PreRunHook(),
+            after_run_hooks=[ProfileTriggerHook()],
+            agent_name=name,
+        )
+
+    set_agent_instances(agent_instances)
+    agent_app.app.include_router(chat_stream2_router)
 
     return agent_app

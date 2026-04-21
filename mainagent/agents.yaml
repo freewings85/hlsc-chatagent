@@ -1,0 +1,161 @@
+# ============================================================
+# MainAgent Agent Registry（agent-graph 简化版）
+#
+# 每条 agent = 一个独立 LLM 调用配置。/chat/stream2 按 `agent_type` 查表后直接跑。
+#
+# 字段说明：
+# - prompt_parts: list[str]
+#     相对 mainagent/prompts/templates/ 的文件路径，按顺序拼成 system prompt
+# - agent_md: list[str]
+#     相对 templates/ 的 agent_md 文件列表，按顺序拼成 agent_md 正文
+# - tools: list[str]
+#     session 内静态 tool 列表
+# - skills: list[str]
+#     该 agent 可激活的 skill
+# - load_history: bool
+#     true = 装载本 session 的对话历史（跨 scene 共享）；false = 裸跑
+# - commit_policy: full | text_only | nothing
+#     full: agent.run() 产出的所有新消息全写回 memory
+#     text_only: 只写最终 assistant 文本（不持久化 tool 链）
+#     nothing: 不写
+# ============================================================
+
+agents:
+  # ── searchshops：3-phase ─────────────────────────────────────
+  searchshops_collect:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - _shared/SOUL.md
+      - searchshops/collect/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: true
+    commit_policy: full
+
+  searchshops_executing:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - searchshops/executing/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
+  searchshops_executed:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - searchshops/executed/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
+  # ── searchcoupons：3-phase ────────────────────────────────────
+  searchcoupons_collect:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - _shared/SOUL.md
+      - searchcoupons/collect/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: true
+    commit_policy: full
+
+  searchcoupons_executing:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - searchcoupons/executing/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
+  searchcoupons_executed:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - searchcoupons/executed/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
+  # ── debug：3-phase ────────────────────────────────────────────
+  debug_collect:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - _shared/SOUL.md
+      - debug/collect/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: true
+    commit_policy: full
+
+  debug_executing:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - debug/executing/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
+  debug_executed:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - debug/executed/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
+  # ── guide：单 agent ───────────────────────────────────────────
+  guide:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - _shared/SOUL.md
+      - guide/main.md
+    agent_md: []
+    tools: []
+    skills:
+      - saving-methods
+      - platform-intro
+    load_history: true
+    commit_policy: full
+
+  # ── platform：单 agent（当前为"敬请期待"占位）────────────────
+  platform:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - _shared/SOUL.md
+      - platform/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: true
+    commit_policy: full
+
+  # ── insurance：legacy（保留 tool-based 收集）──────────────────
+  insurance:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - _shared/SOUL.md
+      - insurance/OUTPUT.md
+    agent_md:
+      - insurance/AGENT.md
+      - _shared/orchestrated.md
+    tools:
+      - collect_vehicle_info
+      - collect_insurance_info
+      - collect_user_car_info
+    skills: []
+    load_history: true
+    commit_policy: full

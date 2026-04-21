@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic_ai import Agent
 from pydantic_ai.agent import ModelRequestNode, CallToolsNode
@@ -145,6 +145,10 @@ class LoopContext:
 
     # transcript 存储路径的 session_id（子 agent 隔离用）。None → 用 task.session_id
     transcript_session_id: str | None = None
+
+    # 写 memory 前对本轮 new_messages 的过滤器：None = 不过滤（老行为）；
+    # 返回空 list 即跳过本次 insert_batch。路由层用它承载 commit_policy。
+    commit_filter: Callable[[list[AgentMessage]], list[AgentMessage]] | None = None
 
 
 # ── Agent 工厂 ─────────────────────────────────────────────────────────────
@@ -555,7 +559,13 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
             await transcript_service.append(task.user_id, _transcript_sid, new_agent_messages)
             result.transcript_persisted = True
             if not is_sub_agent:
-                await memory_service.insert_batch(task.user_id, task.session_id, new_agent_messages)
+                to_commit: list[AgentMessage] = (
+                    ctx.commit_filter(new_agent_messages)
+                    if ctx.commit_filter is not None
+                    else new_agent_messages
+                )
+                if to_commit:
+                    await memory_service.insert_batch(task.user_id, task.session_id, to_commit)
 
     except AgentLoopError as exc:
         # 业务工具主动 raise 的"应当结束本轮"信号（如 WorkflowUnavailableError）。

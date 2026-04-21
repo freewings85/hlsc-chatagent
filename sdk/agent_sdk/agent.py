@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.models import Model
@@ -183,6 +183,7 @@ class Agent:
         request_id: str | None = None,
         session_state: dict[str, Any] | None = None,
         parent_tool_call_id: str | None = None,
+        commit_filter: Callable[[list[Any]], list[Any]] | None = None,
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -403,6 +404,7 @@ class Agent:
                     is_sub_agent=is_sub_agent,
                     transcript_session_id=transcript_session_id,
                     parent_tool_call_id=parent_tool_call_id,
+                    commit_filter=commit_filter,
                 )
             except Exception as init_exc:
                 _log_error(
