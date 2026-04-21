@@ -38,6 +38,9 @@ interface ChatMessage {
   tools: ToolCall[]
   interrupts: InterruptCard[]
   cards: Record<string, CardData>
+  /** 无前置 tool_call_start 的 tool_result_detail（如 workflow 直接 emit）
+   *  走 standalone 独立渲染，不依赖 tool 匹配。 */
+  standaloneCards: CardData[]
 }
 
 // --------------------------------------------------------------------------
@@ -145,8 +148,8 @@ export default function ChatPage() {
     setStreaming(true)
 
     // Add user message + empty assistant placeholder
-    const userMsg: ChatMessage = { role: 'user', text, tools: [], interrupts: [], cards: {} }
-    const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [], cards: {} }
+    const userMsg: ChatMessage = { role: 'user', text, tools: [], interrupts: [], cards: {}, standaloneCards: [] }
+    const asstMsg: ChatMessage = { role: 'assistant', text: '', tools: [], interrupts: [], cards: {}, standaloneCards: [] }
     setMessages(prev => [...prev, userMsg, asstMsg])
 
     try {
@@ -337,14 +340,19 @@ export default function ChatPage() {
         }
         case 'tool_result_detail': {
           const toolCallId = (d.tool_call_id as string) ?? ''
-          if (toolCallId) {
-            const cardData: CardData = {
-              tool_call_id: toolCallId,
-              detail_type: (d.detail_type as string) ?? 'unknown',
-              data: (d.data as CardData['data']) ?? { success: false, data: {} },
-            }
+          const cardData: CardData = {
+            tool_call_id: toolCallId,
+            detail_type: (d.detail_type as string) ?? 'unknown',
+            data: (d.data as CardData['data']) ?? { success: false, data: {} },
+          }
+          // 有 tool_call_id 且匹配到前面的 tool_call_start → 走 tool 侧卡片 slot
+          // 否则（workflow 直接 emit，没有 tool 链路）→ 走 standaloneCards 独立渲染
+          if (toolCallId && last.tools.some((t) => t.id === toolCallId)) {
             const cards = { ...last.cards, [toolCallId]: cardData }
             copy[copy.length - 1] = { ...last, cards }
+          } else {
+            const standaloneCards = [...last.standaloneCards, cardData]
+            copy[copy.length - 1] = { ...last, standaloneCards }
           }
           break
         }
@@ -521,6 +529,9 @@ export default function ChatPage() {
                 <>
                   {msg.tools.map((tool, j) => (
                     <ToolBlock key={tool.id || j} tool={tool} card={msg.cards[tool.id]} onReplyInterrupt={replyToInterrupt} streaming={streaming} />
+                  ))}
+                  {msg.standaloneCards.map((card, j) => (
+                    <DetailCardBlock key={`std-${j}`} card={card} />
                   ))}
                   {msg.interrupts.map((card, j) => (
                     <InterruptBlock key={`int-${j}`} card={card} onReply={(reply) => replyToInterrupt(card.interruptKey, reply)} disabled={card.interruptKey ? false : streaming} />
