@@ -126,7 +126,12 @@ async def chat_stream2(request: dict[str, Any], raw_request: Request) -> Any:
     user_id: str = str(request.get("user_id", "anonymous"))
     message: str = str(request.get("message", ""))
     context: Any = request.get("context")
-    request_id, parent_otel_context = _resolve_trace_context(raw_request)
+
+    # request_id 优先用 body 里的（orchestrator → workflow 全链路同 id）；
+    # body 没传才 fallback 到 OTel trace_id 或 uuid
+    trace_request_id, parent_otel_context = _resolve_trace_context(raw_request)
+    body_request_id: str = str(request.get("request_id", "") or "")
+    request_id: str = body_request_id or trace_request_id
 
     # 3) per-session 锁
     if session_id not in _session_locks:
