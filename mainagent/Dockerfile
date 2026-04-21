@@ -62,6 +62,8 @@ COPY mainagent/server.py mainagent/
 COPY mainagent/src mainagent/src
 COPY mainagent/prompts mainagent/prompts
 COPY mainagent/stage_config.yaml mainagent/
+# agent-graph2 新增：per-agent-type 注册表，app.py 启动时 load_default_registry 读它
+COPY mainagent/agents.yaml mainagent/
 
 # 环境配置（.env.test/.env.uat 等，由 ACTIVE 环境变量决定加载哪个）
 COPY mainagent/.env.test mainagent/.env.test.nacos mainagent/
