@@ -49,7 +49,12 @@ def main() -> None:
 
         if logfire_config.endpoint:
             from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-            from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+            # 用 BatchSpanProcessor 而非 SimpleSpanProcessor：
+            # SimpleSpanProcessor 每次 span 结束都**同步阻塞**导出，OTel 端点
+            # 不可达时每条请求都会等 TCP connect timeout（~10s），导致 /classify
+            # 这类轻量接口卡死给 orchestrator 10s 超时。
+            # BatchSpanProcessor 在后台线程批量导出，不阻塞请求处理。
+            from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
             from agent_sdk._config.otel import patch_pydantic_ai_json_dumps
 
@@ -60,7 +65,7 @@ def main() -> None:
                 scrubbing=False,
                 distributed_tracing=True,
                 additional_span_processors=[
-                    SimpleSpanProcessor(OTLPSpanExporter(endpoint=logfire_config.endpoint)),
+                    BatchSpanProcessor(OTLPSpanExporter(endpoint=logfire_config.endpoint)),
                 ],
             )
         else:
