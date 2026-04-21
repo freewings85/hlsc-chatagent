@@ -82,6 +82,7 @@ class Agent:
         agent_name: str | None = None,
         before_agent_run_hook: BeforeAgentRunHook | None = None,
         after_run_hooks: list[AfterRunHook] | None = None,
+        skills_enabled: bool = True,
     ) -> None:
         self._prompt_loader = prompt_loader
         self._tools = tools
@@ -95,6 +96,10 @@ class Agent:
         self._agent_name = agent_name or get_agent_name()
         self._before_agent_run_hook = before_agent_run_hook
         self._after_run_hooks: list[AfterRunHook] = after_run_hooks or []
+        # skills_enabled=False 时 run() 跳过 Skill 工具自动注入逻辑，tools 严格
+        # 按 self._tools 走（/chat/stream2 per-agent-type 实例按 agents.yaml 的
+        # skills 字段是否非空决定）
+        self._skills_enabled: bool = skills_enabled
 
         # 延迟构建的内部对象
         self._pydantic_model: Model | None = None
@@ -340,7 +345,7 @@ class Agent:
                 # 6k. Skill 系统
                 skill_registry: SkillRegistry | None = None
                 invoked_store: InvokedSkillStore | None = None
-                if any(os.path.isdir(d) for d in SKILL_DIRS):
+                if self._skills_enabled and any(os.path.isdir(d) for d in SKILL_DIRS):
                     skill_registry = SkillRegistry.load(SKILL_DIRS)
                     invoked_store = InvokedSkillStore(get_inner_storage_backend(), user_id, session_id)
                     await invoked_store.load()

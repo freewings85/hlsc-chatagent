@@ -123,13 +123,17 @@ def create_agent_app() -> AgentApp:
             )
         spec_tool_map: dict[str, Any] = {t: tool_map[t] for t in spec.tools}
 
+        # /chat/stream2 path 不走 PreRunHook —— AgentSpec 已承载 prompt/tools/memory
+        # 策略，PreRunHook 是给 /chat/stream 旧路径从 stage_config.yaml 加 scene 配的
+        # skills_enabled 按 spec.skills 是否非空来定——严格按 agents.yaml 走，
+        # 没列 skills 的 agent 不会被 SDK 自动塞 "Skill" 工具
         agent_instances[name] = Agent(
             prompt_loader=SpecPromptLoader(spec, templates_root),
             tools=ToolConfig(manual=spec_tool_map) if spec_tool_map else None,
             context_formatter=formatter,
-            before_agent_run_hook=PreRunHook(),
             after_run_hooks=[ProfileTriggerHook()],
             agent_name=name,
+            skills_enabled=bool(spec.skills),
         )
 
     set_agent_instances(agent_instances)
