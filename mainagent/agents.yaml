@@ -24,8 +24,6 @@ agents:
   # ── searchshops：3-phase ─────────────────────────────────────
   searchshops_collect:
     prompt_parts:
-      - _shared/SYSTEM.md
-      - _shared/SOUL.md
       - searchshops/collect/main.md
     agent_md: []
     tools: []
@@ -56,8 +54,6 @@ agents:
   # ── searchcoupons：3-phase ────────────────────────────────────
   searchcoupons_collect:
     prompt_parts:
-      - _shared/SYSTEM.md
-      - _shared/SOUL.md
       - searchcoupons/collect/main.md
     agent_md: []
     tools: []
