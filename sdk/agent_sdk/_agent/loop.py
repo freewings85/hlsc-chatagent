@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
@@ -64,6 +66,47 @@ from agent_sdk._event.event_emitter import EventEmitter
 from agent_sdk._agent.card_parser import make_card_reminder, parse_card
 from agent_sdk._event.event_model import EventModel
 from agent_sdk._event.event_type import EventType
+
+
+_logger: logging.Logger = logging.getLogger(__name__)
+
+
+def _check_tool_call_id(raw: Any, source: str, tool_name: str, agent_name: str) -> str:
+    """校验 tool_call_id 非空；空值告警但原样返回（保持行为不变）。
+
+    四个 emit 点（tool_call_start / tool_call_args / tool_result_detail /
+    tool_result）理论上都能从 pydantic-ai 拿到同一个 id；偶发的 None/""
+    会让前端无法把这次调用的事件串起来。此函数把这种情形打成 warning，
+    便于观测。
+    """
+    if isinstance(raw, str) and raw != "":
+        return raw
+    _logger.warning(
+        "tool_call_id 缺失 source=%s tool_name=%s agent=%s raw=%r",
+        source, tool_name, agent_name, raw,
+    )
+    return raw if isinstance(raw, str) else ""
+
+
+def _normalize_tool_args(args: Any) -> str | None:
+    """把 ToolCallPart.args 规整成 JSON 字符串；空/None 返回 None。
+
+    非流式模型常在 PartStartEvent 一次性给全 part.args（str 或 dict）；
+    这时 PartDeltaEvent 不会再发，args 就丢了。此函数把 args 统一成字符串，
+    由调用方合成一次 TOOL_CALL_ARGS 事件发给前端。
+    """
+    if args is None:
+        return None
+    if isinstance(args, str):
+        return args if args != "" else None
+    if isinstance(args, dict):
+        if not args:
+            return None
+        try:
+            return json.dumps(args, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return str(args)
+    return str(args)
 
 
 def _tag_request_phase(messages: list[AgentMessage], request_id: str) -> None:
@@ -266,17 +309,36 @@ async def _emit_model_stream(
                     ))
                 elif isinstance(part, ToolCallPart):
                     _tool_call_names.append(part.tool_name)
+                    start_tool_call_id: str = _check_tool_call_id(
+                        part.tool_call_id, "tool_call_start", part.tool_name, agent_name,
+                    )
                     await emitter.emit(EventModel(
                         session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TOOL_CALL_START,
                         data={
                             "tool_name": part.tool_name,
-                            "tool_call_id": part.tool_call_id or "",
+                            "tool_call_id": start_tool_call_id,
                         },
                         agent_name=agent_name,
                         parent_tool_call_id=parent_tool_call_id,
                     ))
+                    # 非流式模型会在 PartStartEvent 一把塞全 args（后续无 delta）；
+                    # 此时补发一条合成 TOOL_CALL_ARGS，前端 chunk 累加逻辑照用即可。
+                    # 流式模型这里 part.args 为空/None，跳过；后面 PartDeltaEvent 会发。
+                    initial_args: str | None = _normalize_tool_args(part.args)
+                    if initial_args is not None:
+                        await emitter.emit(EventModel(
+                            session_id=task.session_id,
+                            request_id=task.request_id,
+                            type=EventType.TOOL_CALL_ARGS,
+                            data={
+                                "tool_call_id": start_tool_call_id,
+                                "args_chunk": initial_args,
+                            },
+                            agent_name=agent_name,
+                            parent_tool_call_id=parent_tool_call_id,
+                        ))
             elif isinstance(event, PartDeltaEvent):
                 delta = event.delta
                 if isinstance(delta, TextPartDelta):
@@ -290,11 +352,17 @@ async def _emit_model_stream(
                         parent_tool_call_id=parent_tool_call_id,
                     ))
                 elif isinstance(delta, ToolCallPartDelta):  # pragma: no cover — 真实 LLM 流式 tool call 才触发
+                    delta_tool_call_id: str = _check_tool_call_id(
+                        delta.tool_call_id, "tool_call_args", "<unknown>", agent_name,
+                    )
                     await emitter.emit(EventModel(
                         session_id=task.session_id,
                         request_id=task.request_id,
                         type=EventType.TOOL_CALL_ARGS,
-                        data={"tool_call_id": delta.tool_call_id, "args_chunk": delta.args_delta},
+                        data={
+                            "tool_call_id": delta_tool_call_id,
+                            "args_chunk": delta.args_delta,
+                        },
                         agent_name=agent_name,
                         parent_tool_call_id=parent_tool_call_id,
                     ))
@@ -334,7 +402,10 @@ async def _emit_tool_events(
             elif isinstance(event, FunctionToolResultEvent):
                 content = event.result.content if hasattr(event.result, "content") else str(event.result)
                 result_tool_name = event.result.tool_name
-                tool_call_id = getattr(event.result, "tool_call_id", "")
+                raw_result_tcid: Any = getattr(event.result, "tool_call_id", "")
+                tool_call_id: str = _check_tool_call_id(
+                    raw_result_tcid, "tool_result", result_tool_name, agent_name,
+                )
                 log_tool_end(result_tool_name, output_data=content, session_id=task.session_id, request_id=task.request_id)
 
                 # 卡片解析：从 tool result 中提取 <!--card:type--> 块
