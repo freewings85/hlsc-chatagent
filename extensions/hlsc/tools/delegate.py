@@ -25,7 +25,8 @@ from src.scene_config import registry
 logger: logging.Logger = logging.getLogger(__name__)
 
 # 可委派的场景白名单（不能 delegate 给 guide / orchestrator）
-_DELEGATABLE_SCENES: set[str] = {"platform", "searchshops", "searchcoupons", "insurance"}
+_DELEGATABLE_SCENES: set[str] = {"searchshops", "searchcoupons"}
+_REMOVED_SCENES: set[str] = {"platform", "insurance"}
 
 
 def _build_scene_system_prompt(scene_config: dict[str, Any]) -> str:
@@ -76,17 +77,15 @@ def _build_scene_toolset(
 
 async def delegate(
     ctx: RunContext[AgentDeps],
-    agent_name: Annotated[str, Field(description="委派给哪个 agent：platform/searchshops/searchcoupons/insurance")],
+    agent_name: Annotated[str, Field(description="委派给哪个 agent：searchshops/searchcoupons")],
     task: Annotated[str, Field(description="具体任务描述")],
     context: Annotated[str, Field(description="当前已知的上下文信息摘要")] = "",
 ) -> str:
     """委派任务给专业 agent 执行。你是协调者，不直接执行业务，而是判断用户意图后分配给最合适的 agent。
 
     可委派的 agent：
-    - platform：平台九折预订相关
     - searchshops：找商户、对比商户
     - searchcoupons：找优惠、省钱方案
-    - insurance：保险竞价
 
     委派时必须提供：
     - agent_name：分配给谁
@@ -96,6 +95,8 @@ async def delegate(
     委派后会返回该 agent 的执行结果，你可以直接使用这个结果回复用户，或者继续委派给其他 agent。
     """
     # 校验 agent_name
+    if agent_name in _REMOVED_SCENES:
+        raise ValueError(f"场景 '{agent_name}' 已下线，禁止再委派")
     if agent_name not in _DELEGATABLE_SCENES:
         return f"错误：不能委派给 '{agent_name}'，可委派的 agent：{sorted(_DELEGATABLE_SCENES)}"
 

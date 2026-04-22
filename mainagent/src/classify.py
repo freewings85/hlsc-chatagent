@@ -8,8 +8,8 @@
   { "user_id": "u123", "session_id": "s456", "message": "搞错了换一辆" }
 
 响应：
-  { "scenario": "insurance" }     — 分类成功
-  { "scenario": null }            — BMA 返回空 / 调用失败
+  { "scenario": "guide" }         — 分类成功
+  { "scenario": null }            — BMA 调用失败
 
 内部流程：
 1. 用 memory_service 加载 session 的对话历史
@@ -31,8 +31,9 @@ from agent_sdk._agent.deps import AgentDeps
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# 初版固定的场景优先级（和 orchestrator 侧 bma_client 一致）
-_SCENARIO_PRIORITY: list[str] = ["insurance", "platform", "searchcoupons", "searchshops"]
+# 当前场景优先级：复合场景时优先落业务执行场景，guide 作为兜底
+_SCENARIO_PRIORITY: list[str] = ["searchcoupons", "searchshops", "guide"]
+_UNSUPPORTED_SCENES: set[str] = {"platform", "insurance"}
 
 
 async def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dict[str, str]]:
@@ -153,6 +154,12 @@ async def classify_scenario(
     )
 
     scenes: list[str] = await _call_bma_classify(message, recent_turns=recent_turns)
+
+    unsupported: list[str] = [scene for scene in scenes if scene in _UNSUPPORTED_SCENES]
+    if unsupported:
+        raise RuntimeError(
+            f"BMA 返回了已下线场景: {unsupported}。当前仅允许 guide/searchshops/searchcoupons"
+        )
 
     if not scenes:
         return None, []

@@ -2,7 +2,8 @@
 
 POST /classify
 请求：{ message, recent_turns? }
-响应：{ scenes: ["platform"] } 或 { scenes: ["platform", "searchshops"] } 或 { scenes: [] }
+响应：{ scenes: ["guide"] } 或 { scenes: ["searchshops"] }
+     或 { scenes: ["searchcoupons"] } 或 { scenes: ["searchshops", "searchcoupons"] }
 
 BMA 只做场景分类，不决定 tools/skills。
 MainAgent hook 根据分类结果加载对应场景配置。
@@ -24,7 +25,7 @@ from pydantic import BaseModel
 logger: logging.Logger = logging.getLogger(__name__)
 
 # 合法场景 id 列表
-VALID_SCENES: list[str] = ["platform", "searchshops", "searchcoupons", "insurance"]
+VALID_SCENES: list[str] = ["guide", "searchshops", "searchcoupons"]
 
 
 # ============================================================
