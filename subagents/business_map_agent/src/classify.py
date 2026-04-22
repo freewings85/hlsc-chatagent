@@ -1,11 +1,10 @@
-"""场景分类端点：调小模型判断用户意图所属场景。
+"""场景分类端点：调小模型判断用户意图所属场景和粗粒度阶段。
 
 POST /classify
 请求：{ message, recent_turns? }
-响应：{ scenes: ["guide"] } 或 { scenes: ["searchshops"] }
-     或 { scenes: ["searchcoupons"] } 或 { scenes: ["searchshops", "searchcoupons"] }
+响应：{ scene: "guide", phase: "intake", scenes: ["guide"] }
 
-BMA 只做场景分类，不决定 tools/skills。
+BMA 只做 scene + phase 分类，不决定 tools/skills。
 MainAgent hook 根据分类结果加载对应场景配置。
 """
 
@@ -26,6 +25,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 # 合法场景 id 列表
 VALID_SCENES: list[str] = ["guide", "searchshops", "searchcoupons"]
+VALID_PHASES: list[str] = ["intake", "followup"]
 
 
 # ============================================================
@@ -48,8 +48,10 @@ class ClassifyRequest(BaseModel):
 
 
 class ClassifyResponse(BaseModel):
-    """场景分类响应：返回匹配的场景列表。"""
+    """场景分类响应。"""
 
+    scene: str = "guide"
+    phase: str = "intake"
     scenes: list[str]
 
 
@@ -102,8 +104,8 @@ async def _call_llm(
     use_openai_compat: bool = bool(openai_endpoint and openai_key)
 
     if not use_azure and not use_openai_compat:
-        logger.warning("LLM 未配置（Azure/OpenAI-compatible 均无），返回空场景列表")
-        return {"scenes": []}
+        logger.warning("LLM 未配置（Azure/OpenAI-compatible 均无），返回默认 guide/intake")
+        return {"scene": "guide", "phase": "intake", "scenes": ["guide"]}
 
     if use_azure:
         deployment: str = os.getenv("AZURE_DEPLOYMENT_NAME", "gpt-4.1-mini")
@@ -191,6 +193,8 @@ async def _do_classify(
         request: 分类请求
         use_multi_turn: False=方案A，True=方案B（multi-turn messages）
     """
+    scene: str = "guide"
+    phase: str = "intake"
     scenes: list[str] = []
     scheme_label: str = "B" if use_multi_turn else "A"
 
@@ -210,13 +214,24 @@ async def _do_classify(
         llm_result: dict[str, Any] = await _call_llm(
             request.message, recent_turns=turns, use_multi_turn=use_multi_turn,
         )
-        raw_scenes: list[str] = llm_result.get("scenes", [])
+        raw_scene: str = str(llm_result.get("scene") or "").strip()
+        raw_phase: str = str(llm_result.get("phase") or "").strip()
+        raw_scenes: list[str] = list(llm_result.get("scenes") or ([raw_scene] if raw_scene else []))
         scenes = [s for s in raw_scenes if s in VALID_SCENES]
+        if raw_scene in VALID_SCENES:
+            scene = raw_scene
+        elif scenes:
+            scene = scenes[0]
+        if raw_phase in VALID_PHASES:
+            phase = raw_phase
     except Exception:
         logger.warning("LLM 场景分类失败（方案%s）", scheme_label, exc_info=True)
 
-    logger.info("场景分类结果（方案%s）: %s", scheme_label, scenes)
-    return ClassifyResponse(scenes=scenes)
+    if scene not in scenes:
+        scenes = [scene, *[s for s in scenes if s != scene]]
+
+    logger.info("场景分类结果（方案%s）: scene=%s phase=%s scenes=%s", scheme_label, scene, phase, scenes)
+    return ClassifyResponse(scene=scene, phase=phase, scenes=scenes or [scene])
 
 
 # ============================================================

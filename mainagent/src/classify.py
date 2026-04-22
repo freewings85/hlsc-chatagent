@@ -8,14 +8,14 @@
   { "user_id": "u123", "session_id": "s456", "message": "搞错了换一辆" }
 
 响应：
-  { "scenario": "guide" }         — 分类成功
+  { "scenario": "guide", "phase": "intake" }  — 分类成功
   { "scenario": null }            — BMA 调用失败
 
 内部流程：
 1. 用 memory_service 加载 session 的对话历史
 2. 提取 recent_turns
 3. 调 BMA /classify（和 StageHook 走同一条路径）
-4. 返回主场景（单场景取唯一，多场景取优先级最高）
+4. 返回主场景和粗粒度 phase
 """
 
 from __future__ import annotations
@@ -32,7 +32,6 @@ from agent_sdk._agent.deps import AgentDeps
 logger: logging.Logger = logging.getLogger(__name__)
 
 # 当前场景优先级：复合场景时优先落业务执行场景，guide 作为兜底
-_SCENARIO_PRIORITY: list[str] = ["searchcoupons", "searchshops", "guide"]
 _UNSUPPORTED_SCENES: set[str] = {"platform", "insurance"}
 
 
@@ -84,7 +83,7 @@ async def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dic
 
 async def _call_bma_classify(
     message: str, recent_turns: list[dict[str, str]] | None = None,
-) -> list[str]:
+) -> dict[str, Any]:
     """调 BMA /classify 接口。"""
     url: str = os.getenv("BMA_CLASSIFY_URL", "")
     if not url:
@@ -100,12 +99,11 @@ async def _call_bma_classify(
             resp: httpx.Response = await client.post(url, json=payload)
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
-            scenes: list[str] = data.get("scenes", [])
-            logger.info("BMA 场景分类: %s → %s", message[:50], scenes)
-            return scenes
+            logger.info("BMA 场景分类: %s → %s", message[:50], data)
+            return data
     except Exception:
         logger.warning("BMA 分类调用失败", exc_info=True)
-        return []
+        return {}
 
 
 class ClassifyRequest(BaseModel):
@@ -116,6 +114,7 @@ class ClassifyRequest(BaseModel):
 
 class ClassifyResponse(BaseModel):
     scenario: str | None = None
+    phase: str = "intake"
     scenes: list[str] = []
     """BMA 返回的全部场景列表（按 BMA 输出顺序）。单场景就是长度 1，
     复合场景 >=2。orchestrator 用它判断是否走多场景 plan。"""
@@ -126,12 +125,13 @@ async def classify_scenario(
     session_id: str,
     message: str,
     memory_service_factory: Any,
-) -> tuple[str | None, list[str]]:
+) -> tuple[str | None, str, list[str]]:
     """核心分类逻辑（可复用，不依赖 HTTP 层）。
 
-    返回 (primary_scenario, scenes_list)：
+    返回 (primary_scenario, phase, scenes_list)：
     - primary_scenario：用于 workflow_id 前缀和单场景路由（按 _SCENARIO_PRIORITY 选）
-    - scenes_list：BMA 原始返回（含复合场景），交给下游 /plan 作 planAgent 候选集
+    - phase：粗粒度阶段，当前只保留 intake / followup
+    - scenes_list：兼容字段，当前主要返回主场景一个元素
 
     Args:
         memory_service_factory: 能构建 MemoryMessageService 的工厂
@@ -153,7 +153,10 @@ async def classify_scenario(
         user_id, session_id, len(recent_turns),
     )
 
-    scenes: list[str] = await _call_bma_classify(message, recent_turns=recent_turns)
+    result: dict[str, Any] = await _call_bma_classify(message, recent_turns=recent_turns)
+    scene: str | None = result.get("scene")
+    phase: str = str(result.get("phase") or "intake")
+    scenes: list[str] = list(result.get("scenes") or ([scene] if scene else []))
 
     unsupported: list[str] = [scene for scene in scenes if scene in _UNSUPPORTED_SCENES]
     if unsupported:
@@ -161,15 +164,15 @@ async def classify_scenario(
             f"BMA 返回了已下线场景: {unsupported}。当前仅允许 guide/searchshops/searchcoupons"
         )
 
-    if not scenes:
-        return None, []
-    if len(scenes) == 1:
-        return scenes[0], scenes
+    if scene in _UNSUPPORTED_SCENES:
+        raise RuntimeError(
+            f"BMA 返回了已下线主场景: {scene}。当前仅允许 guide/searchshops/searchcoupons"
+        )
 
-    # 多场景：按优先级挑 primary，但 scenes 全 list 一起返回
-    primary: str = scenes[0]
-    for prio in _SCENARIO_PRIORITY:
-        if prio in scenes:
-            primary = prio
-            break
-    return primary, scenes
+    if not scene:
+        scene = scenes[0] if scenes else None
+    if not scene:
+        return None, phase, []
+    if scene not in scenes:
+        scenes = [scene, *[s for s in scenes if s != scene]]
+    return scene, phase, scenes
