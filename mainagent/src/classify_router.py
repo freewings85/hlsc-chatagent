@@ -21,10 +21,10 @@ def set_memory_factory(factory) -> None:
 
 @router.post("/classify")
 async def classify_endpoint(req: ClassifyRequest) -> ClassifyResponse:
-    scenario, phase, scenes = await classify_scenario(
+    scenes = await classify_scenario(
         user_id=req.user_id,
         session_id=req.session_id,
         message=req.message,
         memory_service_factory=_memory_service_factory,
     )
-    return ClassifyResponse(scenario=scenario, phase=phase, scenes=scenes)
+    return ClassifyResponse(scenes=scenes)

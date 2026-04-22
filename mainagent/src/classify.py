@@ -32,7 +32,14 @@ from agent_sdk._agent.deps import AgentDeps
 logger: logging.Logger = logging.getLogger(__name__)
 
 # 当前场景优先级：复合场景时优先落业务执行场景，guide 作为兜底
+_SCENARIO_PRIORITY: list[str] = ["searchcoupons", "searchshops", "guide"]
 _UNSUPPORTED_SCENES: set[str] = {"platform", "insurance"}
+_VALID_PHASES: set[str] = {"intake", "followup"}
+
+
+class ScenePhase(BaseModel):
+    name: str
+    phase: str = "intake"
 
 
 async def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dict[str, str]]:
@@ -83,7 +90,7 @@ async def _extract_recent_turns(deps: AgentDeps, max_turns: int = 5) -> list[dic
 
 async def _call_bma_classify(
     message: str, recent_turns: list[dict[str, str]] | None = None,
-) -> dict[str, Any]:
+) -> list[ScenePhase]:
     """调 BMA /classify 接口。"""
     url: str = os.getenv("BMA_CLASSIFY_URL", "")
     if not url:
@@ -99,11 +106,28 @@ async def _call_bma_classify(
             resp: httpx.Response = await client.post(url, json=payload)
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
-            logger.info("BMA 场景分类: %s → %s", message[:50], data)
-            return data
+            raw_scenes: list[Any] = list(data.get("scenes", []))
+            scenes: list[ScenePhase] = []
+            for item in raw_scenes:
+                if isinstance(item, dict):
+                    name: str = str(item.get("name") or "").strip()
+                    phase: str = str(item.get("phase") or "intake").strip() or "intake"
+                    if not name:
+                        continue
+                    if phase not in _VALID_PHASES:
+                        phase = "intake"
+                    scenes.append(ScenePhase(name=name, phase=phase))
+                    continue
+
+                name = str(item).strip()
+                if not name:
+                    continue
+                scenes.append(ScenePhase(name=name, phase="intake"))
+            logger.info("BMA 场景分类: %s → %s", message[:50], scenes)
+            return scenes
     except Exception:
         logger.warning("BMA 分类调用失败", exc_info=True)
-        return {}
+        return []
 
 
 class ClassifyRequest(BaseModel):
@@ -113,11 +137,8 @@ class ClassifyRequest(BaseModel):
 
 
 class ClassifyResponse(BaseModel):
-    scenario: str | None = None
-    phase: str = "intake"
-    scenes: list[str] = []
-    """BMA 返回的全部场景列表（按 BMA 输出顺序）。单场景就是长度 1，
-    复合场景 >=2。orchestrator 用它判断是否走多场景 plan。"""
+    scenes: list[ScenePhase] = []
+    """BMA 返回的全部场景列表（按 BMA 输出顺序）。"""
 
 
 async def classify_scenario(
@@ -125,13 +146,11 @@ async def classify_scenario(
     session_id: str,
     message: str,
     memory_service_factory: Any,
-) -> tuple[str | None, str, list[str]]:
+) -> list[ScenePhase]:
     """核心分类逻辑（可复用，不依赖 HTTP 层）。
 
-    返回 (primary_scenario, phase, scenes_list)：
-    - primary_scenario：用于 workflow_id 前缀和单场景路由（按 _SCENARIO_PRIORITY 选）
-    - phase：粗粒度阶段，当前只保留 intake / followup
-    - scenes_list：兼容字段，当前主要返回主场景一个元素
+    返回 scenes_list：
+    - scenes_list：按优先级重排后的 scene+phase 列表，首元素即本轮 primary scene
 
     Args:
         memory_service_factory: 能构建 MemoryMessageService 的工厂
@@ -153,26 +172,27 @@ async def classify_scenario(
         user_id, session_id, len(recent_turns),
     )
 
-    result: dict[str, Any] = await _call_bma_classify(message, recent_turns=recent_turns)
-    scene: str | None = result.get("scene")
-    phase: str = str(result.get("phase") or "intake")
-    scenes: list[str] = list(result.get("scenes") or ([scene] if scene else []))
+    scenes: list[ScenePhase] = await _call_bma_classify(message, recent_turns=recent_turns)
 
-    unsupported: list[str] = [scene for scene in scenes if scene in _UNSUPPORTED_SCENES]
+    unsupported: list[str] = [scene.name for scene in scenes if scene.name in _UNSUPPORTED_SCENES]
     if unsupported:
         raise RuntimeError(
             f"BMA 返回了已下线场景: {unsupported}。当前仅允许 guide/searchshops/searchcoupons"
         )
 
-    if scene in _UNSUPPORTED_SCENES:
-        raise RuntimeError(
-            f"BMA 返回了已下线主场景: {scene}。当前仅允许 guide/searchshops/searchcoupons"
-        )
+    if not scenes:
+        return []
+    if len(scenes) == 1:
+        return scenes
 
-    if not scene:
-        scene = scenes[0] if scenes else None
-    if not scene:
-        return None, phase, []
-    if scene not in scenes:
-        scenes = [scene, *[s for s in scenes if s != scene]]
-    return scene, phase, scenes
+    primary_scene: ScenePhase = scenes[0]
+    for prio in _SCENARIO_PRIORITY:
+        for scene in scenes:
+            if scene.name == prio:
+                primary_scene = scene
+                break
+        else:
+            continue
+        if primary_scene.name == prio:
+            break
+    return [primary_scene, *[scene for scene in scenes if scene.name != primary_scene.name]]
