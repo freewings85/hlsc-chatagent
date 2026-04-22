@@ -312,17 +312,34 @@ class AgentApp:
                         _act_token: str = (
                             _orch_ctx.get("activity_task_token", "") if isinstance(_orch_ctx, dict) else ""
                         )
+                        # 把入站时 extract 出来的 parent OTel context 注入 header，
+                        # 让 orchestrator 侧能把 /internal/agent_finished span 挂回同一条 trace。
+                        # agent.run 里 attach/detach 已结束，此处 current context 为空，
+                        # 必须显式用 parent_otel_context 作为源。
+                        _headers: dict[str, str] = {}
+                        try:
+                            from opentelemetry.propagate import inject
+                            if parent_otel_context is not None:
+                                inject(_headers, context=parent_otel_context)
+                            else:
+                                inject(_headers)
+                        except Exception:
+                            pass
                         try:
                             import httpx as _httpx
                             async with _httpx.AsyncClient(timeout=5.0) as _cli:
-                                await _cli.post(callback_url, json={
-                                    "request_id": request_id,
-                                    "workflow_id": _wf_id,
-                                    "activity_task_token": _act_token,
-                                    "status": "success",
-                                    "error_message": None,
-                                    "completed_at": int(_time.time()),
-                                })
+                                await _cli.post(
+                                    callback_url,
+                                    json={
+                                        "request_id": request_id,
+                                        "workflow_id": _wf_id,
+                                        "activity_task_token": _act_token,
+                                        "status": "success",
+                                        "error_message": None,
+                                        "completed_at": int(_time.time()),
+                                    },
+                                    headers=_headers,
+                                )
                         except Exception:
                             logger.exception(f"callback failed: {callback_url}")
 
