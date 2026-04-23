@@ -14,4 +14,5 @@ class EventType(str, enum.Enum):
     TOOL_RESULT_DETAIL = "tool_result_detail"
     INTERRUPT = "interrupt"
     ERROR = "error"
+    USAGE = "usage"
     CHAT_REQUEST_END = "chat_request_end"

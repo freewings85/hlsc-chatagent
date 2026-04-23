@@ -707,14 +707,21 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
     finally:
         if not is_sub_agent:
             clear_request_context()
-            end_data: dict[str, Any] = {"user_id": task.user_id}
+            # 先发 USAGE（独立事件，ChatManager 无条件透传用于计量）
             if result.usage is not None:
-                end_data["usage"] = result.usage
+                await emitter.emit(EventModel(
+                    session_id=task.session_id,
+                    request_id=task.request_id,
+                    type=EventType.USAGE,
+                    data={"user_id": task.user_id, "usage": result.usage},
+                    agent_name=agent_name,
+                ))
+            # 再发 CHAT_REQUEST_END（生命周期事件，ChatManager 一问一答只转发首个）
             await emitter.emit(EventModel(
                 session_id=task.session_id,
                 request_id=task.request_id,
                 type=EventType.CHAT_REQUEST_END,
-                data=end_data,
+                data={"user_id": task.user_id},
                 finish_reason=result.finish_reason,
                 agent_name=agent_name,
             ))

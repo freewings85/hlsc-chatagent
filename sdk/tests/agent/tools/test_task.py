@@ -193,6 +193,9 @@ class TestSubAgentLoop:
         events = await _collect_events(queue)
         end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
         assert len(end_events) == 0
+        # 子 agent 也不发 USAGE（和 CHAT_REQUEST_END 同规则，只有主 agent 管这些生命周期事件）
+        usage_events = [e for e in events if e.type == EventType.USAGE]
+        assert len(usage_events) == 0
 
     @pytest.mark.asyncio
     async def test_sub_agent_does_not_close_emitter(self) -> None:

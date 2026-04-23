@@ -47,6 +47,33 @@ class TestAgentLoop:
         assert len(end_events) == 1
 
     @pytest.mark.asyncio
+    async def test_usage_event_emitted_separately(self, make_emitter) -> None:
+        """USAGE 事件独立于 CHAT_REQUEST_END，ChatManager 据此做计量统计。"""
+        model = FunctionModel(mock_simple_text, stream_function=mock_stream_text)
+        agent = make_test_agent(model)
+        event_queue, emitter = make_emitter()
+
+        await agent.run("你好", "test-user", "test-session", emitter, message_history=[])
+
+        events = await _collect_events(event_queue)
+
+        usage_events = [e for e in events if e.type == EventType.USAGE]
+        assert len(usage_events) == 1
+        usage_payload = usage_events[0].data.get("usage")
+        assert isinstance(usage_payload, dict)
+        assert "input_tokens" in usage_payload
+        assert "output_tokens" in usage_payload
+        assert "total_tokens" in usage_payload
+
+        end_events = [e for e in events if e.type == EventType.CHAT_REQUEST_END]
+        assert len(end_events) == 1
+        assert "usage" not in end_events[0].data
+
+        usage_idx = events.index(usage_events[0])
+        end_idx = events.index(end_events[0])
+        assert usage_idx < end_idx
+
+    @pytest.mark.asyncio
     async def test_tool_call_flow(self, make_emitter) -> None:
         model = FunctionModel(
             mock_weather_then_answer,
