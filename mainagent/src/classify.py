@@ -106,6 +106,15 @@ async def _call_bma_classify(
             resp: httpx.Response = await client.post(url, json=payload)
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
+            scene: str = str(data.get("scene") or "").strip()
+            phase: str = str(data.get("phase") or "intake").strip() or "intake"
+            if scene:
+                if phase not in _VALID_PHASES:
+                    phase = "intake"
+                scenes: list[ScenePhase] = [ScenePhase(name=scene, phase=phase)]
+                logger.info("BMA 场景分类: %s → %s", message[:50], scenes)
+                return scenes
+
             raw_scenes: list[Any] = list(data.get("scenes", []))
             scenes: list[ScenePhase] = []
             for item in raw_scenes:
