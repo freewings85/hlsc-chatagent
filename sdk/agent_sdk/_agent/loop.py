@@ -436,7 +436,10 @@ async def run_agent_loop(ctx: LoopContext) -> RunLoopResult:
                 if isinstance(node, ModelRequestNode):
                     if _first_llm_call:
                         full_session = list(agent_history) + [
-                            UserMessage(content=task.message),
+                            UserMessage(
+                                content=task.message,
+                                metadata={"message_origin": task.message_origin},
+                            ),
                         ]
                         model_messages = to_model_messages(full_session)
                         run._graph_run.state.message_history[:] = model_messages[:-1] if model_messages else []

@@ -35,6 +35,7 @@ from agent_sdk._event.event_model import EventModel
 from agent_sdk._event.event_type import EventType
 
 from src.agent_registry import AGENT_REGISTRY, AgentSpec, CommitPolicy
+from src.hlsc_core import MESSAGE_ORIGIN_USER
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -125,6 +126,7 @@ async def chat_stream2(request: dict[str, Any], raw_request: Request) -> Any:
     session_id: str = str(request.get("session_id", "default"))
     user_id: str = str(request.get("user_id", "anonymous"))
     message: str = str(request.get("message", ""))
+    message_origin: str = str(request.get("message_origin", MESSAGE_ORIGIN_USER) or MESSAGE_ORIGIN_USER)
     context: Any = request.get("context")
 
     # request_id 优先用 body 里的（orchestrator → workflow 全链路同 id）；
@@ -167,6 +169,7 @@ async def chat_stream2(request: dict[str, Any], raw_request: Request) -> Any:
                     parent_otel_context=parent_otel_context,
                     message_history=message_history,
                     commit_filter=commit_filter,
+                    message_origin=message_origin,
                 )
             finally:
                 if session_id in _session_locks and not session_lock.locked():
