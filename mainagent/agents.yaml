@@ -51,6 +51,16 @@ agents:
     load_history: false
     commit_policy: text_only
 
+  searchshops_followup:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - searchshops/followup/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
   # ── searchcoupons：3-phase ────────────────────────────────────
   searchcoupons_collect:
     prompt_parts:
@@ -75,6 +85,16 @@ agents:
     prompt_parts:
       - _shared/SYSTEM.md
       - searchcoupons/executed/main.md
+    agent_md: []
+    tools: []
+    skills: []
+    load_history: false
+    commit_policy: text_only
+
+  searchcoupons_followup:
+    prompt_parts:
+      - _shared/SYSTEM.md
+      - searchcoupons/followup/main.md
     agent_md: []
     tools: []
     skills: []

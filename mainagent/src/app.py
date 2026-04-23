@@ -123,6 +123,17 @@ def create_agent_app() -> AgentApp:
             )
         spec_tool_map: dict[str, Any] = {t: tool_map[t] for t in spec.tools}
 
+        async def _stream2_before_run(
+            user_id: str,
+            session_id: str,
+            deps: Any,
+            message: str,
+            *,
+            _skills: tuple[str, ...] = spec.skills,
+        ) -> None:
+            """/chat/stream2 不走 PreRunHook，这里补上 per-agent skills 约束。"""
+            deps.allowed_skills = list(_skills) if _skills else []
+
         # /chat/stream2 path 不走 PreRunHook —— AgentSpec 已承载 prompt/tools/memory
         # 策略，PreRunHook 是给 /chat/stream 旧路径从 stage_config.yaml 加 scene 配的
         # skills_enabled 按 spec.skills 是否非空来定——严格按 agents.yaml 走，
@@ -132,6 +143,7 @@ def create_agent_app() -> AgentApp:
             tools=ToolConfig(manual=spec_tool_map) if spec_tool_map else None,
             context_formatter=formatter,
             after_run_hooks=[ProfileTriggerHook()],
+            before_agent_run_hook=_stream2_before_run,
             agent_name=name,
             skills_enabled=bool(spec.skills),
         )

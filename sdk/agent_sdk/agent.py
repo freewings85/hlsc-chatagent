@@ -189,6 +189,7 @@ class Agent:
         session_state: dict[str, Any] | None = None,
         parent_tool_call_id: str | None = None,
         commit_filter: Callable[[list[Any]], list[Any]] | None = None,
+        message_origin: str = "user",
     ) -> str | None:
         """执行一轮对话（唯一入口，所有场景统一使用）。
 
@@ -391,6 +392,7 @@ class Agent:
                     sinker=None,  # type: ignore[arg-type]
                     request_id=request_id,
                     context=request_context,
+                    message_origin=message_origin,
                 )
 
                 # 6p. 组装 LoopContext

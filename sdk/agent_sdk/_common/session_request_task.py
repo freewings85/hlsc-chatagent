@@ -26,3 +26,4 @@ class SessionRequestTask:
     created_at: int = field(default_factory=lambda: int(time.time() * 1000))
     cancelled: bool = False
     context: RequestContext | None = None
+    message_origin: str = "user"

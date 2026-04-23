@@ -6,7 +6,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y \
-    procps curl net-tools \
+    procps curl net-tools git \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install uv -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -18,6 +18,12 @@ ENV PYTHONUNBUFFERED=1 \
     UV_HTTP_TIMEOUT=600
 
 # ---------- 依赖层（利用 Docker 缓存）----------
+# Jenkins 在 workspace 内 clone 的 base 源码（完整 git working tree）
+COPY com.celiang.hlsc.service.ai.base /app/base
+
+RUN git config --global \
+    url."/app/base".insteadOf "ssh://git@git.51cjml.com:8022/ai-hlsc/com.celiang.hlsc.service.ai.base.git"
+
 # SDK 源码（本地依赖）
 COPY sdk/pyproject.toml sdk/uv.lock sdk/
 COPY sdk/agent_sdk sdk/agent_sdk
@@ -31,7 +37,9 @@ COPY auctioneer/pyproject.toml auctioneer/uv.lock auctioneer/
 
 # 安装依赖
 RUN --mount=type=cache,target=/root/.cache/uv \
-    cd auctioneer && uv sync --no-dev --frozen \
+    cd auctioneer \
+    && uv lock --upgrade-package hlsc-orchestrator-protocol \
+    && uv sync --no-dev \
     --index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 # ---------- 应用层 ----------

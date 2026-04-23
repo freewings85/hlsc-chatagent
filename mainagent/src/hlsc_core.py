@@ -2,4 +2,6 @@
 
 from hlsc.models import CarInfo, LocationInfo
 
-__all__ = ["CarInfo", "LocationInfo"]
+MESSAGE_ORIGIN_USER: str = "user"
+
+__all__ = ["CarInfo", "LocationInfo", "MESSAGE_ORIGIN_USER"]

@@ -1,11 +1,16 @@
-"""场景分类端点：调小模型判断用户意图所属场景。
+"""场景分类端点：调小模型判断用户意图所属场景与阶段。
 
 POST /classify
 请求：{ message, recent_turns? }
-响应：{ scenes: ["platform"] } 或 { scenes: ["platform", "searchshops"] } 或 { scenes: [] }
+响应：
+  {
+    "scenes": [
+      {"name": "searchcoupons", "phase": "followup"},
+      {"name": "searchshops", "phase": "intake"}
+    ]
+  }
 
-BMA 只做场景分类，不决定 tools/skills。
-MainAgent hook 根据分类结果加载对应场景配置。
+BMA 只做场景与阶段分类，不决定 tools/skills。
 """
 
 from __future__ import annotations
@@ -23,8 +28,9 @@ from pydantic import BaseModel
 
 logger: logging.Logger = logging.getLogger(__name__)
 
-# 合法场景 id 列表
-VALID_SCENES: list[str] = ["platform", "searchshops", "searchcoupons", "insurance"]
+# 合法场景 / 阶段 id 列表
+VALID_SCENES: list[str] = ["guide", "searchshops", "searchcoupons"]
+VALID_PHASES: list[str] = ["intake", "followup"]
 
 
 # ============================================================
@@ -46,10 +52,17 @@ class ClassifyRequest(BaseModel):
     recent_turns: list[RecentTurn] = []
 
 
-class ClassifyResponse(BaseModel):
-    """场景分类响应：返回匹配的场景列表。"""
+class ScenePhase(BaseModel):
+    """单个场景的阶段判断结果。"""
 
-    scenes: list[str]
+    name: str
+    phase: str
+
+
+class ClassifyResponse(BaseModel):
+    """场景分类响应：返回匹配的场景与阶段列表。"""
+
+    scenes: list[ScenePhase]
 
 
 # ============================================================
@@ -101,8 +114,8 @@ async def _call_llm(
     use_openai_compat: bool = bool(openai_endpoint and openai_key)
 
     if not use_azure and not use_openai_compat:
-        logger.warning("LLM 未配置（Azure/OpenAI-compatible 均无），返回空场景列表")
-        return {"scenes": []}
+        logger.warning("LLM 未配置（Azure/OpenAI-compatible 均无），返回 guide/intake")
+        return {"scenes": [{"name": "guide", "phase": "intake"}]}
 
     if use_azure:
         deployment: str = os.getenv("AZURE_DEPLOYMENT_NAME", "gpt-4.1-mini")
@@ -184,13 +197,13 @@ async def _do_classify(
     request: ClassifyRequest,
     use_multi_turn: bool = False,
 ) -> ClassifyResponse:
-    """场景分类。
+    """场景与阶段分类。
 
     Args:
         request: 分类请求
         use_multi_turn: False=方案A，True=方案B（multi-turn messages）
     """
-    scenes: list[str] = []
+    scenes: list[ScenePhase] = []
     scheme_label: str = "B" if use_multi_turn else "A"
 
     turns: list[dict[str, str]] = (
@@ -209,12 +222,28 @@ async def _do_classify(
         llm_result: dict[str, Any] = await _call_llm(
             request.message, recent_turns=turns, use_multi_turn=use_multi_turn,
         )
-        raw_scenes: list[str] = llm_result.get("scenes", [])
-        scenes = [s for s in raw_scenes if s in VALID_SCENES]
+        raw_scenes: list[dict[str, Any]] = list(llm_result.get("scenes", []))
+        seen: set[tuple[str, str]] = set()
+        for item in raw_scenes:
+            if not isinstance(item, dict):
+                continue
+            name: Any = item.get("name")
+            phase: Any = item.get("phase")
+            if not isinstance(name, str) or name not in VALID_SCENES:
+                continue
+            if not isinstance(phase, str) or phase not in VALID_PHASES:
+                continue
+            key: tuple[str, str] = (name, phase)
+            if key in seen:
+                continue
+            seen.add(key)
+            scenes.append(ScenePhase(name=name, phase=phase))
     except Exception:
-        logger.warning("LLM 场景分类失败（方案%s）", scheme_label, exc_info=True)
+        logger.warning("LLM 场景/阶段分类失败（方案%s）", scheme_label, exc_info=True)
 
     logger.info("场景分类结果（方案%s）: %s", scheme_label, scenes)
+    if not scenes:
+        scenes = [ScenePhase(name="guide", phase="intake")]
     return ClassifyResponse(scenes=scenes)
 
 
