@@ -59,24 +59,33 @@ def _build_commit_filter(
 ) -> Any:
     """按 commit_policy 返回传给 agent.run(commit_filter=...) 的过滤函数。
 
-    - full：去掉首位 UserMessage（本轮 user_prompt 已由外部管理），其余全写
-    - text_only：只留 AssistantMessage 且 content 非空；tool_calls 清空，不持久化 tool 链
+    - full：保留本轮 user/assistant 全量消息
+    - text_only：保留首条 UserMessage + 最终有文本的 AssistantMessage；不持久化 tool 链
     - nothing：返回 []，触发 SDK 跳过 insert_batch
     """
 
     def _filter(msgs: list[AgentMessage]) -> list[AgentMessage]:
         if policy == "nothing":
             return []
-        trimmed: list[AgentMessage] = list(msgs)
-        if trimmed and isinstance(trimmed[0], UserMessage):
-            trimmed = trimmed[1:]
         if policy == "full":
-            for m in trimmed:
+            result: list[AgentMessage] = []
+            for m in msgs:
                 m.metadata.setdefault("agent", agent_type)
-            return trimmed
+                result.append(m)
+            return result
         # text_only
         result: list[AgentMessage] = []
-        for m in trimmed:
+        for index, m in enumerate(msgs):
+            if index == 0 and isinstance(m, UserMessage):
+                result.append(
+                    UserMessage(
+                        content=m.content,
+                        tool_results=list(m.tool_results),
+                        metadata={**m.metadata, "agent": agent_type},
+                        timestamp=m.timestamp,
+                    )
+                )
+                continue
             if isinstance(m, AssistantMessage) and m.content.strip():
                 result.append(
                     AssistantMessage(
