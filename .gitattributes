@@ -1,6 +1,9 @@
 # 强制所有文本文件用 LF 行尾，避免 Windows/WSL/Mac 切换造成的 CRLF/LF 混乱
 * text=auto eol=lf
 
+# Windows batch files should keep CRLF for cmd.exe compatibility
+*.bat text eol=crlf
+
 # 二进制文件不动
 *.png binary
 *.jpg binary
