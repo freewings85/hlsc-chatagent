@@ -49,8 +49,8 @@ COPY extensions/hlsc extensions/hlsc
 COPY mainagent/pyproject.toml mainagent/uv.lock mainagent/
 
 # 安装依赖
-# 先 upgrade base 再 sync：保证 lock 里 hlsc-orchestrator-protocol 的 git pin 永远是 base main 最新 commit。
-# 否则提交者忘记本地 uv lock --upgrade，CI 会按老 sha 装 base，
+# 先 upgrade base 再 sync：保证构建时始终跟随 pyproject 里声明的 base 分支最新 commit。
+# 否则提交者忘记本地更新 lock，CI 会按旧 sha 装 base，
 # 出现 mainagent 跑老 dataclass、workflow 是新 dataclass 的字段错位（AttributeError）。
 RUN --mount=type=cache,target=/root/.cache/uv \
     cd mainagent \
