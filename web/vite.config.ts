@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// 后端地址：VITE_PROXY_TARGET=http://127.0.0.1:8101 npx vite
-const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://127.0.0.1:8100'
+// Chat 后端地址：VITE_PROXY_TARGET=http://127.0.0.1:7100 npx vite
+const chatProxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://127.0.0.1:8100'
+// 其它 API 默认仍回到 MainAgent(8100)
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8100'
 
 export default defineConfig({
   plugins: [react()],
@@ -13,11 +15,11 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: proxyTarget,
+        target: apiProxyTarget,
         changeOrigin: true,
       },
       '/chat': {
-        target: proxyTarget,
+        target: chatProxyTarget,
         changeOrigin: true,
       },
     },

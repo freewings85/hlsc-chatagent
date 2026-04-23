@@ -44,34 +44,6 @@ interface ChatMessage {
 }
 
 // --------------------------------------------------------------------------
-// SSE parser
-// --------------------------------------------------------------------------
-
-interface SseEvent {
-  type: string
-  data: Record<string, unknown>
-}
-
-function parseSseChunk(raw: string): SseEvent[] {
-  const events: SseEvent[] = []
-  for (const block of raw.split('\n\n')) {
-    if (!block.trim()) continue
-    let type = 'message'
-    let data = ''
-    for (const line of block.split('\n')) {
-      if (line.startsWith('event: ')) type = line.slice(7).trim()
-      else if (line.startsWith('data: ')) data = line.slice(6).trim()
-    }
-    if (data) {
-      try {
-        events.push({ type, data: JSON.parse(data) })
-      } catch { /* skip */ }
-    }
-  }
-  return events
-}
-
-// --------------------------------------------------------------------------
 // Component
 // --------------------------------------------------------------------------
 
