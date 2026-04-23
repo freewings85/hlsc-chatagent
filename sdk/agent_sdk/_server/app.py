@@ -479,6 +479,19 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
                 )
                 _wf_id: str = _orch.get("workflow_id", "")
                 _act_token: str = _orch.get("activity_task_token", "")
+                # 把入站时 extract 出来的 parent OTel context 注入 header，
+                # 让 orchestrator 侧能把 /internal/agent_finished span 挂回同一条 trace。
+                # agent.run 里 attach/detach 已结束，此处 current context 为空，
+                # 必须显式用 parent_otel_context 作为源。
+                _headers: dict[str, str] = {}
+                try:
+                    from opentelemetry.propagate import inject
+                    if parent_otel_context is not None:
+                        inject(_headers, context=parent_otel_context)
+                    else:
+                        inject(_headers)
+                except Exception:
+                    pass
                 try:
                     async with _httpx.AsyncClient(timeout=5.0) as cli:
                         await asyncio.shield(cli.post(
@@ -491,6 +504,7 @@ async def chat_stream_async(request: AsyncChatRequest, raw_request: Request) -> 
                                 "error_message": err_msg,
                                 "completed_at": int(_time.time()),
                             },
+                            headers=_headers,
                         ))
                 except Exception:
                     logger.exception(f"callback failed: {_callback_url}")

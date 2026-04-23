@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from typing import Any
 
@@ -25,6 +26,8 @@ from agent_sdk.exceptions import WorkflowUnavailableError
 from agent_sdk.logging import log_tool_start, log_tool_end
 
 _CALL_WORKFLOW_TIMEOUT: float = float(os.getenv("CALL_WORKFLOW_TIMEOUT", "120"))
+
+_logger: logging.Logger = logging.getLogger(__name__)
 
 
 async def submit_workflow_fields(
@@ -115,13 +118,20 @@ async def submit_workflow_fields(
         if result.tool_result_raw is not None and ctx.deps.emitter is not None:
             from agent_sdk._event.event_model import EventModel
             from agent_sdk._event.event_type import EventType
+            _detail_tcid: str = ctx.tool_call_id or ""
+            if _detail_tcid == "":
+                # 和 loop.py 的 _check_tool_call_id 告警对齐，便于排查漏 id 的 case
+                _logger.warning(
+                    "tool_call_id 缺失 source=tool_result_detail tool_name=%s raw=%r",
+                    ctx.tool_name or tool_name, ctx.tool_call_id,
+                )
             await ctx.deps.emitter.emit(EventModel(
                 session_id=sid,
                 request_id=rid,
                 type=EventType.TOOL_RESULT_DETAIL,
                 data={
                     "tool_name": ctx.tool_name or tool_name,
-                    "tool_call_id": ctx.tool_call_id or "",
+                    "tool_call_id": _detail_tcid,
                     "detail_type": detail_type,
                     "data": result.tool_result_raw,
                 },

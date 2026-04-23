@@ -304,9 +304,11 @@ class ChatAgentExecutor(AgentExecutor):
             elif event.type == EventType.TOOL_RESULT_DETAIL:
                 card_data = event.data.get("data", {})
                 detail_type = event.data.get("detail_type", "card")
+                detail_tcid = event.data.get("tool_call_id", "")
                 await updater.add_artifact(
                     parts=[Part(root=DataPart(data={
                         "event_type": "tool_result_detail",
+                        "tool_call_id": detail_tcid,
                         "card_type": detail_type,
                         **card_data,
                     }))],
